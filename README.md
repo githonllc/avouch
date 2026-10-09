@@ -129,38 +129,22 @@ The plugin has two skills:
 - `avouch-cli`: checks an ontology and runs `avouch query`.
 - `aquery-scan` (also `/aquery-scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document.
 
-The skills run the CLI with `npx -y github:githonllc/avouch`. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git. `skills/aquery-scan/fixture/` is the test project for the skill.
+The skills run the CLI with `npx -y @githonllc/avouch@<version>`, pinned to the version of this repository. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git (`npx -y github:githonllc/avouch`). `skills/aquery-scan/fixture/` is the test project for the skill.
 
 ## Publishing
 
-The npm package is `@githonllc/avouch`, and its command is `avouch`. `package.json` has `"private": true` in the repository, so an accidental `npm publish` from a working copy is refused. A release removes that line only in a fresh release copy.
+The npm package is `@githonllc/avouch`, and its command is `avouch`. `package.json` has `"private": true` in the repository, so an accidental `npm publish` from a working copy is refused. The release workflow removes that line only in its own checkout.
 
-A release needs the explicit approval of the project owner. Do these steps in this sequence:
+A release needs the explicit approval of the project owner. Releases are published by the GitHub Actions workflow `.github/workflows/release.yml` through npm trusted publishing: no npm token is stored, and npm adds provenance. Do these steps in this sequence:
 
-1. Set the new `0.x` version in `package.json`, merge it to `main`, and note the commit.
-2. Make a release copy in an empty directory outside every git worktree, and check it:
-
-   ```sh
-   git clone https://github.com/githonllc/avouch.git <dir> && cd <dir> && git checkout <commit>
-   npm ci && npm run typecheck && npm test
-   npm pack --dry-run
-   ```
-
-   Every command must exit with code 0. Keep the file list that `npm pack --dry-run` prints.
-3. Give the owner the commit, the test result and the file list. Continue only after the owner approves this release.
-4. Sign in to npm as a member of the `githonllc` organization, with two-factor authentication (`npm whoami` shows the account). Then publish from the release copy:
-
-   ```sh
-   npm pkg delete private
-   npm publish --dry-run --access public
-   npm publish --access public
-   ```
-
-   The dry-run file list must be the same as the list from step 2. A scoped package needs `--access public`, or npm publishes it as restricted. `npm publish` runs `prepack`, which builds `dist/`.
-5. Make sure that the release works:
-   - `npm view @githonllc/avouch version` shows the new version;
+1. Set the new `0.x` version in `package.json`, `.claude-plugin/plugin.json` and the `npx -y @githonllc/avouch@<version>` pins in `skills/*/SKILL.md`, merge it to `main`, and wait for CI to pass. Check the file list that the CI step `npm pack --dry-run` prints.
+2. Tag the merge commit `v<version>` (the same version as `package.json`) and push the tag. The workflow checks that the tag matches the version, runs `npm ci`, the type check and the tests, removes `"private"`, and publishes with `--access public`.
+3. The job waits in the `npm` environment until the owner approves it in GitHub. The owner's approval is the release approval.
+4. Make sure that the release works:
+   - `npm view @githonllc/avouch version` shows the new version (a new version can take a few minutes to become available);
    - in an empty directory, `npx -y @githonllc/avouch@<version> check` prints the usage line and exits with code 2.
-6. Tag the commit `v<version>` and push the tag.
+
+Version 0.1.0 was published by hand, because npm accepts a trusted publisher only for a package that exists.
 
 ## Versions and identifiers
 
