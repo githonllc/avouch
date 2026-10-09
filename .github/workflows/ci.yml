@@ -13,12 +13,20 @@ jobs:
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the scan reads the commit messages of a pull request
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: no private content
+        env:
+          PRIVATE_PATTERNS: ${{ secrets.PRIVATE_PATTERNS }}
+          REQUIRE_PRIVATE_PATTERNS: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+          SCAN_LOG_RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: node scripts/scan-private.mjs
       - run: npm test
       - run: npm pack --dry-run
       - name: package, plugin and skill pins name one version

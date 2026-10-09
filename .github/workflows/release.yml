@@ -23,6 +23,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: no private content
+        env:
+          PRIVATE_PATTERNS: ${{ secrets.PRIVATE_PATTERNS }}
+          REQUIRE_PRIVATE_PATTERNS: 1   # a release never runs without the private patterns
+        run: node scripts/scan-private.mjs
       - run: npm pkg delete private
       - run: npm pack --dry-run
       - run: npm publish --access public
