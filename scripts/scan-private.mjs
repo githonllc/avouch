@@ -9,6 +9,7 @@
 //
 // Exit codes: 0 no hit, 1 hit (or required patterns missing), 2 invalid pattern or git failure.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 
 // Path fragments are joined at run time so that this file does not match its own patterns.
@@ -43,8 +44,10 @@ const truthy = (value) => ["1", "true"].includes((value ?? "").trim().toLowerCas
 
 // Private patterns: validate all of them before scanning.
 const privatePatterns = [];
+const loaded = []; // the pattern lines as loaded, for the fingerprint
 for (const line of (process.env.PRIVATE_PATTERNS ?? "").split("\n").map((text) => text.replace(/\r$/, ""))) {
   if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+  loaded.push(line);
   const label = `private pattern #${privatePatterns.length + 1}`;
   const colon = line.indexOf(":");
   let regex;
@@ -55,6 +58,12 @@ for (const line of (process.env.PRIVATE_PATTERNS ?? "").split("\n").map((text) =
     fail(`${label}: invalid regex`, 2);
   }
   privatePatterns.push({ label, regex });
+}
+// Fingerprint: sha256 of the loaded pattern lines joined by "\n" (comments and blank lines dropped), so the CI log shows
+// whether the secret matches its generator without showing any pattern.
+if (privatePatterns.length > 0) {
+  const sha = createHash("sha256").update(loaded.join("\n")).digest("hex");
+  console.log(`PRIVATE_PATTERNS: ${privatePatterns.length} patterns, sha256 ${sha.slice(0, 12)}`);
 }
 if (privatePatterns.length === 0) {
   if (truthy(process.env.REQUIRE_PRIVATE_PATTERNS)) fail("::error::PRIVATE_PATTERNS secret is not set", 1);
