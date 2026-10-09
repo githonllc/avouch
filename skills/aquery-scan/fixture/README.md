@@ -1,6 +1,6 @@
 # aquery-scan test fixture
 
-A toy project ("toolshed") used to test the skill: copy this directory to a scratch location, `git init` and commit it, then run `/aquery-scan <copy>` (or a subagent that follows SKILL.md) and check the result yourself.
+A toy project ("toolshed") used to test the skill: copy `project/` (not this README, which states the expected answers) to a scratch location, `git init` and commit it, then run `/aquery-scan <copy>` (or a subagent that follows SKILL.md) and check the result yourself.
 
 Expected first scan: `avouch check avouch/<name>.ontology.yaml` exits 0 with `PASS: 0 schema error(s), 0 violation(s), N waived` (N ≈ 8: five missing fact sections, three missing field lists), and only `avouch/` is new.
 
