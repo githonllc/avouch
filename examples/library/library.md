@@ -1,4 +1,4 @@
-# Library: toy project for the ontology format
+# Library: toy project for the ontology spec
 
 The only source of the toy library project. Each `## <anchor> <title>` heading opens a section that runs to the next `## ` heading; the anchor is the first word of the heading.
 
