@@ -9,7 +9,7 @@ description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and y
 
 ## Run it
 
-In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.0` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.1` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 | Sub-command | Use |
 |---|---|
