@@ -6,3 +6,4 @@ export * from "./reconcile.js";
 export * from "./patch.js";
 export * from "./query.js";
 export * from "./markdown.js";
+export * from "./unknown.js";
