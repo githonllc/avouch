@@ -121,9 +121,12 @@ Exit code 0 means there is a result. 1 means there is no result: the id is not d
 
 This repository is also a Claude Code plugin marketplace. Install the plugin:
 
+```sh
+claude plugin marketplace add githonllc/avouch
+claude plugin install avouch@avouch
 ```
-/plugin install avouch --marketplace githonllc/avouch
-```
+
+Inside a Claude Code session, the same two steps are `/plugin marketplace add githonllc/avouch` and `/plugin install avouch@avouch`.
 
 The plugin has two skills:
 - `avouch-cli`: checks an ontology and runs `avouch query`.
