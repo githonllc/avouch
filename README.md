@@ -1,15 +1,15 @@
 # Avouch
 
-Avouch is an ontology format whose every claim cites its source. An Avouch file describes objects, links and actions. A checker compares the file with facts that a project adapter extracts from the project's own source documents and evidence.
+Avouch is an ontology spec whose every claim cites its source. An Avouch file describes objects, links and actions. A checker compares the file with facts that a project adapter extracts from the project's own source documents and evidence.
 
 ## Status
 
-Avouch is an experimental draft. It is not a standard. The format can change. A change that breaks existing files raises the version number in both places at the same time (SPEC section 8).
+Avouch is an experimental draft. It is not a standard. The spec can change. A change that breaks existing files raises the version number in both places at the same time (SPEC section 8).
 
 ## Why Avouch
 
 1. OWL, SHACL and LinkML describe classes, properties and data constraints. They do not describe commands with preconditions, link effects, state transitions and permissions. Avouch adds this layer.
-2. Palantir Foundry has action types, submission criteria and parameters. Avouch uses the same names for its keys (SPEC section 2). Avouch is a file format that is checked against the project's own source documents. It is not a runtime platform.
+2. Palantir Foundry has action types, submission criteria and parameters. Avouch uses the same names for its keys (SPEC section 2). Avouch is a spec for files that are checked against the project's own source documents. It is not a runtime platform.
 3. Discipline: each claim has a verbatim quote from its source (R2). An unknown is written explicitly as `unknown` or `unspecified`. A waiver that matches no violation is reported as `stale_waiver`. R7 compares the declarations with execution evidence.
 
 ## Quick start
@@ -43,7 +43,7 @@ Read in this order:
 | `tsconfig.build.json` | configuration for the JavaScript and type declaration build |
 | `dist/` | build output; not tracked in version control |
 | `examples/library/` | toy project: source document, ontology, mutations, adapter, profile, evidence |
-| `test/` | tests of the format layer |
+| `test/` | tests of the spec, checker and CLI |
 | `docs/` | guides (`adapter-guide.md`) |
 | `LICENSE` | Apache License 2.0 |
 | `NOTICE` | copyright notice and third-party text |

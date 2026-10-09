@@ -1,6 +1,6 @@
 # Avouch v1: specification
 
-Avouch is an ontology format whose every claim cites its source. Status: experimental draft. It is not a standard.
+Avouch is an ontology spec whose every claim cites its source. Status: experimental draft. It is not a standard.
 
 Format version: `formatVersion: 1` in the ontology file; `v1` in the schema `$id` (`https://w3id.org/avouch/v1/schema.json`).
 

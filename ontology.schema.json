@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://w3id.org/avouch/v1/schema.json",
   "title": "Avouch v1",
-  "description": "Shape and field reference for an ontology file in Avouch v1 (Avouch is an ontology format whose every claim cites its source). It enforces shape only (required fields, types, enums, closed field sets). The rules R1–R12 are enforced by src/checker.ts against facts that a project adapter extracts from the project's source documents and evidence; the rule definitions are in SPEC.md. Each description below says whether a field is foundation (it has a Palantir Foundry analog, named in the text) or extension (no Palantir analog; used by the named rule). The checker is fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip. A violation has a rule (R1..R12), a kind (a fixed string such as `link_effect_missing`; `generic` where the checker names none) and a key (a string such as `BORROW:loan_book`). A clean ontology has zero violations after waivers (see knownSourceGaps). Terms: a 'declared object' is a key of `objectTypes`; 'touched(action)' = the object prefix of each `edits` entry plus each `creates` entry, keeping only declared objects (out-of-scope objects are never touched).",
+  "description": "Shape and field reference for an ontology file in Avouch v1 (Avouch is an ontology spec whose every claim cites its source). It enforces shape only (required fields, types, enums, closed field sets). The rules R1–R12 are enforced by src/checker.ts against facts that a project adapter extracts from the project's source documents and evidence; the rule definitions are in SPEC.md. Each description below says whether a field is foundation (it has a Palantir Foundry analog, named in the text) or extension (no Palantir analog; used by the named rule). The checker is fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip. A violation has a rule (R1..R12), a kind (a fixed string such as `link_effect_missing`; `generic` where the checker names none) and a key (a string such as `BORROW:loan_book`). A clean ontology has zero violations after waivers (see knownSourceGaps). Terms: a 'declared object' is a key of `objectTypes`; 'touched(action)' = the object prefix of each `edits` entry plus each `creates` entry, keeping only declared objects (out-of-scope objects are never touched).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   "properties": {
     "formatVersion": {
       "const": 1,
-      "description": "Version of the ontology format this file follows. Must be 1 (R1 `formatVersion`). Extension: no Palantir analog."
+      "description": "Version of the Avouch spec this file follows. Must be 1 (R1 `formatVersion`). Extension: no Palantir analog."
     },
     "contexts": {
       "type": "object",
