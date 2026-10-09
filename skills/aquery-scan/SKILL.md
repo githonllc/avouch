@@ -27,7 +27,7 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 ## Step 0: locate the CLI and the target
 
-In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.0` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.1` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
 avouch check 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
