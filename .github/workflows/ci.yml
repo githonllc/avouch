@@ -21,3 +21,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm pack --dry-run
+      - name: package, plugin and skill pins name one version
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          test "$(node -p 'require("./.claude-plugin/plugin.json").version')" = "$v"
+          ! grep -rhoE '@githonllc/avouch@[0-9][^` ]*' skills | grep -vx "@githonllc/avouch@$v"
