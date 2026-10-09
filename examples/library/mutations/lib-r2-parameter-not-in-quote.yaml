@@ -1,0 +1,4 @@
+# R2: the cite quote of BORROW's parameter member_id does not name member_id.
+expect: R2
+patch:
+  - { op: replace, path: /actionTypes/BORROW/parameters/member_id/cite/quote, value: "BORROW creates a Loan" }

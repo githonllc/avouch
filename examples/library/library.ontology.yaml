@@ -1,0 +1,193 @@
+# yaml-language-server: $schema=../../ontology.schema.json
+# Toy library ontology: shows that a second project can use the format. Source: library.md. Must have 0 violations.
+formatVersion: 1
+
+contexts:
+  Catalog: "Catalog:"
+  Circulation: "Circulation:"
+
+infrastructureStores: [audit_log]
+permission_rows_not_commands: []
+
+scope:
+  by: branch_id
+  global:
+    - { type: Person, cite: { doc: L13, quote: "is seen from every Branch" } }
+  root: { type: Branch, cite: { doc: L12, quote: "A Branch is one library." } }
+  cite: { doc: L12, quote: "Every Book, Member and Loan belongs to one Branch by branch_id, and is seen only from that Branch." }
+
+dispositions:
+  BORROWED: { class: applied, cite: { doc: L14, quote: "BORROWED, RETURNED or RETURNED_LATE when the change is made" } }
+  RETURNED: { class: applied, cite: { doc: L14, quote: "BORROWED, RETURNED or RETURNED_LATE when the change is made" } }
+  RETURNED_LATE: { class: applied, cite: { doc: L14, quote: "BORROWED, RETURNED or RETURNED_LATE when the change is made" } }
+  REJECTED: { class: rejected, cite: { doc: L14, quote: "REJECTED when nothing is changed" } }
+  REFERRED: { class: pending, cite: { doc: L14, quote: "REFERRED when a librarian must decide" } }
+
+objectTypes:
+  Book:
+    context: Catalog
+    datasource: books
+    doc: L1
+    properties:
+      title: { class: canonical, cite: { doc: L1, quote: "The title of a Book is set when the copy is catalogued." } }
+      state: { class: canonical, type: enum, cite: { doc: L1, quote: "The state of a Book is AVAILABLE, ON_LOAN or WITHDRAWN." } }
+  Member:
+    context: Circulation
+    datasource: members
+    doc: L2
+    properties:
+      blocked_until: { class: canonical, type: timestamp, cite: { doc: L2, quote: "A librarian sets blocked_until when a member may not borrow until that time." } }
+      person_id: { class: canonical, type: { ref: Person }, cite: { doc: L2, quote: "person_id names the Person." } }
+      open_loans:
+        class: derived
+        cite: { doc: L2, quote: "open_loans counts the ACTIVE loans of the member" }
+        materializedFrom:
+          reads: [Loan.state]
+          cites:
+            - cite: { doc: L2, quote: "is updated in the same transaction as the loan" }
+  Loan:
+    context: Circulation
+    datasource: loans
+    doc: L3
+    properties:
+      state: { class: canonical, type: enum, cite: { doc: L3, quote: "The state of a Loan is ACTIVE or RETURNED." } }
+      due_date: { class: canonical, type: date, cite: { doc: L3, quote: "due_date is set by BORROW." } }
+      return_condition: { class: canonical, type: enum, cite: { doc: L3, quote: "RETURN records the return_condition of the Loan: GOOD or DAMAGED." } }
+  Branch:
+    context: Circulation
+    datasource: branches
+    doc: L12
+    properties:
+      timezone: { class: policy, type: timezone, cite: { doc: L12, quote: "The timezone of a Branch is set by the librarian." } }
+  Person:
+    context: Circulation
+    datasource: people
+    doc: L13
+    properties: {}
+
+stateMachines:
+  Book:
+    doc: L4
+    initial: AVAILABLE
+    terminal: [WITHDRAWN]
+    transitions:
+      - { from: AVAILABLE, to: ON_LOAN, by: [BORROW] }
+      - { from: ON_LOAN, to: AVAILABLE, by: [RETURN] }
+      - { from: AVAILABLE, to: WITHDRAWN, by: [], out_of_scope: "a librarian withdraws a copy outside the system" }
+  Loan:
+    doc: L5
+    initial: ACTIVE
+    terminal: [RETURNED]
+    transitions:
+      - { from: ACTIVE, to: RETURNED, by: [RETURN] }
+
+linkTypes:
+  - { id: loan_book, from: Loan, to: Book, cardinality: "N:1", via: book_id, doc: L3, table: loans }
+  - { id: loan_member, from: Loan, to: Member, cardinality: "N:1", via: member_id, doc: L3 }
+  - { id: member_person, from: Member, to: Person, cardinality: "N:1", via: person_id, doc: L2 }
+  - { id: loan_branch, from: Loan, to: Branch, cardinality: "N:1", via: branch_id, doc: L12 }
+
+derivedProperties:
+  loan_overdue: { of: Loan, doc: L3, doc_term: "A Loan is overdue", reads: [Loan.due_date, Loan.state] }
+
+actionTypes:
+  BORROW:
+    doc: L6
+    doc_term: "BORROW creates a Loan"
+    context: Circulation
+    permission: { keys: ["loan:create"], cite: { doc: L10, quote: "`loan:create`" } }
+    parameters:
+      member_id: { type: { ref: Member }, cite: { doc: L6, quote: "BORROW takes member_id" } }
+      book_id: { type: { ref: Book }, cite: { doc: L6, quote: "BORROW takes book_id" } }
+    conditions:
+      - id: borrower_is_caller
+        expr: { eq: [{ ref: member_id.person_id }, { ref: actor.id }] }
+        cites:
+          - cite: { doc: L6, quote: "only that Member may submit BORROW" }
+          - cite: { doc: L6, quote: "The caller of an action is a Person." }
+      - id: book_available
+        expr: { eq: [{ ref: book_id.state }, { lit: AVAILABLE }] }
+        cites:
+          - cite: { doc: L6, quote: "BORROW creates a Loan for an AVAILABLE Book" }
+      - id: member_not_blocked
+        expr: { or: [{ isNull: [{ ref: member_id.blocked_until }] }, { lte: [{ ref: member_id.blocked_until }, { ref: now }] }] }
+        cites:
+          - cite: { doc: L2, quote: "A librarian sets blocked_until when a member may not borrow until that time." }
+      - id: returns_in_good_condition
+        expr:
+          all:
+            as: l
+            in: { nav: { from: { ref: member_id }, link: loan_member, dir: reverse } }
+            where: { and: [{ isNotNull: [{ ref: l.return_condition }] }, { eq: [{ ref: l.return_condition }, { lit: GOOD }] }] }
+        cites:
+          - cite: { doc: L3, quote: "RETURN records the return_condition of the Loan: GOOD or DAMAGED." }
+    decision:
+      hitPolicy: first
+      order: { cite: { doc: L6, quote: "BORROW and RETURN check their rules from top to bottom; the first rule that matches decides." } }
+      rows:
+        - when: { fails: borrower_is_caller }
+          result: REJECTED
+          cites: [{ cite: { doc: L6, quote: "BORROW by anyone other than that Member is REJECTED." } }]
+        - when: { fails: book_available }
+          result: REJECTED
+          cites: [{ cite: { doc: L6, quote: "BORROW of a Book that is not AVAILABLE is REJECTED." } }]
+        - when: { fails: member_not_blocked }
+          result: REJECTED
+          cites: [{ cite: { doc: L6, quote: "BORROW by a blocked Member is REJECTED." } }]
+        - when: { fails: returns_in_good_condition }
+          result: REFERRED
+          cites: [{ cite: { doc: L6, quote: "BORROW by a Member with a Loan that is not returned in GOOD condition is REFERRED to a librarian." } }]
+          next: { external: "a librarian decides", cite: { doc: L14, quote: "REFERRED when a librarian must decide" } }
+      otherwise: { result: BORROWED, cites: [{ cite: { doc: L6, quote: "Otherwise BORROW is BORROWED." } }] }
+    creates: [Loan]
+    edits: [Book.state, Member.open_loans]
+    crossContext: { via: same_transaction, cite: { doc: L6, quote: "BORROW and RETURN write Book and Member in the same transaction as the Loan." } }
+    link_effects:
+      loan_book: { effect: "the new Loan refers to the Book", cite: { doc: L3, quote: "The Loan refers to the Book by book_id" } }
+      loan_member: { effect: "the new Loan refers to the Member", cite: { doc: L3, quote: "to the Member by member_id" } }
+      loan_branch: { effect: "the new Loan belongs to the Branch", cite: { doc: L12, quote: "Every Book, Member and Loan belongs to one Branch by branch_id" } }
+      member_person: { none: "BORROW does not change the Person of a Member" }
+    emits: [loan.created]
+    evidence: borrow
+  RETURN:
+    doc: L6
+    doc_term: "RETURN closes an ACTIVE Loan"
+    context: Circulation
+    permission: { keys: ["loan:close"], cite: { doc: L10, quote: "`loan:close`" } }
+    parameters:
+      loan_id: { type: { ref: Loan }, cite: { doc: L6, quote: "RETURN takes loan_id" } }
+    conditions:
+      - id: loan_active
+        expr: { eq: [{ ref: loan_id.state }, { lit: ACTIVE }] }
+        cites:
+          - cite: { doc: L6, quote: "RETURN closes an ACTIVE Loan" }
+      - id: returned_late
+        expr:
+          exists:
+            as: b
+            in: { nav: { from: { ref: loan_id }, link: loan_branch, dir: forward } }
+            where: { gt: [{ dateIn: [{ ref: now }, { ref: b.timezone }] }, { ref: loan_id.due_date }] }
+        cites:
+          - cite: { doc: L6, quote: "RETURN after the due_date, on the date of the Branch timezone, is RETURNED_LATE." }
+    decision:
+      hitPolicy: first
+      order: { cite: { doc: L6, quote: "BORROW and RETURN check their rules from top to bottom; the first rule that matches decides." } }
+      rows:
+        - when: { fails: loan_active }
+          result: REJECTED
+          cites: [{ cite: { doc: L6, quote: "RETURN of a Loan that is not ACTIVE is REJECTED." } }]
+        - when: { passes: returned_late }
+          result: RETURNED_LATE
+          cites: [{ cite: { doc: L6, quote: "RETURN after the due_date, on the date of the Branch timezone, is RETURNED_LATE." } }]
+      otherwise: { result: RETURNED, cites: [{ cite: { doc: L6, quote: "Otherwise RETURN is RETURNED." } }] }
+    edits: [Loan.state, Loan.return_condition, Book.state, Member.open_loans]
+    crossContext: { via: same_transaction, cite: { doc: L6, quote: "BORROW and RETURN write Book and Member in the same transaction as the Loan." } }
+    link_effects:
+      loan_book: { effect: "the Loan row that holds book_id is closed", cite: { doc: L6, quote: "RETURN closes an ACTIVE Loan" } }
+      loan_member: { none: "the Loan keeps member_id" }
+      loan_branch: { none: "the Loan keeps branch_id" }
+      member_person: { none: "RETURN does not change the Person of a Member" }
+    emits: [loan.returned]
+    evidence: return
+
+knownSourceGaps: []

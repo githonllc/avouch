@@ -1,0 +1,4 @@
+# R12: the first RETURN row gives RETURNED, but its cite names only REJECTED.
+expect: R12
+patch:
+  - { op: replace, path: /actionTypes/RETURN/decision/rows/0/result, value: RETURNED }

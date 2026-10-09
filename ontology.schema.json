@@ -1,0 +1,1690 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/avouch/v1/schema.json",
+  "title": "Avouch v1",
+  "description": "Shape and field reference for an ontology file in Avouch v1 (Avouch is an ontology format whose every claim cites its source). It enforces shape only (required fields, types, enums, closed field sets). The rules R1–R12 are enforced by src/checker.ts against facts that a project adapter extracts from the project's source documents and evidence; the rule definitions are in SPEC.md. Each description below says whether a field is foundation (it has a Palantir Foundry analog, named in the text) or extension (no Palantir analog; used by the named rule). The checker is fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip. A violation has a rule (R1..R12), a kind (a fixed string such as `link_effect_missing`; `generic` where the checker names none) and a key (a string such as `BORROW:loan_book`). A clean ontology has zero violations after waivers (see knownSourceGaps). Terms: a 'declared object' is a key of `objectTypes`; 'touched(action)' = the object prefix of each `edits` entry plus each `creates` entry, keeping only declared objects (out-of-scope objects are never touched).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "contexts",
+    "permission_rows_not_commands",
+    "objectTypes",
+    "linkTypes",
+    "actionTypes",
+    "knownSourceGaps"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": 1,
+      "description": "Version of the ontology format this file follows. Must be 1 (R1 `formatVersion`). Extension: no Palantir analog."
+    },
+    "contexts": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "minProperties": 1,
+      "description": "Bounded contexts: context name → label. Extension (R1, R5); no Palantir analog. The label is a literal substring of the source line that lists the objects of that context. R1: must be a non-empty mapping; every `objectTypes.<N>.context`, `actionTypes.<ID>.context` and `linkTypes[].create_rule.context` must be one of these names. R5: the adapter supplies the member names of each context; each declared object must be a member of its own context (else R5 `generic`). Every member that is a single identifier is an entity that must be in `objectTypes` or `outOfScopeObjectTypes` (else R5 `context_entity_uncovered`). A label the adapter does not find fails R5.",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "infrastructureStores": {
+      "type": "array",
+      "description": "Stores that every action writes and that belong to no object (for example a guard table, an event log, a receipt table). Optional. Extension (R1, R2, R7); no Palantir analog. R1: must be a list. R2: each name must be in the source store catalog (else R2 `table_not_in_catalog`). R7: writes to these stores are always allowed for every action with `evidence`.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "permission_rows_not_commands": {
+      "type": "array",
+      "description": "Names in the source permission table that are not action ids. Extension (R1, R2, R10); no Palantir analog. R1: must be a list (use []); each item needs name, reason, cite; a name that is a key of `actionTypes` fails R1. R2: each cite quote must be verbatim in its section. R10: a table name that is neither an action id nor declared here fails R10 `permission_row_undeclared`; a declared name that is not in the table fails R10 `permission_row_stale`. A declared name binds nothing.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "reason",
+          "cite"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name exactly as the source permission table lists it (R10 compares by equality)."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why the name is not a command. Free text; R1 requires a non-empty string; no rule reads its content."
+          },
+          "cite": {
+            "$ref": "#/$defs/cite"
+          }
+        }
+      }
+    },
+    "outOfScopeObjectTypes": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "description": "Entities that the source context lists name but this ontology does not model: entity name → reason. Optional. Extension (R1, R5); no Palantir analog. R1: must be a mapping; each value a non-empty string. R5: each key must be an entity named by the source context lists (else R5 `out_of_scope_unknown`); together with `objectTypes` it must cover every such entity (else R5 `context_entity_uncovered`). These names are valid in `actionTypes.<ID>.creates` and as the object prefix of `edits` entries (R1), but they are not touched objects: R5 cross-context, the R6 link sweep and R7 stores ignore them.",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "by",
+          "cite"
+        ],
+        "description": "Optional tenant scope. Extension (R1, R2, R6); no Palantir analog. `by` names the tenant field; every object type not listed in `global` or `root` is a tenant type, seen only with `<by>` = the scope. `global` types are not filtered; the `root` type is the tenant object itself, seen only where `id` = the scope. Each global / root entry is a claim with its own cite; `cite` supports `by` only. R1: each type is a declared object type, and no type is listed twice. R2: the field list of each tenant type must contain `<by>` (else `scope_field_missing`, key `<Object>.<by>`); the field list of a global type must not (else `scope_field_present`); `<by>` must occur as a whole identifier in `cite.quote` (else `scope_by_not_in_quote`, key `scope`). R6: on a tenant type, `<by>` counts as declared and must not be written in `non_link_fields`.",
+        "properties": {
+          "by": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The tenant field name."
+          },
+          "global": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/scopeType"
+            },
+            "description": "Object types that are not filtered by the scope."
+          },
+          "root": {
+            "$ref": "#/$defs/scopeType",
+            "description": "The tenant object type itself, filtered by id."
+          },
+          "cite": {
+            "$ref": "#/$defs/cite"
+          }
+        }
+      },
+      "dispositions": {
+        "type": "object",
+        "propertyNames": {
+          "minLength": 1
+        },
+        "description": "Optional disposition vocabulary: result id → {class, cite}. Extension (R1, R2, R12); no Palantir analog. A decision row gives a result id; its class says what the result means: rejected (no domain write), recorded (final; the input is kept, the business change is not), pending (not final; needs a next step), applied (final; the business change is made). R1: a result id must not be one of the fixed invocation results. R2: the id must occur as a whole identifier in its cite quote (else `disposition_not_in_quote`, key `dispositions.<ID>`).",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "class",
+            "cite"
+          ],
+          "properties": {
+            "class": {
+              "enum": [
+                "rejected",
+                "recorded",
+                "pending",
+                "applied"
+              ]
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            }
+          }
+        }
+      },
+    "objectTypes": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "description": "Declared objects: object name → definition. Foundation: Palantir object type. R1: must be a mapping. R2: the name must occur as a whole identifier in the section of its `doc` anchor. R5: the name must be a member of its context's list.",
+      "additionalProperties": {
+        "$ref": "#/$defs/objectType"
+      }
+    },
+    "stateMachines": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "description": "State machines: object type name → state machine. Optional (the checker uses {} when absent). Extension (R1, R3); no Palantir analog (Palantir object types have no state machine). R1: must be a mapping; every key must be a key of `objectTypes` (else R1, key `stateMachines.<Name>`). R3: the adapter supplies the machines that the source defines; each such object must have a state machine whose `doc` is the anchor the adapter reports.",
+      "additionalProperties": {
+        "$ref": "#/$defs/stateMachine"
+      }
+    },
+    "linkTypes": {
+      "type": "array",
+      "description": "Link catalog between declared objects. Foundation: Palantir link type. R6 (link catalog complete): for each object, every field matching the configured link-field pattern in its source field list must be either a link with `from` = that object and `via` = that field, or a key of that object's `non_link_fields` (else R6 `link_catalog_incomplete`). R1: must be a list; ids unique.",
+      "items": {
+        "$ref": "#/$defs/linkType"
+      }
+    },
+    "derivedProperties": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "description": "Derived predicates and views computed from properties (not stored): id → definition. Foundation: Palantir derived property (calculated at runtime, not stored). Optional (the checker uses {} when absent). A derived id may be used in `conditions[].reads`; R4 then checks every property in its `reads` as if the condition read it directly. An expression reads a derived property with `{derived: {id, of: {ref}}}`.",
+      "additionalProperties": {
+        "$ref": "#/$defs/derivedProperty"
+      }
+    },
+    "actionTypes": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "description": "Actions: action id → definition. Foundation: Palantir action type. R1: must be a mapping; ids match the configured action id pattern. R2: an id that does not occur as a whole identifier anywhere in the source is printed as a new name for owner confirmation (not a failure). R9: every action must be cited by at least one source scenario (else R9 `generic`, key `uncited:<ID>`). R10: every action must have exactly one row in the source permission table.",
+      "additionalProperties": {
+        "$ref": "#/$defs/actionType"
+      }
+    },
+    "knownSourceGaps": {
+      "type": "array",
+      "description": "Waivers for known source gaps. Extension (R1); no Palantir analog. R1: must be a list (use []). A violation is waived only when one entry has the same `rule`, the same `kind` and lists the violation's `key` in `keys`; waived violations are printed, not failed. Any other problem on the same key still fails. A listed key that no longer matches any violation fails under the entry's `rule` with kind `stale_waiver` (delete the entry after the source is fixed). Each entry is a candidate finding.",
+      "items": {
+        "$ref": "#/$defs/knownSourceGap"
+      }
+    }
+  },
+  "$defs": {
+    "anchor": {
+      "type": "string",
+      "description": "Source anchor: the name of a source section. The adapter defines the syntax and resolves it to a section. R2 (or the rule that uses the anchor): zero or more than one matching section is a failure; a missing anchor is R1.",
+      "minLength": 1
+    },
+    "cite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "quote"
+      ],
+      "description": "Evidence `{doc, quote}`. Extension (R2); no Palantir analog. R2 (applies to every `cite` under objectTypes, stateMachines, linkTypes, actionTypes and permission_rows_not_commands, at any depth): `quote` must occur verbatim (exact substring) in the section of `doc`; no fuzzy match. R2 proves the text exists, not that it supports the claim it is attached to.",
+      "properties": {
+        "doc": {
+          "$ref": "#/$defs/anchor"
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact substring of the section text of `doc` (R2)."
+        }
+      }
+    },
+    "propRef": {
+      "type": "string",
+      "description": "Property reference `Object.prop`: Object is a key of `objectTypes`, prop a key of its `properties` (exactly one dot)."
+    },
+    "objectType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "datasource",
+        "doc",
+        "properties"
+      ],
+      "description": "One declared object. Foundation: Palantir object type.",
+      "properties": {
+        "context": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Owning bounded context; must be a key of `contexts` (R1). R5: the object name must be a member of that context's list. R5 also uses it to decide whether an action touches another context (see actionTypes.<ID>.crossContext). Extension; no Palantir analog."
+        },
+        "datasource": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Store that holds the object. Foundation: Palantir backing datasource of an object type. R1: required. R2: must be in the source store catalog (else `table_not_in_catalog`). R7: editing or creating the object allows its action's evidence to write this store; a column changed on an existing row of this store must be a property of a resolvable entry in the action's `edits` of each touched object with this store (objects may share a store; a column declared by one object is still reported for another touched object of the store that does not declare it; else R7 `column_undeclared`, once per touched object of the store)."
+        },
+        "doc": {
+          "$ref": "#/$defs/anchor",
+          "description": "Anchor of the section that defines the object. R2: the object name must occur in that section as a whole identifier, and the section must hold exactly one field list for the object (else R2 `field_list_missing`); the adapter defines the field-list syntax. R6 reads the same field list for the link catalog."
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "Modelled properties: property name → classification. Foundation: Palantir property. R1: required (use {}). R2: each name must be a field of the object's source field list (else R2 `property_not_field`). Only properties listed here can be referenced by edits, conditions, derivedProperties.reads and materializedFrom.reads (R1).",
+          "additionalProperties": {
+            "$ref": "#/$defs/property"
+          }
+        },
+        "non_link_fields": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "Fields of the source field list that match the link-field pattern but are not links: field → {reason, cite}. Extension (R1, R6); no Palantir analog. R1: must be a mapping; each entry needs reason and cite. R6: every key must be a field of the field list and must not also be the `via` of a link from this object (else R6 `non_link_field_stray`).",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "cite"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why the field is not a link. Free text (R1: non-empty)."
+              },
+              "cite": {
+                "$ref": "#/$defs/cite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class"
+      ],
+      "description": "Classification of one property. Foundation: Palantir property.",
+      "properties": {
+        "class": {
+          "enum": [
+            "canonical",
+            "derived",
+            "policy",
+            "unknown"
+          ],
+          "description": "State class. canonical = a fact written directly by actions; derived = computed from other facts; policy = configuration; unknown = the source does not classify it. Extension (R1, R4); no Palantir analog. R1: must be one of the four values; any class except unknown needs a `cite`. R4: a condition may read only canonical and policy properties, also through expressions and derived properties; derived and unknown fail R4 (`precondition_reads_non_canonical`), except value reads (and expression comparisons with a literal) covered by `canonical_values`."
+        },
+        "cite": {
+          "$ref": "#/$defs/cite",
+          "description": "Doc evidence for the class. R1: required unless class is unknown. R2: quote verbatim in its section."
+        },
+        "type": {
+          "$ref": "#/$defs/valueType",
+          "description": "Optional value type. Extension (R1, R2); closest Palantir analog: property base type. R1: a property an expression reads must declare it. R2: a property with a type needs a cite (else `type_without_provenance`, key `<Object>.<prop>`)."
+        },
+        "canonical_values": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "values",
+            "cite"
+          ],
+          "description": "Values of a NON-canonical property that the source explicitly marks as canonical. Extension (R1, R4); no Palantir analog. R1: needs values[] (non-empty) and cite; not allowed when class is canonical; on the configured state property of an object with `stateMachines`, each value must be a state of that object. R4: each value must occur as a whole identifier in this cite's quote (else R4 `canonical_value_unsupported`); a condition value read `{prop, values}` of this property passes R4 only if all its values are in this list.",
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "description": "The canonical values."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            }
+          }
+        },
+        "materializedFrom": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reads",
+            "cites"
+          ],
+          "description": "The source requires this derived property to be stored in the same operation as its inputs. Extension (R1, R11); no Palantir analog (not a Palantir derived property, which is computed at runtime and read-only). R1: needs reads[] (non-empty, each a declared `Object.prop`) and cites[] (non-empty, each `{cite}`). R11: any action that edits one of `reads`, or creates the object of one of `reads`, must list this property (`Object.prop`) in its `edits` (else R11 `materialization_missing`). R11 guarantees complete declaration only; atomicity is guaranteed by the evidence adapter.",
+          "properties": {
+            "reads": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/propRef"
+              },
+              "description": "Input properties `Object.prop` (R1: must resolve)."
+            },
+            "cites": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Source evidence for the rule and its inputs; each item is `{cite}`.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "cite"
+                ],
+                "properties": {
+                  "cite": {
+                    "$ref": "#/$defs/cite"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "unknown"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "cite"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "canonical"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "canonical_values"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "stateMachine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "initial",
+        "terminal",
+        "transitions"
+      ],
+      "description": "State machine of the object. Extension (R1, R3); no Palantir analog. R3 compares it with the machine the adapter extracts from the source: the state set, the initial state and the transition set must be equal; `terminal` must equal the source states that have no outgoing edge; every source state must be reachable from the initial state. Also R3: an action appears in some `by` of this object's transitions if and only if its `edits` contains `<Object>.<state property>`.",
+      "properties": {
+        "doc": {
+          "$ref": "#/$defs/anchor",
+          "description": "The anchor of the source section that holds the state machine (R3: must be exactly the anchor the adapter reports for this object)."
+        },
+        "initial": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Initial state; R3: must equal the single initial state of the source machine."
+        },
+        "terminal": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Terminal states; R3: must equal exactly the source states with no outgoing edge."
+        },
+        "transitions": {
+          "type": "array",
+          "description": "All transitions of the source machine; R3: the set of from→to pairs must equal the source edge set; a duplicate pair fails R3.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to",
+              "by"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Source state."
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Target state."
+              },
+              "by": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Actions that perform this transition. R3: each must be a key of `actionTypes`; each such action must edit `<Object>.<state property>`. R3: `by` must equal exactly the action ids the adapter reports as triggers of this transition. A trigger missing from `by` fails R3 `transition_binding_missing`; a `by` action the source does not bind fails R3 `transition_binding_unsupported`. Empty `by` requires `out_of_scope`."
+              },
+              "out_of_scope": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why no declared action performs the transition. R3: required when `by` is empty; forbidden when `by` is not empty."
+              },
+              "bind": {
+                "type": "object",
+                "propertyNames": {
+                  "minLength": 1
+                },
+                "description": "Optional per-action evidence: `bind.<ID>.cite` is a source sentence that names the action and the target state. The checker reads `bind` only for the R2 verbatim check of its cites; R3 binding comes only from the adapter's trigger fact.",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "cite"
+                  ],
+                  "properties": {
+                    "cite": {
+                      "$ref": "#/$defs/cite"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "linkType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "from",
+        "to",
+        "cardinality",
+        "via",
+        "doc"
+      ],
+      "description": "One link between two declared objects. Foundation: Palantir link type. R6: every action that touches `from` or `to` must have a `link_effects` entry for this link id.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique link id (R1); the key used in `actionTypes.<ID>.link_effects`."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Object that holds the reference (R1: a key of `objectTypes`, not an out-of-scope object). R6 catalog: `via` is a field of this object's field list."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Referenced object (R1: a key of `objectTypes`)."
+        },
+        "cardinality": {
+          "type": "string",
+          "pattern": "^(1|N):(1|N|M)$",
+          "description": "from:to cardinality, e.g. `N:1`, `1:1`, `N:M` (R1 pattern ^(1|N):(1|N|M)$). Not otherwise checked."
+        },
+        "via": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Foreign-key field on `from` or the link store name. R2: must occur as a whole identifier in the section of `doc`. R6 catalog: a link with from = O and via = f accounts for the link-pattern field f of O."
+        },
+        "doc": {
+          "$ref": "#/$defs/anchor",
+          "description": "Section that defines the link; R2 checks that `via` occurs in it."
+        },
+        "table": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional: the link's own store. Extension (R2, R6, R7); no Palantir analog. R2: must be in the source store catalog. R6: if an action's entry for this link is `none` but the action's evidence wrote this store, R6 fails `none_but_written`. R7: if the store is not any object's store (a pure link store), an action may write it when it declares an `effect` for this link, and a committed invocation of the action's evidence must insert or delete a row of it (else R7 `effect_unwitnessed`, key `<ID>:link:<link id>`)."
+        },
+        "create_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "context",
+            "with_creates",
+            "cite"
+          ],
+          "description": "Who may establish the link. Extension (R1, R5); no Palantir analog. R1: needs context (a key of `contexts`), with_creates[] and cite. R5: every action whose `creates` contains `from` — whatever its link_effects entry says — must belong to `context` and must also create every object in `with_creates`, unless the action is listed in `exceptions.commands` (else R5 `generic`, key `<ID>:<link id>`).",
+          "properties": {
+            "context": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The only context whose commands may create `from` with this link (R5)."
+            },
+            "with_creates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Objects the action must create in the same operation (R5)."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            },
+            "exceptions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commands",
+                "cite"
+              ],
+              "description": "Actions the source names as exceptions to the create_rule (R5 skips them). Nested inside create_rule (the checker reads `create_rule.exceptions`). R1: needs commands[] and cite.",
+              "properties": {
+                "commands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Exempt action ids."
+                },
+                "cite": {
+                  "$ref": "#/$defs/cite"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "derivedProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "of",
+        "doc",
+        "doc_term"
+      ],
+      "description": "One derived predicate or view. R1: exactly one of `expr` and `reads`; a derived property without `expr` is undefined for evaluation. Foundation: Palantir derived property (calculated at runtime, not stored).",
+      "properties": {
+        "of": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Object it is defined on (R1: a key of `objectTypes`)."
+        },
+        "doc": {
+          "$ref": "#/$defs/anchor",
+          "description": "Section that defines it (R2: `doc_term` must occur verbatim in it)."
+        },
+        "doc_term": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name or defining sentence, verbatim (substring) in the section of `doc` (R2)."
+        },
+        "reads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/propRef"
+          },
+          "description": "Properties it depends on (R1: each a declared `Object.prop`; another derived id is not allowed). R4: a condition that reads this derived id reads all of these; each must be class canonical or policy. Write it only when there is no `expr`."
+        },
+        "expr": {
+          "$ref": "#/$defs/expr",
+          "description": "Optional definition as an expression; `self` is the object it is defined on. R1: it type-checks to the declared `type`, needs `type` and `cite`, and derived properties form no cycle. R4: its reads count as reads of every condition that reaches it; each literal must occur in `cite.quote` (else `literal_unsupported`, key `derivedProperties.<id>:<value>`)."
+        },
+        "cite": {
+          "$ref": "#/$defs/cite",
+          "description": "Source text that defines the expression. R2: quote verbatim."
+        },
+        "type": {
+          "$ref": "#/$defs/valueType",
+          "description": "Declared value type. R1: required when an expression reads it with `{derived}`; equals the type of `expr`. A predicate expression needs `boolean`. R2: needs a cite (else `type_without_provenance`, key `derivedProperties.<id>`)."
+        }
+      }
+    },
+    "actionType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "doc_term",
+        "context",
+        "permission",
+        "conditions",
+        "edits",
+        "emits",
+        "link_effects"
+      ],
+      "description": "One action. Foundation: Palantir action type.",
+      "properties": {
+        "doc": {
+          "$ref": "#/$defs/anchor",
+          "description": "Anchor of the section that names the action. R2: `doc_term` must occur verbatim in it."
+        },
+        "doc_term": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The name or endpoint of the action exactly as written in the `doc` section (R2: verbatim substring). If the action id itself is not in the source, the checker prints it as a new name (not a failure)."
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Context the action belongs to (R1: a key of `contexts`). R5 compares it with the context of each touched object and with `linkTypes[].create_rule.context`."
+        },
+        "permission": {
+          "$ref": "#/$defs/permission"
+        },
+        "conditions": {
+          "type": "array",
+          "description": "Decision conditions, each a named Boolean claim. Foundation (closest analog: Palantir submission criteria ≈ the decision rows whose disposition class is `rejected`). R1: must be a list; ids unique within the action; each has exactly one of `expr` and `unspecified`. R4: the properties a condition reads, directly or through derived properties, must be canonical or policy; parameter and actor reads are request inputs, not state, and R4 does not classify them. R4 does not parse the cite text, so it cannot prove `reads` is complete.",
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "decision": {
+          "$ref": "#/$defs/decision"
+        },
+        "parameters": {
+          "type": "object",
+          "propertyNames": { "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/parameter" },
+          "description": "Optional action parameters: parameter name → {cite}. Foundation: Palantir action parameters (\"Parameters are the inputs of an action type.\"). A condition reads a parameter as `{param: <name>}` or, in an expression, as `{ref: <name>}`. R1: must be a mapping; each entry carries a cite. R2: the cite quote must occur verbatim, and the parameter name must appear in it (R2 `parameter_not_in_quote`, key `<ID>:<name>`), and so must each of its `values` (R2 `parameter_value_not_in_quote`, key `<ID>:<name>:<value>`). A declared parameter that no condition reads is not a failure."
+        },
+        "edits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Properties the action modifies, as `Object.prop`. Foundation (closest analog: the modify-object rules of a Palantir action type). R1: each must be a declared property of a declared object, or have an outOfScopeObjectTypes name as its object prefix. The object prefixes (declared objects only) are touched objects: R5 cross-context, R6 link sweep, R7 allowed stores. R7: for an action with `evidence`, a column changed on an existing row of a touched object's store must be listed here as `Object.prop` for each touched object with that store (else `column_undeclared`, key `<ID>:<Object>.<prop>`, once per touched object and column), and each entry that resolves to a declared property (as R1 resolves it; an unresolvable entry is R1 only) must be changed on an existing row by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:<Object>.<prop>`). R3: `<Object>.<state property>` here ⇔ the action is in some `by` of that object's transitions (objects with `stateMachines` only). R11: an action that writes an input of a `materializedFrom` property must also list that property here."
+        },
+        "creates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Objects the action creates (optional). Foundation (closest analog: the create-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. Declared objects here are touched (R5, R6, R7) and count as writing every property of that object for R11. R5: creating the `from` object of a link with `create_rule` triggers that rule."
+        },
+        "edit_cites": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "Optional source evidence for single edits: `Object.prop` → {cite}. Extension (R1); no Palantir analog. R1: each key must be an entry of `edits` and carry a cite.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cite"
+            ],
+            "properties": {
+              "cite": {
+                "$ref": "#/$defs/cite"
+              }
+            }
+          }
+        },
+        "idempotencyKey": {
+          "description": "Whether the caller must supply an idempotency key for this action. Extension (R1, R2). `required: true` = a key is required; `required: false` = explicitly not required; field absent = unspecified, never read as false. A cite is required for both values. Never derived from creates, edits, emits or any other effect.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "cite"
+          ],
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            }
+          }
+        },
+        "crossContext": {
+          "description": "Declaration that the action writes objects of another context. Extension (R1, R5); no Palantir analog. Exactly one of two forms. `{via, cite}`: through one of the mechanisms the project configures. `{unspecified, cite}`: the source says the action writes objects of another context but does not say how; `unspecified` states what is missing. R1: exactly one of `via` / `unspecified` (non-empty string) and a `cite` object. R5: required when any touched object has a context different from the action's context; must be absent when none has (else R5 `generic`, key = action id). The `via` form: the mechanism must be configured; R5 does not check its content. The `unspecified` form: R5 `mechanism_unspecified` (key = action id) unless waived in knownSourceGaps.",
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "via",
+                "cite"
+              ],
+              "properties": {
+                "via": {
+                  "description": "The mechanism. R5: must be one of the mechanisms in the project's format configuration.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cite": {
+                  "$ref": "#/$defs/cite"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "unspecified",
+                "cite"
+              ],
+              "properties": {
+                "unspecified": {
+                  "description": "What the source does not say about the mechanism.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cite": {
+                  "$ref": "#/$defs/cite"
+                }
+              }
+            }
+          ]
+        },
+        "link_effects": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "description": "Link sweep (R6), keyed by link id. Extension (R1, R6); no Palantir analog. R1: must be a mapping (use {}); each key must be a declared link id. R6 needs an entry for EXACTLY the links whose `from` or `to` is a touched object of this action: a missing entry fails R6 `link_effect_missing` (key `<ID>:<link id>`); an entry for a link not incident to any touched object fails R6 (key `<ID>:<link id>:stray`, kind `generic`). The effect text itself is not checked for meaning.",
+          "additionalProperties": {
+            "$ref": "#/$defs/linkEffect"
+          }
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Event types the action writes. Extension (R1, R7, R8); no Palantir analog. R1: must be a list. R8: each must be in the source event catalog. R7: every event type the evidence wrote must be listed here (else R7 `event_undeclared`); listed but unwritten events are not a failure."
+        },
+        "evidence": {
+          "description": "Optional: id of the evidence that implements this action. Extension (R1, R6, R7); no Palantir analog. R1: must be an id the evidence adapter provides; each id is claimed by at most one action. R7: for this action at least one committed invocation must be observed (else `<ID>:no-batch`); every store those invocations changed must be in stores(touched objects) ∪ link `table`s that are not any object's store and for which this action declares an `effect` ∪ `infrastructureStores` (else R7 `table_undeclared`); every event type written must be in `emits` (else R7 `event_undeclared`). Changed columns and edited properties are checked as described under `edits` (`column_undeclared`, `effect_unwitnessed`); each declared object in `creates` must have a row inserted into its store by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:creates:<Object>`); pure link stores as described under the link `table`. Rejected invocations add nothing to the observed changes. An invocation record that is not well-formed (SPEC section 4: for example a committed record without a well-formed `delta`, a rejected record whose `delta` is not `null`, or a missing `id` or `rolledBackAttempts`) counts as neither committed nor rejected and is reported as an info diagnostic, not a violation. Evidence with committed invocations that no action claims fails R7. R6 also uses the observed stores for `none_but_written`. Actions without `evidence` get no other R7 check; with the profile setting `evidenceRequired`, they fail R7 `evidence_missing`.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "permission": {
+      "description": "Permission of the action. Extension (R1, R10); closest Palantir analog: action type permissions. Four forms: (1) `unknown` — the source gives none; R10 fails `permission_unknown` (waivable). (2) `{keys, cite, conditional_keys?, conditional_cite?}` — keys = unconditional keys of the action's row; conditional_keys = keys needed only under a condition. (3) `{none, cite, principals?}` — the row names no key; `none` is a reason string; optional `principals` as in form (2). (4) `{any_of: [...]}` — at least 2 alternatives, each a form (2) object; the actor may run the action when its effective keys satisfy at least one alternative (OR). R1: exactly one form; `any_of` must be the only key, hold at least 2 alternatives, and each alternative must pass the form (2) checks below (a `none` alternative is rejected); an alternative b is redundant, and rejected, when another alternative a exists with b.keys ⊇ a.keys ∪ a.conditional_keys and b admits no actor kind that a does not (a has no `principals`, or b's `principals.kinds` ⊆ a's) (whoever satisfies b holds all keys of a, whether or not a's condition applies; b's own conditional_keys do not matter; two condition-free alternatives with equal keys: only the later one is reported); keys distinct and non-empty; no singular `key`; conditional_keys and conditional_cite only together and only with keys. R10: the action id must be in exactly one row of the source permission table (else `permission_unmapped`); every key must be in the source permission catalog (else `permission_not_in_catalog`); keys ∪ conditional_keys must equal the row keys (else `permission_mismatch`; `none` means the empty set; for `any_of` the union over alternatives of keys ∪ conditional_keys is compared); keys ∩ conditional_keys must be empty (else `permission_conditional_overlap`); `cite.doc` must be exactly the project's required source anchor and `cite.quote` a substring of that row's key cell (else `permission_cite_mismatch`, also for `none`); `conditional_cite` must also name the required anchor, be a substring of the key cell and name each conditional key in the source's key syntax. For `any_of`, the catalog, overlap, cite and conditional_cite checks apply to each alternative; and each alternative's cite.quote must name every key in its keys, and cite.quote or conditional_cite.quote every key in its conditional_keys, in the source's key syntax (else `permission_cite_mismatch`; this extra check applies only inside `any_of`).",
+      "oneOf": [
+        {
+          "const": "unknown"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "none",
+            "cite"
+          ],
+          "properties": {
+            "none": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why there is no key. The action's source row must name no key (R10)."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite",
+              "description": "R10: doc must be the required source anchor; quote a substring of the action's row key cell."
+            },
+            "principals": { "$ref": "#/$defs/principals" }
+          }
+        },
+        {
+          "$ref": "#/$defs/permissionKeys"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "any_of"
+          ],
+          "properties": {
+            "any_of": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/permissionKeys"
+              },
+              "description": "Alternatives. The actor may run the action when its effective keys satisfy at least one alternative. Each alternative means exactly what form (2) means."
+            }
+          }
+        }
+      ]
+    },
+    "principals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kinds", "cite"],
+      "description": "Optional: the actor kinds the form admits; an actor of another kind is denied. A claim with its own cite (R2 verbatim); R10 does not check it.",
+      "properties": {
+        "kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "cite": { "$ref": "#/$defs/cite" }
+      }
+    },
+    "permissionKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keys",
+        "cite"
+      ],
+      "dependentRequired": {
+        "conditional_keys": [
+          "conditional_cite"
+        ],
+        "conditional_cite": [
+          "conditional_keys"
+        ]
+      },
+      "properties": {
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Unconditional permission keys (R10: keys ∪ conditional_keys = row keys)."
+        },
+        "cite": {
+          "$ref": "#/$defs/cite",
+          "description": "R10: doc must be the required source anchor; quote a substring of the action's row key cell."
+        },
+        "conditional_keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Keys needed only under a condition (R10: disjoint from keys)."
+        },
+        "conditional_cite": {
+          "$ref": "#/$defs/cite",
+          "description": "R10: doc is the required source anchor; quote a substring of the row key cell that states the condition and names each conditional key."
+        },
+        "principals": { "$ref": "#/$defs/principals" }
+      },
+      "description": "Form (2) of `permission`, also one alternative of `any_of`: `{keys, cite, conditional_keys?, conditional_cite?}` — keys = unconditional keys the actor must all hold; conditional_keys = keys needed only under a condition; conditional_keys and conditional_cite only together. R1: keys distinct and non-empty; no singular `key`. R10: every key in the source permission catalog; keys ∩ conditional_keys empty; `cite.doc` the required source anchor and `cite.quote` a substring of the action's row key cell; `conditional_cite` also names the anchor, is a substring of the key cell and names each conditional key."
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cites"
+      ],
+      "oneOf": [
+        { "required": ["expr"] },
+        { "required": ["unspecified"] }
+      ],
+      "dependentRequired": {
+        "reads": ["unspecified"],
+        "reads_unspecified": ["unspecified"]
+      },
+      "description": "One condition: exactly one of `expr` (the claim as an expression) and `unspecified` (the source states the claim but it is not written as an expression; `reads` may then list what it reads). Foundation (closest analog: Palantir submission criteria).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id unique within the action (R1). Violation keys and decision rows use it."
+        },
+        "expr": {
+          "$ref": "#/$defs/expr",
+          "description": "The claim as a predicate expression. R1: it type-checks in the action (parameters, `actor.id`, `actor.keys`, `now`, quantifier variables). R4: every literal must occur as a whole identifier in one of the `cites` quotes (else `literal_unsupported`, key `<ID>:<condition id>:<value>`)."
+        },
+        "unspecified": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the claim is not written as an expression. A decision row that uses this condition fails R12 `condition_unspecified`."
+        },
+        "reads": {
+          "type": "array",
+          "description": "What the criterion reads. Items: `Object.prop` (a declared property), a derived id (a key of `derivedProperties`; its `reads` are checked instead), a value read `{prop, values}`, a parameter read `{param, values?}` (a key of this action's `parameters`) or an actor read `{actor: id | keys}`. R1: each item must resolve. R4: every property read, directly or through a derived id, must be class canonical (derived, policy and unknown fail R4 `precondition_reads_non_canonical`, key `<ID>:<Object.prop>`). A value read passes if the property is canonical, or if every value is in that property's `canonical_values.values`. Parameter and actor reads are not properties; R4 does not classify them. Each value of a parameter read must appear in one of this condition's cite quotes (R4 `parameter_value_unsupported`, key `<ID>:<criterion id>:<value>`).",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "`Object.prop` or a derived id."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "prop",
+                  "values"
+                ],
+                "description": "Value read: the precondition reads only these values of the property.",
+                "properties": {
+                  "prop": {
+                    "$ref": "#/$defs/propRef"
+                  },
+                  "values": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["param"],
+                "description": "Parameter read: the precondition reads this parameter of the action (only these values, when `values` is given).",
+                "properties": {
+                  "param": { "type": "string", "minLength": 1 },
+                  "values": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["actor"],
+                "description": "Actor read: the precondition reads the caller — `id` (its identity) or `keys` (its effective permission keys, for example which `permission.any_of` alternative it satisfies).",
+                "properties": { "actor": { "enum": ["id", "keys"] } }
+              }
+            ]
+          }
+        },
+        "cites": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/citeItem" },
+          "description": "Source text that states the condition (R2 verbatim each)."
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional source scenario ids. R9: each must be a scenario the adapter reports whose cited actions include this action. Coverage is printed, or enforced as R9 `criterion_uncovered` when the project config sets `scenarioCoverage: \"enforced\"`."
+        },
+        "reads_unspecified": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Set when the source does not say what the condition reads; text says what is missing. R4 fails `precondition_reads_unspecified` (key `<ID>:<condition id>`) unless waived in knownSourceGaps."
+        }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cite"],
+      "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote.",
+      "properties": {
+        "cite": { "$ref": "#/$defs/cite" },
+        "type": { "$ref": "#/$defs/valueType" },
+        "optional": { "const": true },
+        "values": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["values"] },
+          "then": { "required": ["type"], "properties": { "type": { "const": "enum" } } }
+        }
+      ]
+    },
+    "citeItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cite"
+        ],
+        "properties": {
+          "cite": {
+            "$ref": "#/$defs/cite"
+          }
+        }
+      },
+      "scopeType": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "cite"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cite": {
+            "$ref": "#/$defs/cite"
+          }
+        }
+      },
+      "valueType": {
+        "description": "A value type: a scalar type name, `{ref: <ObjectType>}` (an id of that object), or `{set: <element type>}`. `string` exists only as a set element type.",
+        "oneOf": [
+          {
+            "enum": [
+              "enum",
+              "timestamp",
+              "duration",
+              "date",
+              "timezone",
+              "id",
+              "integer",
+              "boolean"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "set"
+            ],
+            "properties": {
+              "set": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "enum",
+                      "timestamp",
+                      "duration",
+                      "date",
+                      "timezone",
+                      "id",
+                      "integer",
+                      "boolean",
+                      "string"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "ref"
+                    ],
+                    "properties": {
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expr": {
+        "type": "object",
+        "minProperties": 1,
+        "maxProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "now, actor.id, actor.keys, a parameter, or <binding>.<property> (one dot)."
+          },
+          "lit": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                }
+              }
+            ],
+            "description": "A literal: string, integer, or a non-empty set literal. No Boolean literals."
+          },
+          "plus": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "dateIn": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "derived": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "of"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "of": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "eq": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "neq": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "lt": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "lte": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "gt": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "gte": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "and": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "or": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "not": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "in": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "subsetOf": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "isNull": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "isNotNull": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "exists": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "as",
+              "in"
+            ],
+            "properties": {
+              "as": {
+                "type": "string",
+                "minLength": 1
+              },
+              "in": {
+                "$ref": "#/$defs/expr"
+              },
+              "where": {
+                "$ref": "#/$defs/expr"
+              }
+            }
+          },
+          "none": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "as",
+              "in"
+            ],
+            "properties": {
+              "as": {
+                "type": "string",
+                "minLength": 1
+              },
+              "in": {
+                "$ref": "#/$defs/expr"
+              },
+              "where": {
+                "$ref": "#/$defs/expr"
+              }
+            }
+          },
+          "all": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "as",
+              "in"
+            ],
+            "properties": {
+              "as": {
+                "type": "string",
+                "minLength": 1
+              },
+              "in": {
+                "$ref": "#/$defs/expr"
+              },
+              "where": {
+                "$ref": "#/$defs/expr"
+              }
+            }
+          },
+          "nav": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "link",
+              "dir"
+            ],
+            "properties": {
+              "from": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "link": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dir": {
+                "enum": [
+                  "forward",
+                  "reverse"
+                ]
+              }
+            }
+          }
+        },
+        "description": "An expression: a map with exactly one key, the node name. Value nodes: ref, lit, plus, dateIn, derived. Predicate nodes: comparisons, and, or, not, in, subsetOf, isNull, isNotNull, and the quantifiers exists / none / all over a nav. Type rules: SPEC.md section 9."
+      },
+      "decision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hitPolicy",
+          "rows"
+        ],
+        "description": "Decision table of the action: the first row whose condition test holds gives the result; `otherwise` gives the result when no row holds. Extension (R1, R12); closest Palantir analog: none. R12: an action with conditions needs a table (`decision_table_missing`); a table needs `otherwise` (`otherwise_missing`); rows with different results need `order` (`row_order_uncited`) and, for rows that cite one section, source order (`row_order_mismatch`); each result must occur in one of its row's cites (`result_unsupported`); a row may not use an unspecified condition (`condition_unspecified`).",
+        "properties": {
+          "hitPolicy": {
+            "const": "first"
+          },
+          "order": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cite"
+            ],
+            "properties": {
+              "cite": {
+                "$ref": "#/$defs/cite"
+              }
+            },
+            "description": "Source text that says the rows are checked in order."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/decisionRow"
+            }
+          },
+          "otherwise": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "result",
+              "cites"
+            ],
+            "properties": {
+              "result": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cites": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/citeItem"
+                }
+              },
+              "next": {
+                "$ref": "#/$defs/next"
+              }
+            }
+          }
+        }
+      },
+      "decisionRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "when",
+          "result",
+          "cites"
+        ],
+        "properties": {
+          "when": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "passes"
+                ],
+                "properties": {
+                  "passes": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fails"
+                ],
+                "properties": {
+                  "fails": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ],
+            "description": "passes: the condition is true; fails: it is false or unknown. R1: a condition id of this action."
+          },
+          "result": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A key of `dispositions` (R1)."
+          },
+          "cites": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/citeItem"
+            }
+          },
+          "next": {
+            "$ref": "#/$defs/next"
+          }
+        }
+      },
+      "next": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "actions"
+            ],
+            "properties": {
+              "actions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "external",
+              "cite"
+            ],
+            "properties": {
+              "external": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cite": {
+                "$ref": "#/$defs/cite"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "unspecified"
+            ],
+            "properties": {
+              "unspecified": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ],
+        "description": "What follows a pending result: actions of this system, an external step (with a cite), or unspecified (R12 `next_unspecified`, waivable). R1: only a pending result has `next`, and it must have one."
+      },
+    "linkEffect": {
+      "description": "Effect of the action on one link. Extension (R1, R6, R7, R9); no Palantir analog. Exactly one of `effect` (what changes), `none` (reason it does not change) or `unspecified` (what the source leaves open); the value is a non-empty string. R1: exactly one of the three; `effect` and `unspecified` need a `cite`; `none` may carry a cite. R6: `unspecified` fails R6 `effect_unspecified` (key `<ID>:<link id>`) unless waived in knownSourceGaps; `none` on a link with `table` that the action's evidence wrote fails R6 `none_but_written`. R7: an `effect` on a pure link store allows the evidence to write that store. R9: `scenarios` of `effect` / `unspecified` entries must exist and cite the action; on `none` entries R9 does not check them.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "effect",
+            "cite"
+          ],
+          "properties": {
+            "effect": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What the action does to the link."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            },
+            "scenarios": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Source scenario ids (R9: must exist and cite this action)."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "none"
+          ],
+          "properties": {
+            "none": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why the link is not changed."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            },
+            "scenarios": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Source scenario ids; not checked by R9 on a `none` entry."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unspecified",
+            "cite"
+          ],
+          "properties": {
+            "unspecified": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What the source does not say (R6 fails unless waived)."
+            },
+            "cite": {
+              "$ref": "#/$defs/cite"
+            },
+            "scenarios": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Source scenario ids (R9: must exist and cite this action)."
+            }
+          }
+        }
+      ]
+    },
+    "knownSourceGap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "rule",
+        "kind",
+        "keys",
+        "doc_line",
+        "conflict",
+        "proposed"
+      ],
+      "description": "One known source gap (waiver). R1: all seven fields required.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Waiver id (printed with each waived violation)."
+        },
+        "rule": {
+          "type": "string",
+          "pattern": "^R[0-9]+$",
+          "description": "Rule of the violations to waive (R1: ^R\\d+$). A stale key fails under this rule."
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Violation kind to waive, e.g. `effect_unspecified`, `permission_unknown`, `criterion_uncovered`, `effect_uncovered`, `precondition_reads_unspecified`; `generic` for violations without a named kind. Must match exactly."
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Violation keys to waive, exactly as the checker builds them (e.g. `<ID>:<link id>` for R6, `<ID>` for R10 permission_unknown, `<ID>:<condition id>` for R4 reads_unspecified). Each key must still match a violation (else `stale_waiver`)."
+        },
+        "doc_line": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the source gap is. Free text."
+        },
+        "conflict": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What is missing or contradictory. Free text."
+        },
+        "proposed": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Proposed source fix. Free text."
+        }
+      }
+    }
+  }
+}

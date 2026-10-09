@@ -1,0 +1,4 @@
+# R3: the source binds RETURN to Book ON_LOAN → AVAILABLE; the ontology drops it from by.
+expect: R3
+patch:
+  - { op: replace, path: /stateMachines/Book/transitions/1/by, value: [] }

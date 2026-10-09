@@ -1,0 +1,5 @@
+# R12: borrower_is_caller is written as neq and consumed by passes; with a null person_id it is UNKNOWN, row 0 does not match, and the table falls through to BORROWED.
+expect: R12
+patch:
+  - { op: replace, path: /actionTypes/BORROW/conditions/0/expr, value: { neq: [{ ref: member_id.person_id }, { ref: actor.id }] } }
+  - { op: replace, path: /actionTypes/BORROW/decision/rows/0/when, value: { passes: borrower_is_caller } }

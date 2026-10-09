@@ -1,0 +1,4 @@
+# R10: BORROW keys differ from its permission row.
+expect: R10
+patch:
+  - { op: replace, path: /actionTypes/BORROW/permission/keys, value: ["loan:close"] }

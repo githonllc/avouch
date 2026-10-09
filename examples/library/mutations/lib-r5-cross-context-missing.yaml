@@ -1,0 +1,4 @@
+# R5: BORROW (Circulation) edits Book (Catalog) without crossContext.
+expect: R5
+patch:
+  - { op: remove, path: /actionTypes/BORROW/crossContext }

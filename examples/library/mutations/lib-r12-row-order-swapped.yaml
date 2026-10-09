@@ -1,0 +1,11 @@
+# R12: the REFERRED row is moved above a REJECTED row whose cite comes earlier in L6; the row order no longer follows the source.
+expect: R12
+patch:
+  - { op: remove, path: /actionTypes/BORROW/decision/rows/3 }
+  - op: add
+    path: /actionTypes/BORROW/decision/rows/2
+    value:
+      when: { fails: returns_in_good_condition }
+      result: REFERRED
+      cites: [{ cite: { doc: L6, quote: "BORROW by a Member with a Loan that is not returned in GOOD condition is REFERRED to a librarian." } }]
+      next: { external: "a librarian decides", cite: { doc: L14, quote: "REFERRED when a librarian must decide" } }

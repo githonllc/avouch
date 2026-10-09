@@ -1,0 +1,4 @@
+# R4: book_available compares with ON_LOAN, a literal its cite quote does not name.
+expect: R4
+patch:
+  - { op: replace, path: /actionTypes/BORROW/conditions/1/expr/eq/1/lit, value: ON_LOAN }

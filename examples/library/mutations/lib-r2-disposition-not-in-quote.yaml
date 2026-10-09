@@ -1,0 +1,4 @@
+# R2: the quote of the REFERRED disposition does not name REFERRED.
+expect: R2
+patch:
+  - { op: replace, path: /dispositions/REFERRED/cite/quote, value: "when a librarian must decide" }

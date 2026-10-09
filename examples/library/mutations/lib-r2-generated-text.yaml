@@ -1,0 +1,4 @@
+# R2: a cite quotes text inside a generated block; the adapter excludes generated text, so the quote is not in its section.
+expect: R2
+patch:
+  - { op: replace, path: /actionTypes/BORROW/conditions/0/cites/0/cite/quote, value: "BORROW edits Book.state and Member.open_loans" }

@@ -1,0 +1,4 @@
+# R2: a cite quote that is not verbatim in its section.
+expect: R2
+patch:
+  - { op: replace, path: /objectTypes/Book/properties/title/cite/quote, value: "The title of a Book is set when the copy is catalogued!" }

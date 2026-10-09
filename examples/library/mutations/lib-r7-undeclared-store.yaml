@@ -1,0 +1,4 @@
+# R7: the evidence writes audit_log, which is no longer declared.
+expect: R7
+patch:
+  - { op: replace, path: /infrastructureStores, value: [] }

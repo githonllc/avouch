@@ -1,0 +1,4 @@
+# R8: BORROW emits an event that is not in the event catalog.
+expect: R8
+patch:
+  - { op: add, path: /actionTypes/BORROW/emits/-, value: loan.lent }

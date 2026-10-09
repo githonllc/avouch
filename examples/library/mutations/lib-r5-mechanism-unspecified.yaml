@@ -1,0 +1,6 @@
+# R5: BORROW's crossContext says the source does not name the mechanism -> mechanism_unspecified.
+expect: R5
+patch:
+  - op: replace
+    path: /actionTypes/BORROW/crossContext
+    value: { unspecified: "the source does not say how Book is written", cite: { doc: L6, quote: "BORROW and RETURN write Book and Member in the same transaction as the Loan." } }

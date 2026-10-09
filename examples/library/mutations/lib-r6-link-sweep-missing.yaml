@@ -1,0 +1,4 @@
+# R6: RETURN touches Loan but has no link_effects entry for loan_member.
+expect: R6
+patch:
+  - { op: remove, path: /actionTypes/RETURN/link_effects/loan_member }

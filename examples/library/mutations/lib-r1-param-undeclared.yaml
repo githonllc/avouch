@@ -1,0 +1,4 @@
+# R1: a condition reads a parameter BORROW does not declare.
+expect: R1
+patch:
+  - { op: add, path: /actionTypes/BORROW/conditions/-, value: { id: reads_probe, unspecified: "probe", reads: [{ param: memberid }], cites: [{ cite: { doc: L6, quote: "only that Member may submit BORROW" } }] } }

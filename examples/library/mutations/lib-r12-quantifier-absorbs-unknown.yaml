@@ -1,0 +1,10 @@
+# R12: returns_in_good_condition is written as none(not(eq)) without a null guard; a Loan with a null return_condition makes the body UNKNOWN, and none turns it into T.
+expect: R12
+patch:
+  - op: replace
+    path: /actionTypes/BORROW/conditions/3/expr
+    value:
+      none:
+        as: l
+        in: { nav: { from: { ref: member_id }, link: loan_member, dir: reverse } }
+        where: { not: [{ eq: [{ ref: l.return_condition }, { lit: GOOD }] }] }

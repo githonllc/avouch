@@ -1,0 +1,55 @@
+{
+  "name": "@githonllc/avouch",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/githonllc/avouch.git"
+  },
+  "homepage": "https://avouch.dev/",
+  "bugs": {
+    "url": "https://github.com/githonllc/avouch/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./ontology.schema.json": "./ontology.schema.json",
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "avouch": "dist/cli/avouch.js"
+  },
+  "files": [
+    "dist/src/",
+    "dist/cli/",
+    "ontology.schema.json",
+    "SPEC.md",
+    "docs/",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run build",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~5.8.3",
+    "vite": "~7.3.6",
+    "vitest": "~3.2.4"
+  }
+}

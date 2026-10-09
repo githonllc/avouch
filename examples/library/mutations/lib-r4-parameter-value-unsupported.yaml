@@ -1,0 +1,4 @@
+# R4: a condition compares member_id with a value its cite quote does not name.
+expect: R4
+patch:
+  - { op: add, path: /actionTypes/BORROW/conditions/-, value: { id: reads_probe, unspecified: "probe", reads: [{ param: member_id, values: [M-1] }], cites: [{ cite: { doc: L6, quote: "only that Member may submit BORROW" } }] } }

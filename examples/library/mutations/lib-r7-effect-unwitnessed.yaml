@@ -1,0 +1,4 @@
+# R7: BORROW declares an edit of Book.title that no committed invocation of its evidence makes (effect_unwitnessed).
+expect: R7
+patch:
+  - { op: add, path: /actionTypes/BORROW/edits/-, value: Book.title }

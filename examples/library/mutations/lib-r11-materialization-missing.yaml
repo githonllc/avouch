@@ -1,0 +1,4 @@
+# R11: Loan.due_date is declared materialized from Book.state, but BORROW and RETURN, which edit Book.state, do not list it.
+expect: R11
+patch:
+  - { op: add, path: /objectTypes/Loan/properties/due_date/materializedFrom, value: { reads: [Book.state], cites: [{ cite: { doc: L2, quote: "is updated in the same transaction as the loan" } }] } }

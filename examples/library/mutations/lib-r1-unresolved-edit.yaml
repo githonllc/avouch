@@ -1,0 +1,4 @@
+# R1: BORROW edits a property that is not declared.
+expect: R1
+patch:
+  - { op: add, path: /actionTypes/BORROW/edits/-, value: Book.titel }

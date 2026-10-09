@@ -1,0 +1,4 @@
+# R6: none on loan_book, but the borrow evidence writes its store loans.
+expect: R6
+patch:
+  - { op: replace, path: /actionTypes/BORROW/link_effects/loan_book, value: { none: "claimed unchanged" } }

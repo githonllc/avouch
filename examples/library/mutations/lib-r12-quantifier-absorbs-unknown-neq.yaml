@@ -1,0 +1,10 @@
+# R12: as lib-r12-quantifier-absorbs-unknown, but the body is neq without a null guard; none still turns its UNKNOWN into T.
+expect: R12
+patch:
+  - op: replace
+    path: /actionTypes/BORROW/conditions/3/expr
+    value:
+      none:
+        as: l
+        in: { nav: { from: { ref: member_id }, link: loan_member, dir: reverse } }
+        where: { neq: [{ ref: l.return_condition }, { lit: GOOD }] }

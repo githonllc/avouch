@@ -1,0 +1,4 @@
+# R12: RETURN has a decision table without an otherwise row.
+expect: R12
+patch:
+  - { op: remove, path: /actionTypes/RETURN/decision/otherwise }

@@ -1,0 +1,4 @@
+# R9: a link effect lists a scenario that does not exist.
+expect: R9
+patch:
+  - { op: add, path: /actionTypes/BORROW/link_effects/loan_member/scenarios, value: [S9] }

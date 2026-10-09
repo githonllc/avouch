@@ -1,0 +1,4 @@
+# R4: a condition reads the derived Member.open_loans.
+expect: R4
+patch:
+  - { op: add, path: /actionTypes/BORROW/conditions/-, value: { id: open_loans_below_limit, unspecified: "probe", reads: [Member.open_loans], cites: [{ cite: { doc: L6, quote: "a Member who is not blocked" } }] } }
