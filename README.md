@@ -151,6 +151,8 @@ Version 0.1.0 was published by hand, because npm accepts a trusted publisher onl
 
 CI and the release workflow run `scripts/scan-private.mjs`. It scans the path and text of each tracked file, and the commit messages of a pull request, for private content: local paths, tokens, private keys, and the patterns in the repository secret `PRIVATE_PATTERNS`. A hit shows only the file and line (or commit) and a pattern label, never the text. Pull requests from forks do not get the secret, so they run with the built-in patterns only. Pushes to `main`, pull requests from this repository and releases fail if the secret is missing.
 
+The secret is generated from a list kept in a private repository; maintainers never edit it by hand. After the list changes, a maintainer runs the generator, which prints a pattern count and a sha256 fingerprint, and re-sets the secret with `gh secret set PRIVATE_PATTERNS`. The scan prints `PRIVATE_PATTERNS: <n> patterns, sha256 <12 hex>` for the patterns it loaded (comment lines dropped, pattern lines joined by `\n`); the next CI run on `main` must show the same count and fingerprint as the generator.
+
 ## Versions and identifiers
 
 The ontology file has `formatVersion: 1`. The schema `$id` is `https://w3id.org/avouch/v1/schema.json`. The version rules are in SPEC section 8.
