@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,11 +90,14 @@ describe("scan-private", () => {
     expect(result.status).toBe(0);
   });
 
-  it("exits 0 with a one-line summary on a clean repository", () => {
+  it("exits 0 with the pattern fingerprint and a one-line summary on a clean repository", () => {
     const cwd = repo({ "a.md": "all clean\n" });
     const result = scan(cwd, { PRIVATE_PATTERNS: ":Zorblax" });
     expect(result.status).toBe(0);
-    expect(result.output.trim().split("\n")).toHaveLength(1);
+    const lines = result.output.trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^PRIVATE_PATTERNS: 1 patterns, sha256 [0-9a-f]{12}$/);
+    expect(lines[1]).toMatch(/^scan-private: no hits/);
   });
 
   it("finds a hit in a commit message of SCAN_LOG_RANGE", () => {
@@ -147,5 +151,15 @@ describe("scan-private", () => {
     const result = scan(cwd);
     expect(result.output).toContain("::warning::");
     expect(result.status).toBe(0);
+  });
+  it("prints the count and sha256 prefix of the loaded pattern lines, ignoring comments and blank lines", () => {
+    const cwd = repo({ "a.md": "all clean\n" });
+    const expected = createHash("sha256").update(":Zorblax\ni:zorb\\w+").digest("hex").slice(0, 12);
+    const plain = scan(cwd, { PRIVATE_PATTERNS: ":Zorblax\ni:zorb\\w+" });
+    const commented = scan(cwd, { PRIVATE_PATTERNS: "# Zorblax label\n:Zorblax\r\n\n# second\ni:zorb\\w+\n" });
+    for (const result of [plain, commented]) {
+      expect(result.status).toBe(0);
+      expect(result.output).toContain(`PRIVATE_PATTERNS: 2 patterns, sha256 ${expected}`);
+    }
   });
 });
