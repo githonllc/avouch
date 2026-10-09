@@ -1,0 +1,14 @@
+{
+  "name": "avouch",
+  "owner": {
+    "name": "Githon LLC"
+  },
+  "description": "Claude Code skills for the Avouch ontology spec.",
+  "plugins": [
+    {
+      "name": "avouch",
+      "source": "./",
+      "description": "Avouch skills: avouch-cli and aquery-scan."
+    }
+  ]
+}

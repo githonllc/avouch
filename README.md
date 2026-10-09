@@ -117,6 +117,20 @@ The stamp tells which specification answered:
 
 Exit code 0 means there is a result. 1 means there is no result: the id is not declared, or the list is empty (the envelope is still printed). 2 means invalid arguments, or a file, parsing or adapter error.
 
+## Claude Code plugin
+
+This repository is also a Claude Code plugin marketplace. Install the plugin:
+
+```
+/plugin install avouch --marketplace githonllc/avouch
+```
+
+The plugin has two skills:
+- `avouch-cli`: checks an ontology and runs `avouch query`.
+- `aquery-scan` (also `/aquery-scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document.
+
+The skills run the CLI with `npx -y github:githonllc/avouch`. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git. `skills/aquery-scan/fixture/` is the test project for the skill.
+
 ## Publishing
 
 The npm package is `@githonllc/avouch`, and its command is `avouch`. The package is not published yet. `package.json` has `"private": true`, so `npm publish` refuses the package. Keep that line in every repository copy. Remove it only in the release copy (step 4).
