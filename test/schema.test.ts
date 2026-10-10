@@ -18,6 +18,17 @@ const probe = (reads: unknown[]) => ({ id: "reads_probe", unspecified: "probe", 
 const sorted = (xs: readonly string[]) => [...xs].sort();
 
 describe("ontology JSON Schema", () => {
+  it("deletes accepts a string list alongside creates and edits", () => {
+    const o = structuredClone(ontology);
+    o.actionTypes.BORROW.deletes = ["Loan"];
+    expect(validate(o)).toBe(true);
+    for (const invalid of ["Loan", [1]]) {
+      o.actionTypes.BORROW.deletes = invalid;
+      expect(validate(o)).toBe(false);
+      expect(paths()).toContain(Array.isArray(invalid) ? "/actionTypes/BORROW/deletes/0" : "/actionTypes/BORROW/deletes");
+    }
+  });
+
   it("the YAML names the schema on its first line", () =>
     expect(toyText.split("\n")[0]).toBe("# yaml-language-server: $schema=../../ontology.schema.json"));
 

@@ -53,6 +53,19 @@ afterEach(() => {
 });
 
 describe("avouch query", () => {
+  it("prints deletes and deleters in action, object and writes text", () => {
+    const path = patchedOntology([{ op: "add", path: "/actionTypes/DELETE_LOAN", value: { deletes: ["Loan"] } }]);
+    for (const [verb, arg, line] of [
+      ["action", "DELETE_LOAN", "deletes: Loan"],
+      ["object", "Loan", "    deletes: true"],
+      ["writes", "Loan.state", "deleters: DELETE_LOAN"],
+    ]) {
+      const r = run(verb, arg, path);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout.split("\n")).toContain(line);
+    }
+  });
+
   it("prints a versioned envelope with check not_run", () => {
     const r = json("action", "BORROW", ontology);
     expect(r.status, r.stderr).toBe(0);

@@ -171,6 +171,86 @@ describe("toy library project", () => {
       return ev;
     };
 
+    describe("deletes", () => {
+      const deleting = (value: unknown) => applyPatch(ont, [{ op: "add", path: "/actionTypes/BORROW/deletes", value }]);
+      const onlyDeletes = (objects = ["Loan"]) => applyPatch(deleting(objects), [
+        { op: "replace", path: "/actionTypes/BORROW/creates", value: [] },
+        { op: "replace", path: "/actionTypes/BORROW/edits", value: [] },
+      ]);
+      const removed = { row: 2, before: { id: "LN-2", state: "ACTIVE" } };
+
+      it("R1 rejects deletes that is not a list", () => {
+        expect(check(deleting("Loan"), facts()).violations).toContainEqual(expect.objectContaining({
+          rule: "R1", key: "actionTypes.BORROW", msg: "deletes must be a list",
+        }));
+      });
+
+      it("R1 rejects an unknown deletes object", () => {
+        expect(check(deleting(["Nope"]), facts()).violations).toContainEqual(expect.objectContaining({
+          rule: "R1", key: "actionTypes.BORROW", msg: "deletes Nope: unknown object",
+        }));
+      });
+
+      it("R7 witnesses deletes only when a committed invocation deletes a row", () => {
+        const o = deleting(["Loan"]);
+        const missing = ["R7", "effect_unwitnessed", "BORROW:deletes:Loan"];
+        expect(triples(check(o, facts()))).toEqual([missing]);
+        const ev = withBorrow((inv) => inv.delta!.stores.loans.deleted.push(removed));
+        expect(triples(check(o, buildLibraryFacts(doc, ev, config)))).toEqual([]);
+        const rejected = libraryEvidence();
+        rejected.get("borrow")!.push({ ...ev.get("borrow")![0], id: "borrow#rejected", outcome: "rejected" } as unknown as Invocation);
+        expect(triples(check(o, buildLibraryFacts(doc, rejected, config)))).toEqual([missing]);
+      });
+
+      it("R7 allows the datasource of a delete-only action", () => {
+        const ev = withBorrow((inv) => {
+          inv.delta = { stores: { loans: { inserted: [], updated: [], deleted: [removed] } }, events: [] };
+        });
+        expect(triples(check(onlyDeletes(), buildLibraryFacts(doc, ev, config))).filter(([r]) => r === "R7")).toEqual([]);
+      });
+
+      it("R11 requires materialization after deleting an input object", () => {
+        expect(triples(check(onlyDeletes(), facts())).filter(([r]) => r === "R11")).toEqual([
+          ["R11", "materialization_missing", "BORROW:Member.open_loans"],
+        ]);
+        const o = applyPatch(onlyDeletes(), [{ op: "add", path: "/actionTypes/BORROW/edits/-", value: "Member.open_loans" }]);
+        expect(triples(check(o, facts())).filter(([r]) => r === "R11")).toEqual([]);
+      });
+
+      it("R11 exempts a materialized target whose object is deleted", () => {
+        expect(triples(check(onlyDeletes(["Loan", "Member"]), facts())).filter(([r]) => r === "R11")).toEqual([]);
+        const o = applyPatch(onlyDeletes(["Member"]), [
+          { op: "replace", path: "/objectTypes/Member/properties/open_loans/materializedFrom/reads", value: ["Member.person_id"] },
+        ]);
+        expect(triples(check(o, facts())).filter(([r]) => r === "R11")).toEqual([]);
+      });
+
+      it("R11 still reports an edit or create of an input when the target's object is deleted", () => {
+        const missing = [["R11", "materialization_missing", "BORROW:Member.open_loans"]];
+        const edited = applyPatch(onlyDeletes(["Member"]), [{ op: "add", path: "/actionTypes/BORROW/edits/-", value: "Loan.state" }]);
+        expect(triples(check(edited, facts())).filter(([r]) => r === "R11")).toEqual(missing);
+        const created = applyPatch(onlyDeletes(["Member"]), [{ op: "add", path: "/actionTypes/BORROW/creates/-", value: "Loan" }]);
+        expect(triples(check(created, facts())).filter(([r]) => r === "R11")).toEqual(missing);
+      });
+
+      it("R6 sweeps incident links of deleted objects", () => {
+        const o = applyPatch(onlyDeletes(), [{ op: "remove", path: "/actionTypes/BORROW/link_effects/loan_book" }]);
+        expect(triples(check(o, facts()))).toContainEqual(["R6", "link_effect_missing", "BORROW:loan_book"]);
+      });
+
+      it("R5 checks cross-context deletes", () => {
+        const o = applyPatch(onlyDeletes(["Book"]), [{ op: "remove", path: "/actionTypes/BORROW/crossContext" }]);
+        expect(triples(check(o, facts()))).toContainEqual(["R5", "generic", "BORROW"]);
+      });
+
+      it("out-of-scope deletes need no store witness and upserts need no deletes", () => {
+        const o = applyPatch(deleting(["Shelf"]), [{ op: "add", path: "/outOfScopeObjectTypes", value: { Shelf: "not modelled" } }]);
+        expect(triples(check(o, facts())).filter(([r]) => r === "R1" || r === "R7")).toEqual([]);
+        const ev = withBorrow((inv) => inv.delta!.stores.loans.deleted.push(removed));
+        expect(triples(check(ont, buildLibraryFacts(doc, ev, config)))).toEqual([]);
+      });
+    });
+
     it("(i) generated text is in the document, and a cite that quotes it fails R2", () => {
       expect(doc).toContain("BORROW edits Book.state and Member.open_loans");
       const r = check(applyPatch(ont, mut("lib-r2-generated-text")), facts());

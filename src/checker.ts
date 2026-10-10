@@ -210,6 +210,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     }
     for (const f of ["conditions", "edits", "emits"]) if (!Array.isArray(c[f])) v("R1", p, `${f} must be a list`);
     if (c.creates !== undefined && !Array.isArray(c.creates)) v("R1", p, "creates must be a list");
+    if (c.deletes !== undefined && !Array.isArray(c.deletes)) v("R1", p, "deletes must be a list");
     if (!isObj(c.link_effects)) v("R1", p, "link_effects missing (use {})");
     if (c.crossContext !== undefined) {
       const cc = c.crossContext, ks = isObj(cc) ? ["via", "unspecified"].filter((k) => k in cc) : [];
@@ -254,6 +255,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       if (!(outOfScope.has(o) || propClass(e) !== null)) v("R1", p, `edit ${e} does not resolve to a declared property`);
     }
     for (const o of arr(c.creates)) if (!objType(o) && !outOfScope.has(o)) v("R1", p, `creates ${o}: unknown object`);
+    for (const o of arr(c.deletes)) if (!objType(o) && !outOfScope.has(o)) v("R1", p, `deletes ${o}: unknown object`);
     for (const e of Object.keys(isObj(c.edit_cites) ? c.edit_cites : {}))
       if (!arr(c.edits).includes(e) || !isObj(c.edit_cites[e]?.cite)) v("R1", `${p}.edit_cites.${e}`, "must name an edit and carry a cite");
     for (const [lid, le] of Object.entries(isObj(c.link_effects) ? c.link_effects : {})) {
@@ -492,7 +494,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   for (const x of outOfScope) if (!entities.has(x)) v("R5", `entity:${x}`, `outOfScopeObjectTypes.${x} is not a source entity`, "out_of_scope_unknown");
   }
   const touched = (c: Any) =>
-    new Set<string>([...arr(c.edits).map((e: string) => e.split(".")[0]), ...arr(c.creates)].filter(objType));
+    new Set<string>([...arr(c.edits).map((e: string) => e.split(".")[0]), ...arr(c.creates), ...arr(c.deletes)].filter(objType));
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c)) continue;
     const cross = [...touched(c)].filter((o) => objects[o].context !== c.context);
@@ -553,18 +555,19 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   // columns changed on existing rows (per store; checked per object), and the events written
   const observe = (id: unknown) => {
     const committed = part(id).committed;
-    const rowStores = new Set<string>(), insertedStores = new Set<string>(), insDelStores = new Set<string>(), events = new Set<string>();
+    const rowStores = new Set<string>(), insertedStores = new Set<string>(), insDelStores = new Set<string>(), deletedStores = new Set<string>(), events = new Set<string>();
     const changedCols = new Map<string, Set<string>>();
     for (const i of committed) {
       for (const e of i.delta.events) events.add(e);
       for (const [tb, d] of Object.entries(i.delta.stores)) {
         if (hasRows(d)) rowStores.add(tb);
         if (d.inserted.length) insertedStores.add(tb);
+        if (d.deleted.length) deletedStores.add(tb);
         if (d.inserted.length || d.deleted.length) insDelStores.add(tb);
         for (const u of d.updated) for (const col of Object.keys(u.changes)) changedCols.set(tb, (changedCols.get(tb) ?? new Set<string>()).add(col));
       }
     }
-    return { committed, rowStores, insertedStores, insDelStores, changedCols, events };
+    return { committed, rowStores, insertedStores, insDelStores, deletedStores, changedCols, events };
   };
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c)) continue;
@@ -606,13 +609,13 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       if (isObj(c) && c.evidence === undefined) v("R7", cid, "the profile requires evidence, but the action declares none", "evidence_missing");
   if (facts.evidence !== undefined) {
   // a pure link table (not any object's table) may be written when the action declares an `effect` on that link;
-  // an object's table still needs the object in edits / creates
+  // an object's table still needs the object in edits / creates / deletes
   const objTables = new Set(Object.values(objects).map((o: Any) => o?.datasource));
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c) || c.evidence === undefined) continue;
     claimed.add(c.evidence);
     const { rejected } = part(c.evidence);
-    const { committed, rowStores, insertedStores, insDelStores, changedCols, events } = observe(c.evidence);
+    const { committed, rowStores, insertedStores, insDelStores, deletedStores, changedCols, events } = observe(c.evidence);
     const attempts = [...committed, ...rejected].reduce((n, i) => n + i.rolledBackAttempts, 0); // malformed records add nothing
     info.push(`R7 ${cid} (${c.evidence}, ${committed.length} committed, ${rejected.length} rejected invocations, ${attempts} rolled-back attempts): changed {${[...rowStores].sort()}} events {${[...events].sort()}}`);
     if (!committed.length) {
@@ -624,7 +627,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     const pureLink = (l: Any) => isObj(l) && isStr(l.table) && !objTables.has(l.table) && isObj(c.link_effects?.[l.id]) && "effect" in c.link_effects[l.id];
     const linkTables = links.filter(pureLink).map((l) => l.table as string);
     const allowed = new Set([...declared, ...linkTables, ...infra]);
-    for (const tb of rowStores) if (!allowed.has(tb)) v("R7", `${cid}:${tb}`, `evidence (${c.evidence}) changed store ${tb}, not declared by edits/creates`, "table_undeclared");
+    for (const tb of rowStores) if (!allowed.has(tb)) v("R7", `${cid}:${tb}`, `evidence (${c.evidence}) changed store ${tb}, not declared by edits/creates/deletes`, "table_undeclared");
     for (const e of events) if (!arr(c.emits).includes(e)) v("R7", `${cid}:event:${e}`, `evidence (${c.evidence}) wrote event ${e}, not in emits`, "event_undeclared");
     // column level, per touched object (objects may share a store): a column changed on an existing row of its store must
     // be a property of a resolvable edit of that same object; reported once per touched object and column
@@ -647,6 +650,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     }
     for (const o of arr(c.creates))
       if (objType(o) && !insertedStores.has(objects[o].datasource)) unwitnessed(`creates:${o}`, `inserted a row into ${objects[o].datasource}`);
+    for (const o of arr(c.deletes))
+      if (objType(o) && !deletedStores.has(objects[o].datasource)) unwitnessed(`deletes:${o}`, `deleted a row of ${objects[o].datasource}`);
     for (const l of links.filter(pureLink))
       if (!insDelStores.has(l.table)) unwitnessed(`link:${l.id}`, `inserted or deleted a row of the link store ${l.table}`);
   }
@@ -759,7 +764,9 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const target = `${name}.${pn}`;
       for (const [cid, c] of Object.entries(commands)) {
         if (!isObj(c)) continue;
-        const hit = reads.filter((r) => arr(c.edits).includes(r) || arr(c.creates).includes(r.split(".")[0]));
+        // deleting an input object writes it, unless the target's own object is deleted too (the target row is gone)
+        const hit = reads.filter((r) => arr(c.edits).includes(r) || arr(c.creates).includes(r.split(".")[0])
+          || (arr(c.deletes).includes(r.split(".")[0]) && !arr(c.deletes).includes(name)));
         if (hit.length && !arr(c.edits).includes(target))
           v("R11", `${cid}:${target}`, `${cid} writes ${hit.join(", ")} (inputs of ${target}) but does not list ${target} in edits`, "materialization_missing");
       }
