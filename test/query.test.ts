@@ -19,6 +19,21 @@ const patched = (ops: Op[]) => applyPatch(clean(), ops);
 const cite = (doc: string, quote: string) => ({ doc, quote });
 const L2_BLOCKED = "A librarian sets blocked_until when a member may not borrow until that time.";
 
+describe("deletes queries", () => {
+  const deleting = () => patched([{ op: "add", path: "/actionTypes/DELETE_LOAN", value: { deletes: ["Loan"] } }]);
+  it("queryAction returns deletes and defaults to an empty list", () => {
+    expect(queryAction(deleting(), "DELETE_LOAN")).toMatchObject({ deletes: ["Loan"] });
+    expect(queryAction(clean(), "BORROW")).toMatchObject({ deletes: [] });
+  });
+  it("queryObject includes a delete-only writer with deletes true", () => {
+    expect(queryObject(deleting(), "Loan")!.writers).toContainEqual({ action: "DELETE_LOAN", edits: [], creates: false, deletes: true });
+  });
+  it("queryWrites returns deleters for properties and none for derived properties", () => {
+    expect(queryWrites(deleting(), "Loan.state")).toMatchObject({ deleters: ["DELETE_LOAN"] });
+    expect(queryWrites(deleting(), "Loan.loan_overdue")).toMatchObject({ deleters: [] });
+  });
+});
+
 describe("showExpr", () => {
   const borrow = clean().actionTypes.BORROW.conditions;
   const ret = clean().actionTypes.RETURN.conditions;
@@ -229,7 +244,7 @@ describe("queryWrites", () => {
     expect(queryWrites(clean(), "Member.open_loans")).toEqual({
       target: "Member.open_loans", kind: "property", unanalyzed: [],
       writers: [{ action: "BORROW", cite: null, path: [] }, { action: "RETURN", cite: null, path: [] }],
-      creators: [],
+      creators: [], deleters: [],
     });
     const rc = queryWrites(clean(), "Loan.return_condition")!;
     expect(rc.writers).toEqual([{ action: "RETURN", cite: null, path: [] }]);
@@ -368,8 +383,8 @@ describe("queryObject", () => {
     const loan = queryObject(clean(), "Loan")!;
     expect(loan.scope).toBe("tenant");
     expect(loan.writers).toEqual([
-      { action: "BORROW", edits: [], creates: true },
-      { action: "RETURN", edits: ["Loan.state", "Loan.return_condition"], creates: false },
+      { action: "BORROW", edits: [], creates: true, deletes: false },
+      { action: "RETURN", edits: ["Loan.state", "Loan.return_condition"], creates: false, deletes: false },
     ]);
     expect(loan.readers).toContainEqual({ action: "BORROW", condition: "returns_in_good_condition", props: ["Loan.return_condition"] });
     expect(loan.readers).toContainEqual({ action: "RETURN", condition: "loan_active", props: ["Loan.state"] });
@@ -396,7 +411,7 @@ describe("queryObject", () => {
     expect(queryObject(ont, "Shelf")).toEqual({
       id: "Shelf", context: null, datasource: null, doc: null, outOfScope: "not modelled", scope: null,
       properties: [], derived: [], stateMachine: null, links: [],
-      writers: [{ action: "BORROW", edits: [], creates: true }], readers: [], unanalyzed: [],
+      writers: [{ action: "BORROW", edits: [], creates: true, deletes: false }], readers: [], unanalyzed: [],
     });
     expect(queryObject(ont, "Loan")!.outOfScope).toBeNull();
     expect(queryObject(clean(), "Shelf")).toBeNull();
