@@ -1,6 +1,6 @@
 {
   "name": "avouch",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Avouch skills: check and query an Avouch ontology (`/avouch:cli`), and draft or update a project's ontology from its design documents (`/avouch:scan`).",
   "author": {
     "name": "Githon LLC"

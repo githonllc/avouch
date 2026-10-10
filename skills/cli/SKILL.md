@@ -9,7 +9,7 @@ description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and y
 
 ## Run it
 
-In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.3` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.4` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 | Sub-command | Use |
 |---|---|
@@ -21,10 +21,10 @@ In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CL
 | Verb | When to use |
 |---|---|
 | `list <actions\|objects\|links\|derived\|dispositions\|anchors\|gaps>` | overview: actions with context and permission keys, objects, links, which document sections the ontology depends on, waived gaps |
-| `action <ID>` | before you implement or change an action: permission (`any_of`, `principals`), idempotency key, parameters, conditions, decision rows in order with the conditions each row requires, edits, creates, emits, link effects |
+| `action <ID>` | before you implement or change an action: permission (`any_of`, `principals`), idempotency key, parameters, conditions, decision rows in order with the conditions each row requires, edits, creates, deletes, emits, link effects |
 | `object <Type>` | a type: property classes, `canonical_values`, state machine, links, writers, readers |
 | `result <DISPOSITION>` | what makes any action return this result |
-| `writes <Object>.<prop>` | which actions change a property; for a derived property, which actions change its inputs |
+| `writes <Object>.<prop>` | which actions change a property (`writers`), create its object (`creators`) or delete it (`deleters`); for a derived property, which actions change its inputs |
 | `reads <Object>.<prop>` | impact of changing a property's meaning: conditions, decision rows and derived properties that read it, directly or `via` a derived property |
 | `cites <anchor>` | before you change a document section: every claim that cites it. The anchor matches exactly. |
 

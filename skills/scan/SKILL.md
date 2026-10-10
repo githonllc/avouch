@@ -27,7 +27,7 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 ## Step 0: locate the CLI and the target
 
-In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.3` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.4` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
 avouch check 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
@@ -59,7 +59,7 @@ Write the ontology in the shape of `examples/library/library.ontology.yaml` of t
 
 - objects, properties (with `class`), state machines;
 - links (`*_id` fields);
-- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, emits, link effects;
+- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, deletes, emits, link effects. Use `deletes` only when the document says the rows are removed ("removes", "deletes"); a status or `deleted_at` marker is an `edits`;
 - dispositions.
 
 When the documents name no bounded context, use one context named after the project and record it as a gap.
