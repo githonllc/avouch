@@ -1,0 +1,499 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ofv: <https://w3id.org/avouch/v1/vocab#> .
+
+<https://w3id.org/avouch/v1/vocab> a owl:Ontology ;
+  rdfs:label "Avouch vocabulary"@en ;
+  rdfs:seeAlso <https://w3id.org/avouch/v1/schema.json> .
+
+ofv:Context a rdfs:Class ;
+  rdfs:label "Context" ;
+  rdfs:comment "Exported from the YAML path contexts.<name>." ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:OutOfScopeObjectType a rdfs:Class ;
+  rdfs:label "OutOfScopeObjectType" ;
+  rdfs:comment "Exported from the YAML path outOfScopeObjectTypes.<name>." ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:DerivedProperty a rdfs:Class ;
+  rdfs:label "DerivedProperty" ;
+  rdfs:comment "Exported from the YAML path derivedProperties.<id>." ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:ActionType a rdfs:Class ;
+  rdfs:label "ActionType" ;
+  rdfs:comment "Exported from the YAML path actionTypes.<ID>." ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:index a rdf:Property ;
+  rdfs:label "index" ;
+  rdfs:comment "Position (from 0) of a record in its YAML list. YAML: conditions[], decision.rows[], transitions[], knownSourceGaps[], permission_rows_not_commands[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:key a rdf:Property ;
+  rdfs:label "key" ;
+  rdfs:comment "Name of an entry in a YAML mapping. YAML: non_link_fields.<key>, edit_cites.<key>, link_effects.<key>, transitions[].bind.<key>" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:name a rdf:Property ;
+  rdfs:label "name" ;
+  rdfs:comment "Name of a permission row that is not a command. YAML: permission_rows_not_commands[].name" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:reason a rdf:Property ;
+  rdfs:label "reason" ;
+  rdfs:comment "Reason text. YAML: permission_rows_not_commands[].reason, outOfScopeObjectTypes.<name>, objectTypes.<name>.non_link_fields.<key>.reason" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:cite a rdf:Property ;
+  rdfs:label "cite" ;
+  rdfs:comment "Source citation (a node with doc and quote). YAML: cite, in any record that has one, scope.cite, scope.global[].cite, scope.root.cite, dispositions.<ID>.cite, decision.order.cite, decision…next.cite, derivedProperties.<id>.cite, ….principals.cite, actionTypes.<ID>.idempotencyKey.cite" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:doc a rdf:Property ;
+  rdfs:label "doc" ;
+  rdfs:comment "Source document reference. YAML: doc, in any record that has one; also cite.doc" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:quote a rdf:Property ;
+  rdfs:label "quote" ;
+  rdfs:comment "Quoted source text. YAML: cite.quote" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:id a rdf:Property ;
+  rdfs:label "id" ;
+  rdfs:comment "Identifier of a record. YAML: knownSourceGaps[].id, actionTypes.<ID>.conditions[].id" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:rule a rdf:Property ;
+  rdfs:label "rule" ;
+  rdfs:comment "Rule code of a source gap. YAML: knownSourceGaps[].rule" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:kind a rdf:Property ;
+  rdfs:label "kind" ;
+  rdfs:comment "Kind of a source gap. YAML: knownSourceGaps[].kind" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:keys a rdf:Property ;
+  rdfs:label "keys" ;
+  rdfs:comment "Keys of a record (permission keys, or gap keys). YAML: knownSourceGaps[].keys, actionTypes.<ID>.permission.keys" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:doc_line a rdf:Property ;
+  rdfs:label "doc_line" ;
+  rdfs:comment "Document line of a source gap. YAML: knownSourceGaps[].doc_line" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:conflict a rdf:Property ;
+  rdfs:label "conflict" ;
+  rdfs:comment "Conflict text of a source gap. YAML: knownSourceGaps[].conflict" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:proposed a rdf:Property ;
+  rdfs:label "proposed" ;
+  rdfs:comment "Proposed fix of a source gap. YAML: knownSourceGaps[].proposed" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:description a rdf:Property ;
+  rdfs:label "description" ;
+  rdfs:comment "Label of a context: a literal substring of the source line that lists its objects. YAML: contexts.<name>" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:infrastructureStores a rdf:Property ;
+  rdfs:label "infrastructureStores" ;
+  rdfs:comment "Infrastructure stores that are not object types. YAML: infrastructureStores[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:permission_rows_not_commands a rdf:Property ;
+  rdfs:label "permission_rows_not_commands" ;
+  rdfs:comment "Permission rows that are not commands. YAML: permission_rows_not_commands[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:knownSourceGaps a rdf:Property ;
+  rdfs:label "knownSourceGaps" ;
+  rdfs:comment "Known gaps in the source document. YAML: knownSourceGaps[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:context a rdf:Property ;
+  rdfs:label "context" ;
+  rdfs:comment "Context of an object type, action type or create rule. YAML: objectTypes.<name>.context, actionTypes.<ID>.context, linkTypes[].create_rule.context" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:datasource a rdf:Property ;
+  rdfs:label "datasource" ;
+  rdfs:comment "Store that holds the object. YAML: objectTypes.<name>.datasource" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:non_link_fields a rdf:Property ;
+  rdfs:label "non_link_fields" ;
+  rdfs:comment "Fields that look like links but are not. YAML: objectTypes.<name>.non_link_fields" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:stateMachines a rdf:Property ;
+  rdfs:label "stateMachines" ;
+  rdfs:comment "State machine of an object type. YAML: stateMachines.<name>" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:initial a rdf:Property ;
+  rdfs:label "initial" ;
+  rdfs:comment "Initial state. YAML: stateMachines.<name>.initial" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:terminal a rdf:Property ;
+  rdfs:label "terminal" ;
+  rdfs:comment "Terminal state. YAML: stateMachines.<name>.terminal[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:transitions a rdf:Property ;
+  rdfs:label "transitions" ;
+  rdfs:comment "State transition. YAML: stateMachines.<name>.transitions[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:from a rdf:Property ;
+  rdfs:label "from" ;
+  rdfs:comment "Source state of a transition. YAML: stateMachines.<name>.transitions[].from" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:to a rdf:Property ;
+  rdfs:label "to" ;
+  rdfs:comment "Target state of a transition. YAML: stateMachines.<name>.transitions[].to" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:by a rdf:Property ;
+  rdfs:label "by" ;
+  rdfs:comment "Action type that causes a transition. YAML: stateMachines.<name>.transitions[].by[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:out_of_scope a rdf:Property ;
+  rdfs:label "out_of_scope" ;
+  rdfs:comment "Why no declared action performs the transition. YAML: stateMachines.<name>.transitions[].out_of_scope" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:bind a rdf:Property ;
+  rdfs:label "bind" ;
+  rdfs:comment "Per-action evidence for a transition, keyed by action id. YAML: stateMachines.<name>.transitions[].bind.<ID>" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:class a rdf:Property ;
+  rdfs:label "class" ;
+  rdfs:comment "State class of a property: canonical, derived, policy or unknown. YAML: objectTypes.<name>.properties.<p>.class" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:canonical_values a rdf:Property ;
+  rdfs:label "canonical_values" ;
+  rdfs:comment "Values of a non-canonical property that the source explicitly marks as canonical. YAML: objectTypes.<name>.properties.<p>.canonical_values" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:values a rdf:Property ;
+  rdfs:label "values" ;
+  rdfs:comment "Values of a list. YAML: canonical_values.values[], conditions[].reads[].values[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:materializedFrom a rdf:Property ;
+  rdfs:label "materializedFrom" ;
+  rdfs:comment "The source requires this derived property to be stored in the same operation as its inputs. YAML: objectTypes.<name>.properties.<p>.materializedFrom" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:reads a rdf:Property ;
+  rdfs:label "reads" ;
+  rdfs:comment "Properties read. YAML: materializedFrom.reads[], derivedProperties.<id>.reads[], conditions[].reads[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:cites a rdf:Property ;
+  rdfs:label "cites" ;
+  rdfs:comment "Citations, each a node with ofv:cite. YAML: objectTypes.<name>.properties.<p>.materializedFrom.cites[], actionTypes.<ID>.conditions[].cites[], decision.rows[].cites[], decision.otherwise.cites[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:cardinality a rdf:Property ;
+  rdfs:label "cardinality" ;
+  rdfs:comment "Cardinality text of a link type, kept as written. YAML: linkTypes[].cardinality" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:via a rdf:Property ;
+  rdfs:label "via" ;
+  rdfs:comment "Foreign-key field on the from object or the link store name (linkTypes[].via); the mechanism of a cross-context write (crossContext.via). YAML: linkTypes[].via, actionTypes.<ID>.crossContext.via" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:table a rdf:Property ;
+  rdfs:label "table" ;
+  rdfs:comment "The link's own store. YAML: linkTypes[].table" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:create_rule a rdf:Property ;
+  rdfs:label "create_rule" ;
+  rdfs:comment "Who may establish the link. YAML: linkTypes[].create_rule" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:with_creates a rdf:Property ;
+  rdfs:label "with_creates" ;
+  rdfs:comment "Objects the action must create in the same operation. YAML: linkTypes[].create_rule.with_creates[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:exceptions a rdf:Property ;
+  rdfs:label "exceptions" ;
+  rdfs:comment "Exceptions to a create rule. YAML: linkTypes[].create_rule.exceptions" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:commands a rdf:Property ;
+  rdfs:label "commands" ;
+  rdfs:comment "Action types that are exceptions to a create rule. YAML: linkTypes[].create_rule.exceptions.commands[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:of a rdf:Property ;
+  rdfs:label "of" ;
+  rdfs:comment "Object a derived property is defined on. YAML: derivedProperties.<id>.of" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:doc_term a rdf:Property ;
+  rdfs:label "doc_term" ;
+  rdfs:comment "Term used in the source document. YAML: derivedProperties.<id>.doc_term, actionTypes.<ID>.doc_term" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:evidence a rdf:Property ;
+  rdfs:label "evidence" ;
+  rdfs:comment "Id of the evidence that implements the action. YAML: actionTypes.<ID>.evidence" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:emits a rdf:Property ;
+  rdfs:label "emits" ;
+  rdfs:comment "Event types the action writes. YAML: actionTypes.<ID>.emits[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:creates a rdf:Property ;
+  rdfs:label "creates" ;
+  rdfs:comment "Object types an action type creates. YAML: actionTypes.<ID>.creates[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:deletes a rdf:Property ;
+  rdfs:label "deletes" ;
+  rdfs:comment "Object types whose rows an action type removes (a soft delete is an edits). YAML: actionTypes.<ID>.deletes[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:edits a rdf:Property ;
+  rdfs:label "edits" ;
+  rdfs:comment "Properties an action type edits. YAML: actionTypes.<ID>.edits[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:edit_cites a rdf:Property ;
+  rdfs:label "edit_cites" ;
+  rdfs:comment "Citations of edits. YAML: actionTypes.<ID>.edit_cites.<key>" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:crossContext a rdf:Property ;
+  rdfs:label "crossContext" ;
+  rdfs:comment "Cross-context write of an action type. YAML: actionTypes.<ID>.crossContext" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:permission a rdf:Property ;
+  rdfs:label "permission" ;
+  rdfs:comment "Permission of an action type: a string, or a node with keys. YAML: actionTypes.<ID>.permission" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:conditional_keys a rdf:Property ;
+  rdfs:label "conditional_keys" ;
+  rdfs:comment "Permission keys needed only under a condition. YAML: actionTypes.<ID>.permission.conditional_keys[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:none a rdf:Property ;
+  rdfs:label "none" ;
+  rdfs:comment "Why there is no key (permission), or why the link is not changed (link effect). YAML: actionTypes.<ID>.permission.none, actionTypes.<ID>.link_effects.<key>.none" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:conditional_cite a rdf:Property ;
+  rdfs:label "conditional_cite" ;
+  rdfs:comment "Citation for the conditional keys. YAML: actionTypes.<ID>.permission.conditional_cite" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:any_of a rdf:Property ;
+  rdfs:label "any_of" ;
+  rdfs:comment "At least 2 alternatives, each a keys form; the actor may run the action when its keys satisfy any one of them (OR). YAML: actionTypes.<ID>.permission.any_of" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:parameters a rdf:Property ;
+  rdfs:label "parameters" ;
+  rdfs:comment "Parameters of an action type, the inputs it takes; each has a key and a cite. YAML: actionTypes.<ID>.parameters" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:param a rdf:Property ;
+  rdfs:label "param" ;
+  rdfs:comment "Parameter named in a read, optionally with values. YAML: actionTypes.<ID>.conditions[].reads[].param" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:actor a rdf:Property ;
+  rdfs:label "actor" ;
+  rdfs:comment "The caller read by a criterion: id or keys. YAML: actionTypes.<ID>.conditions[].reads[].actor" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:submissionCriteria a rdf:Property ;
+  rdfs:label "submissionCriteria" ;
+  rdfs:comment "Renamed to conditions; exports no longer use it. YAML before the rename: actionTypes.<ID>.submissionCriteria[]" ;
+  owl:deprecated true ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:conditions a rdf:Property ;
+  rdfs:label "conditions" ;
+  rdfs:comment "Condition of an action type: a named claim, written as an expression or stated as not yet written. YAML: actionTypes.<ID>.conditions[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:expr a rdf:Property ;
+  rdfs:label "expr" ;
+  rdfs:comment "Expression as one rdf:JSON literal (object keys sorted, no white space), not as triples. YAML: actionTypes.<ID>.conditions[].expr, derivedProperties.<id>.expr" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:prop a rdf:Property ;
+  rdfs:label "prop" ;
+  rdfs:comment "Property named in a read with values. YAML: actionTypes.<ID>.conditions[].reads[].prop" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:reads_unspecified a rdf:Property ;
+  rdfs:label "reads_unspecified" ;
+  rdfs:comment "Statement that the reads are not specified. YAML: actionTypes.<ID>.conditions[].reads_unspecified" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:scenarios a rdf:Property ;
+  rdfs:label "scenarios" ;
+  rdfs:comment "Scenario ids. YAML: conditions[].scenarios[], link_effects.<key>.scenarios[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:link_effects a rdf:Property ;
+  rdfs:label "link_effects" ;
+  rdfs:comment "Effect of an action type on a link type. YAML: actionTypes.<ID>.link_effects" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:effect a rdf:Property ;
+  rdfs:label "effect" ;
+  rdfs:comment "Text of a link effect. YAML: actionTypes.<ID>.link_effects.<key>.effect" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:unspecified a rdf:Property ;
+  rdfs:label "unspecified" ;
+  rdfs:comment "Statement that something is not specified. YAML: actionTypes.<ID>.link_effects.<key>.unspecified, actionTypes.<ID>.crossContext.unspecified, actionTypes.<ID>.conditions[].unspecified, decision.rows[].next.unspecified, decision.otherwise.next.unspecified" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:Disposition a rdfs:Class ;
+  rdfs:label "Disposition" ;
+  rdfs:comment "A result that a decision table can give. Exported from the YAML path dispositions.<ID>." ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:dispositionClass a rdf:Property ;
+  rdfs:label "dispositionClass" ;
+  rdfs:comment "Class of a disposition: rejected, recorded, pending or applied. YAML: dispositions.<ID>.class" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:decision a rdf:Property ;
+  rdfs:label "decision" ;
+  rdfs:comment "Decision table of an action type. YAML: actionTypes.<ID>.decision" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:hitPolicy a rdf:Property ;
+  rdfs:label "hitPolicy" ;
+  rdfs:comment "Hit policy of a decision table; v1 has only first (top to bottom, first match). YAML: actionTypes.<ID>.decision.hitPolicy" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:order a rdf:Property ;
+  rdfs:label "order" ;
+  rdfs:comment "Citation for the row order of a decision table. YAML: actionTypes.<ID>.decision.order" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:rows a rdf:Property ;
+  rdfs:label "rows" ;
+  rdfs:comment "Row of a decision table, with ofv:index. YAML: actionTypes.<ID>.decision.rows[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:when a rdf:Property ;
+  rdfs:label "when" ;
+  rdfs:comment "Test of a row: a node with ofv:passes or ofv:fails. YAML: actionTypes.<ID>.decision.rows[].when" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:passes a rdf:Property ;
+  rdfs:label "passes" ;
+  rdfs:comment "Id of a condition that must evaluate to T. YAML: actionTypes.<ID>.decision.rows[].when.passes" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:fails a rdf:Property ;
+  rdfs:label "fails" ;
+  rdfs:comment "Id of a condition that does not evaluate to T (it is F or U). It is not a negation. YAML: actionTypes.<ID>.decision.rows[].when.fails" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:result a rdf:Property ;
+  rdfs:label "result" ;
+  rdfs:comment "Disposition that a row gives: an ofv:Disposition, or a literal when the id is not declared. YAML: actionTypes.<ID>.decision.rows[].result, actionTypes.<ID>.decision.otherwise.result" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:otherwise a rdf:Property ;
+  rdfs:label "otherwise" ;
+  rdfs:comment "Last row of a decision table; it gives the result when no row matches. YAML: actionTypes.<ID>.decision.otherwise" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:next a rdf:Property ;
+  rdfs:label "next" ;
+  rdfs:comment "What follows a pending result. YAML: actionTypes.<ID>.decision.rows[].next, actionTypes.<ID>.decision.otherwise.next" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:actions a rdf:Property ;
+  rdfs:label "actions" ;
+  rdfs:comment "Action type of this system that follows. YAML: decision.rows[].next.actions[], decision.otherwise.next.actions[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:external a rdf:Property ;
+  rdfs:label "external" ;
+  rdfs:comment "Step outside this system that follows. YAML: decision.rows[].next.external, decision.otherwise.next.external" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:scope a rdf:Property ;
+  rdfs:label "scope" ;
+  rdfs:comment "Tenant scope of the ontology. YAML: scope" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:scopeBy a rdf:Property ;
+  rdfs:label "scopeBy" ;
+  rdfs:comment "Name of the field that holds the tenant. YAML: scope.by" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:global a rdf:Property ;
+  rdfs:label "global" ;
+  rdfs:comment "Object type that all tenants share, with its citation. YAML: scope.global[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:root a rdf:Property ;
+  rdfs:label "root" ;
+  rdfs:comment "Object type that is the tenant itself, with its citation. YAML: scope.root" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:type a rdf:Property ;
+  rdfs:label "type" ;
+  rdfs:comment "A type. For a value type: a literal (enum, timestamp, duration, date, timezone, id, integer or boolean), the class whose ids the value holds, or a node with ofv:set. For a scope entry: the class of the entry. YAML: objectTypes.<name>.properties.<p>.type, actionTypes.<ID>.parameters.<n>.type, derivedProperties.<id>.type, scope.global[].type, scope.root.type" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:set a rdf:Property ;
+  rdfs:label "set" ;
+  rdfs:comment "Element type of a set type, written as for ofv:type; string is allowed here only. YAML: ….type.set" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:optional a rdf:Property ;
+  rdfs:label "optional" ;
+  rdfs:comment "The caller may leave the parameter out; it is then null. YAML: actionTypes.<ID>.parameters.<n>.optional" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:principals a rdf:Property ;
+  rdfs:label "principals" ;
+  rdfs:comment "Actor kinds that one permission alternative admits, with its own citation; an actor of another kind is denied. YAML: actionTypes.<ID>.permission.principals, actionTypes.<ID>.permission.any_of[].principals" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:kinds a rdf:Property ;
+  rdfs:label "kinds" ;
+  rdfs:comment "One actor kind. YAML: actionTypes.<ID>.permission.principals.kinds[], actionTypes.<ID>.permission.any_of[].principals.kinds[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:idempotencyKey a rdf:Property ;
+  rdfs:label "idempotencyKey" ;
+  rdfs:comment "Declaration of whether the caller must supply an idempotency key for this action type, with its citation. Absent means unspecified, not false; never derived from the action's effects. YAML: actionTypes.<ID>.idempotencyKey" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:required a rdf:Property ;
+  rdfs:label "required" ;
+  rdfs:comment "Whether the caller must supply an idempotency key; true and false are both explicit, cited claims. YAML: actionTypes.<ID>.idempotencyKey.required" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .

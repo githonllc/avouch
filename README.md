@@ -34,6 +34,7 @@ Read in this order:
 |---|---|
 | `SPEC.md` | concepts (foundation / extension), fields, rules R1–R12, fact contract |
 | `ontology.schema.json` | JSON Schema: `$id` and `formatVersion`; shape only, no project values |
+| `vocab.ttl` | RDF vocabulary (`ofv:`) for exporting an ontology as RDF; one term per schema field (`test/vocab.test.ts`) |
 | `src/contract.ts` | `SourceFacts`: the facts with their sources, and diagnostics |
 | `src/checker.ts` | `check(ontology, facts)` returns the violations |
 | `src/patch.ts` | JSON-pointer patch that the mutation tests use |
@@ -158,6 +159,8 @@ The secret is generated from a list kept in a private repository; maintainers ne
 ## Versions and identifiers
 
 The ontology file has `formatVersion: 1`. The schema `$id` is `https://w3id.org/avouch/v1/schema.json`. The version rules are in SPEC section 8.
+
+The RDF vocabulary is `vocab.ttl`, namespace `https://w3id.org/avouch/v1/vocab#` (prefix `ofv:`), served at `https://avouch.dev/v1/vocab.ttl`. An RDF export of an ontology (for example the Turtle export of Avouch Studio) names each field with the term of the same name. The check does not read the vocabulary. A change that adds a schema field adds its term in the same change: `test/vocab.test.ts` fails on a field without a term, except for the top-level sections, expressions (exported as one JSON literal), the `properties` of an object type (OWL properties) and the `ref` of a value type (the class itself); each exclusion has its reason in the test.
 
 ## License
 

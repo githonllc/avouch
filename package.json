@@ -1,6 +1,6 @@
 {
   "name": "@githonllc/avouch",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
@@ -31,6 +31,7 @@
     "dist/src/",
     "dist/cli/",
     "ontology.schema.json",
+    "vocab.ttl",
     "SPEC.md",
     "docs/",
     "NOTICE"
