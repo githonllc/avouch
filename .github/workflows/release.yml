@@ -9,6 +9,7 @@ permissions:
   id-token: write
 jobs:
   publish:
+    if: github.repository == 'githonllc/avouch'   # only the public repository publishes; a tag in the internal repository does nothing
     runs-on: ubuntu-latest
     environment: npm
     steps:
