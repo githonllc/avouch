@@ -609,7 +609,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       if (isObj(c) && c.evidence === undefined) v("R7", cid, "the profile requires evidence, but the action declares none", "evidence_missing");
   if (facts.evidence !== undefined) {
   // a pure link table (not any object's table) may be written when the action declares an `effect` on that link;
-  // an object's table still needs the object in edits / creates
+  // an object's table still needs the object in edits / creates / deletes
   const objTables = new Set(Object.values(objects).map((o: Any) => o?.datasource));
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c) || c.evidence === undefined) continue;

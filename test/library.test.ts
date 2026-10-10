@@ -225,6 +225,14 @@ describe("toy library project", () => {
         expect(triples(check(o, facts())).filter(([r]) => r === "R11")).toEqual([]);
       });
 
+      it("R11 still reports an edit or create of an input when the target's object is deleted", () => {
+        const missing = [["R11", "materialization_missing", "BORROW:Member.open_loans"]];
+        const edited = applyPatch(onlyDeletes(["Member"]), [{ op: "add", path: "/actionTypes/BORROW/edits/-", value: "Loan.state" }]);
+        expect(triples(check(edited, facts())).filter(([r]) => r === "R11")).toEqual(missing);
+        const created = applyPatch(onlyDeletes(["Member"]), [{ op: "add", path: "/actionTypes/BORROW/creates/-", value: "Loan" }]);
+        expect(triples(check(created, facts())).filter(([r]) => r === "R11")).toEqual(missing);
+      });
+
       it("R6 sweeps incident links of deleted objects", () => {
         const o = applyPatch(onlyDeletes(), [{ op: "remove", path: "/actionTypes/BORROW/link_effects/loan_book" }]);
         expect(triples(check(o, facts()))).toContainEqual(["R6", "link_effect_missing", "BORROW:loan_book"]);
