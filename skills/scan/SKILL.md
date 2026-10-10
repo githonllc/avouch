@@ -87,13 +87,13 @@ Repeat until the command exits 0. Also run `avouch query list actions <yaml>` an
 
 ## Step 3a: structure patch (when most objects have no field list)
 
-Do this step when the check printed `field_list_missing` for at least half of the object types. The ontology is then a skeleton: most objects have no fields and no links, so a viewer shows unconnected boxes. The missing structure is usually in the code, but the fix belongs in the documents.
+Do this step after Step 3 when at least half of the object types have a `knownSourceGaps` entry of kind `field_list_missing` (count the entries: the check does not print a waived violation). The ontology is then a skeleton: most objects have no fields and no links, so a viewer shows unconnected boxes. The missing structure is usually in the code, but the fix belongs in the documents.
 
-Write `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patch and merges what is intended design.
+Write `avouch/doc-patch.md`, and replace the file if an earlier run wrote one. When this step does not apply, delete an earlier `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patch and merges what is intended design. Do not add the patched fields to the ontology until a document holds them; the `code:` lines belong to the patch, never to the ontology.
 
 - First line: `<!-- Derived from code at <git short sha>; unreviewed. Merge only the fields that are intended design, then run /avouch:scan again. -->`
-- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/adapter-guide.md` section 7): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
-- When no document lists the store names, add one `Store Catalog` section with a `text` block of the table names, one per line.
+- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
+- When no document lists the store names, add to the patch one `Store Catalog` section with a `text` block of the table names, one per line.
 - Structure only: fields, foreign keys and store names. Do not draft states, transitions, permissions, conditions or decision orders from the code, even when the code has them. List them in the report (item 6) with the code `file:line`. A reviewer tends to accept drafted behavior as written, and the check would then confirm the code's own bugs.
 - When the documents and the code name a field differently, use the document's name and put the code name on the `code:` line.
 
@@ -101,11 +101,11 @@ Write `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patc
 
 1. Run the check before you change anything, and keep its output.
 2. Find what changed: `B=$(git log -1 --format=%h -- <yaml>)`, then `git diff $B..HEAD -- <docs>` (the full diff, not `--stat`). Read `git diff --stat $B..HEAD -- <code>` too, for conflicts.
-3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. The check passing does not mean the table is done; a missing new item fails no rule.
+3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. A new section that holds a fact in the adapter syntax (for example a store catalog) is a new item too: add its anchor to `avouch.json` `facts` (Step 2). The check passing does not mean the table is done; a missing new item fails no rule.
 4. Keep every id. Keep each claim whose cite still passes.
 5. For a failing quote: if the document still states the claim, re-cite it with the new text. If it does not, change the claim. If the document removed the claim, delete it.
 6. Do not delete or rewrite a `knownSourceGaps` entry unless the check reports it as `stale_waiver`.
-7. Do Step 3 again.
+7. Do Step 3 and Step 3a again.
 
 ## Report
 
