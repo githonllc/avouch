@@ -85,6 +85,18 @@ A `knownSourceGaps` entry must match a printed violation; an entry that matches 
 
 Repeat until the command exits 0. Also run `avouch query list actions <yaml>` and resolve each entry under `unanalyzed`.
 
+## Step 3a: structure patch (when most objects have no field list)
+
+Do this step when the check printed `field_list_missing` for at least half of the object types. The ontology is then a skeleton: most objects have no fields and no links, so a viewer shows unconnected boxes. The missing structure is usually in the code, but the fix belongs in the documents.
+
+Write `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patch and merges what is intended design.
+
+- First line: `<!-- Derived from code at <git short sha>; unreviewed. Merge only the fields that are intended design, then run /avouch:scan again. -->`
+- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/adapter-guide.md` section 7): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
+- When no document lists the store names, add one `Store Catalog` section with a `text` block of the table names, one per line.
+- Structure only: fields, foreign keys and store names. Do not draft states, transitions, permissions, conditions or decision orders from the code, even when the code has them. List them in the report (item 6) with the code `file:line`. A reviewer tends to accept drafted behavior as written, and the check would then confirm the code's own bugs.
+- When the documents and the code name a field differently, use the document's name and put the code name on the `code:` line.
+
 ## Step 4: update mode
 
 1. Run the check before you change anything, and keep its output.
@@ -99,8 +111,10 @@ Repeat until the command exits 0. Also run `avouch query list actions <yaml>` an
 
 Answer in this shape:
 
+0. Only when Step 3a ran, first: "`<n>` of `<m>` object types have no documented field list, so the ontology is a skeleton. Review `avouch/doc-patch.md`, merge the intended fields into the documents, then run `/avouch:scan` again."
 1. The files written, and the last line of the check, verbatim (`PASS: …`).
 2. The repair list: one row per `knownSourceGaps` entry (`id`, `keys`, `proposed`).
 3. Document-to-code conflicts: the claim, the document `file:line`, the code `file:line`.
 4. The items you left `unknown` or `unspecified`.
 5. In update mode: the change table from Step 4, one row per document hunk.
+6. Behavior that the code has and the documents do not state (states, transitions, permissions, conditions, removals): one row per item, with the code `file:line`. These are questions for the document owner, not drafts.
