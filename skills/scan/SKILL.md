@@ -27,7 +27,7 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 ## Step 0: locate the CLI and the target
 
-In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.3` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.4` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
 avouch check 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
@@ -59,7 +59,7 @@ Write the ontology in the shape of `examples/library/library.ontology.yaml` of t
 
 - objects, properties (with `class`), state machines;
 - links (`*_id` fields);
-- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, emits, link effects;
+- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, deletes, emits, link effects. Use `deletes` only when the document says the rows are removed ("removes", "deletes"); a status or `deleted_at` marker is an `edits`;
 - dispositions.
 
 When the documents name no bounded context, use one context named after the project and record it as a gap.
@@ -85,22 +85,36 @@ A `knownSourceGaps` entry must match a printed violation; an entry that matches 
 
 Repeat until the command exits 0. Also run `avouch query list actions <yaml>` and resolve each entry under `unanalyzed`.
 
+## Step 3a: structure patch (when most objects have no field list)
+
+Do this step after Step 3 when at least half of the object types have a `knownSourceGaps` entry of kind `field_list_missing` (count the entries: the check does not print a waived violation). The ontology is then a skeleton: most objects have no fields and no links, so a viewer shows unconnected boxes. The missing structure is usually in the code, but the fix belongs in the documents.
+
+Write `avouch/doc-patch.md`, and replace the file if an earlier run wrote one. When this step does not apply, delete an earlier `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patch and merges what is intended design. Do not add the patched fields to the ontology until a document holds them; the `code:` lines belong to the patch, never to the ontology.
+
+- First line: `<!-- Derived from code at <git short sha>; unreviewed. Merge only the fields that are intended design, then run /avouch:scan again. -->`
+- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
+- When no document lists the store names, add to the patch one `Store Catalog` section with a `text` block of the table names, one per line.
+- Structure only: fields, foreign keys and store names. Do not draft states, transitions, permissions, conditions or decision orders from the code, even when the code has them. List them in the report (item 6) with the code `file:line`. A reviewer tends to accept drafted behavior as written, and the check would then confirm the code's own bugs.
+- When the documents and the code name a field differently, use the document's name and put the code name on the `code:` line.
+
 ## Step 4: update mode
 
 1. Run the check before you change anything, and keep its output.
 2. Find what changed: `B=$(git log -1 --format=%h -- <yaml>)`, then `git diff $B..HEAD -- <docs>` (the full diff, not `--stat`). Read `git diff --stat $B..HEAD -- <code>` too, for conflicts.
-3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. The check passing does not mean the table is done; a missing new item fails no rule.
+3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. A new section that holds a fact in the adapter syntax (for example a store catalog) is a new item too: add its anchor to `avouch.json` `facts` (Step 2). The check passing does not mean the table is done; a missing new item fails no rule.
 4. Keep every id. Keep each claim whose cite still passes.
 5. For a failing quote: if the document still states the claim, re-cite it with the new text. If it does not, change the claim. If the document removed the claim, delete it.
 6. Do not delete or rewrite a `knownSourceGaps` entry unless the check reports it as `stale_waiver`.
-7. Do Step 3 again.
+7. Do Step 3 and Step 3a again.
 
 ## Report
 
 Answer in this shape:
 
+0. Only when Step 3a ran, first: "`<n>` of `<m>` object types have no documented field list, so the ontology is a skeleton. Review `avouch/doc-patch.md`, merge the intended fields into the documents, then run `/avouch:scan` again."
 1. The files written, and the last line of the check, verbatim (`PASS: …`).
 2. The repair list: one row per `knownSourceGaps` entry (`id`, `keys`, `proposed`).
 3. Document-to-code conflicts: the claim, the document `file:line`, the code `file:line`.
 4. The items you left `unknown` or `unspecified`.
 5. In update mode: the change table from Step 4, one row per document hunk.
+6. Behavior that the code has and the documents do not state (states, transitions, permissions, conditions, removals): one row per item, with the code `file:line`. These are questions for the document owner, not drafts.

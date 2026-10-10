@@ -130,7 +130,7 @@ Inside a Claude Code session, the same two steps are `/plugin marketplace add gi
 
 The plugin has two skills:
 - `cli` (`/avouch:cli`): checks an ontology and runs `avouch query`.
-- `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document.
+- `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document. When most objects have no documented field list, it also writes `avouch/doc-patch.md`: field lists, foreign keys and store names derived from the code, for a human to review and merge into the documents. It never drafts states, permissions or rules from code.
 
 Before 0.1.3 the two skills were named `avouch-cli` and `aquery-scan`.
 
