@@ -8,7 +8,7 @@
     {
       "name": "avouch",
       "source": "./",
-      "description": "Avouch skills: avouch-cli and aquery-scan."
+      "description": "Avouch skills: /avouch:cli and /avouch:scan."
     }
   ]
 }

@@ -1,16 +1,16 @@
 ---
-name: aquery-scan
+name: scan
 description: Use when asked to scan a project's design documents and code and write or update its Avouch spec (an `*.ontology.yaml` checked by the `avouch` CLI), for example "生成 avouch spec", "扫描项目生成本体", "更新 avouch 本体", "draft an Avouch ontology for this repo".
 argument-hint: "[project-dir]"
 ---
 
-# aquery-scan
+# scan
 
 Draft or update the Avouch ontology of the project in the current directory. The result is a **candidate** that a human repairs. It is accepted only by the deterministic check, never by your own reading.
 
 The Avouch repository is two directories above this skill's base directory (`<base>/../..`): it holds `SPEC.md`, `docs/` and `examples/`.
 
-Invoked as `/aquery-scan [project-dir]`. The argument is the project root; without it, use the git root of the current directory. Run every command below from that root.
+Invoked as `/avouch:scan [project-dir]`. The argument is the project root; without it, use the git root of the current directory. Run every command below from that root.
 
 ## Ground rules
 
@@ -27,7 +27,7 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 ## Step 0: locate the CLI and the target
 
-In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.2` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.3` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
 avouch check 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
