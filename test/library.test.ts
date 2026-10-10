@@ -236,7 +236,7 @@ describe("toy library project", () => {
       });
 
       it("out-of-scope deletes need no store witness and upserts need no deletes", () => {
-        const o = applyPatch(deleting(["Shelf"]), [{ op: "add", path: "/outOfScopeObjectTypes/Shelf", value: "not modelled" }]);
+        const o = applyPatch(deleting(["Shelf"]), [{ op: "add", path: "/outOfScopeObjectTypes", value: { Shelf: "not modelled" } }]);
         expect(triples(check(o, facts())).filter(([r]) => r === "R1" || r === "R7")).toEqual([]);
         const ev = withBorrow((inv) => inv.delta!.stores.loans.deleted.push(removed));
         expect(triples(check(ont, buildLibraryFacts(doc, ev, config)))).toEqual([]);
