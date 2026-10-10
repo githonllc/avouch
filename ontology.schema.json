@@ -689,6 +689,13 @@
           },
           "description": "Objects the action creates (optional). Foundation (closest analog: the create-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. Declared objects here are touched (R5, R6, R7) and count as writing every property of that object for R11. R5: creating the `from` object of a link with `create_rule` triggers that rule."
         },
+        "deletes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Objects whose rows the action removes (optional). Foundation (closest analog: the delete-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. A soft delete is an `edits` of the marker property. Declared objects here are touched (R5, R6, R7). R7: for an action with `evidence`, each declared object here must have a row of its datasource deleted by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:deletes:<Object>`); an upsert declares `creates`, not `deletes`. R11: deleting an input of a `materializedFrom` property counts as writing it, unless the object of that property is also listed here."
+        },
         "edit_cites": {
           "type": "object",
           "propertyNames": {

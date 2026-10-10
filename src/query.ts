@@ -30,7 +30,7 @@ export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
   parameters: { name: string; type: Type | null; optional: boolean; values: string[] | null; cite: QueryCite | null }[];
   conditions: { id: string; expr: Expr | null; exprText: S; unspecified: S; reads: unknown[]; cites: QueryCite[]; scenarios: string[] }[];
   decision: { order: QueryCite | null; rows: QueryRow[] /* otherwise, when present, is last */ } | null;
-  edits: { prop: string; cite: QueryCite | null /* edit_cites */ }[]; creates: string[]; emits: string[];
+  edits: { prop: string; cite: QueryCite | null /* edit_cites */ }[]; creates: string[]; deletes: string[]; emits: string[];
   linkEffects: { link: string; kind: "effect" | "none" | "unspecified"; text: S; cite: QueryCite | null; scenarios: string[] }[];
   crossContext: { via: S; unspecified: S; cite: QueryCite | null } | null; evidence: S;
   transitions: { object: string; from: S; to: S }[] /* state machine transitions whose by names this action */ };
@@ -40,11 +40,11 @@ export type QueryObject = { id: string; context: S; datasource: S; doc: S; outOf
   derived: { id: string; type: Type | null; docTerm: S; exprText: S; cite: QueryCite | null }[];
   stateMachine: { doc: S; initial: S; terminal: string[]; transitions: { from: S; to: S; by: string[]; outOfScope: S }[] } | null;
   links: { id: string; end: "from" | "to"; other: S; cardinality: S; via: S }[];
-  writers: { action: string; edits: string[]; creates: boolean }[]; readers: { action: string; condition: string; props: string[] }[];
+  writers: { action: string; edits: string[]; creates: boolean; deletes: boolean }[]; readers: { action: string; condition: string; props: string[] }[];
   unanalyzed: QueryWrites["unanalyzed"] /* conditions ("<action>:<condition>") and derived properties that do not type-check */ };
 export type QueryDisposition = { disposition: string; class: S; cite: QueryCite | null; rows: ({ action: string } & QueryRow)[] };
 export type QueryWrites = { target: string; kind: "property" | "derived"; unanalyzed: { at: string; error: string }[];
-  writers: { action: string; cite: QueryCite | null; path: string[] /* [] = direct */ }[]; creators: string[] };
+  writers: { action: string; cite: QueryCite | null; path: string[] /* [] = direct */ }[]; creators: string[]; deleters: string[] };
 export type QueryReads = { target: string; kind: "property" | "derived"; materialized: string[]; unanalyzed: { at: string; error: string }[];
   conditions: { action: string; condition: string; source: "expr" | "reads"; direct: boolean; via: string[]; rows: number[] }[];
   derived: { id: string; source: "expr" | "reads"; direct: boolean; via: string[] }[] };
@@ -372,6 +372,7 @@ export function queryAction(ont: unknown, id: string): QueryAction | null {
     decision: isObj(a.decision) ? { order: citeOf(map(a.decision.order).cite), rows: decisionRows(an, id, a) } : null,
     edits: strs(a.edits).map((prop) => ({ prop, cite: citeOf(map(own(editCites, prop)).cite) })),
     creates: strs(a.creates),
+    deletes: strs(a.deletes),
     emits: strs(a.emits),
     linkEffects: Object.entries(map(a.link_effects)).flatMap(([link, le]) => {
       const e = map(le);
@@ -422,7 +423,8 @@ export function queryObject(ont: unknown, id: string): QueryObject | null {
   for (const [aid, a] of sortedActions(ont)) {
     const edits = strs(a.edits).filter((e) => e.startsWith(prefix));
     const creates = strs(a.creates).includes(id);
-    if (edits.length || creates) writers.push({ action: aid, edits, creates });
+    const deletes = strs(a.deletes).includes(id);
+    if (edits.length || creates || deletes) writers.push({ action: aid, edits, creates, deletes });
   }
   if (o === undefined)
     return { id, context: null, datasource: null, doc: null, outOfScope, scope: null, properties: [], derived: [], stateMachine: null, links: [], writers, readers: [], unanalyzed: [] };
@@ -514,7 +516,8 @@ export function queryWrites(ont: unknown, t: string): QueryWrites | null {
   const writersOf = (prop: string, path: string[]) =>
     acts.filter(([, a]) => strs(a.edits).includes(prop)).map(([aid, a]) => ({ action: aid, cite: citeOf(map(own(map(a.edit_cites), prop)).cite), path }));
   if (tg.kind === "property")
-    return { target: t, kind: "property", unanalyzed: [], writers: writersOf(t, []), creators: acts.filter(([, a]) => strs(a.creates).includes(tg.obj)).map(([aid]) => aid) };
+    return { target: t, kind: "property", unanalyzed: [], writers: writersOf(t, []), creators: acts.filter(([, a]) => strs(a.creates).includes(tg.obj)).map(([aid]) => aid),
+      deleters: acts.filter(([, a]) => strs(a.deletes).includes(tg.obj)).map(([aid]) => aid) };
   // Breadth first from the derived target: each input once, by its shortest path.
   const an = new Analysis(ont);
   const writers: QueryWrites["writers"] = [];
@@ -538,7 +541,7 @@ export function queryWrites(ont: unknown, t: string): QueryWrites | null {
     frontier = next;
   }
   writers.sort((a, b) => a.path.length - b.path.length || sortStr(a.path.join(), b.path.join()) || sortStr(a.action, b.action));
-  return { target: t, kind: "derived", unanalyzed: derivedErrors(an, seenDerived), writers, creators: [] };
+  return { target: t, kind: "derived", unanalyzed: derivedErrors(an, seenDerived), writers, creators: [], deleters: [] };
 }
 
 export function queryReads(ont: unknown, t: string): QueryReads | null {
