@@ -1,15 +1,15 @@
 ---
-name: avouch-cli
+name: cli
 description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and you need to check it or ask it a question — before you implement or change business logic (the permission, conditions, decision rows, effects or state machine of an action; the writers and readers of a property), or before you change a cited document section.
 ---
 
 # Avouch CLI
 
-`avouch` checks an Avouch ontology against its source documents and answers read-only questions about it. To draft or update an ontology, use the skill `aquery-scan`.
+`avouch` checks an Avouch ontology against its source documents and answers read-only questions about it. To draft or update an ontology, use the skill `scan` (`/avouch:scan`).
 
 ## Run it
 
-In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.2` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.3` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 | Sub-command | Use |
 |---|---|

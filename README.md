@@ -129,10 +129,12 @@ claude plugin install avouch@avouch
 Inside a Claude Code session, the same two steps are `/plugin marketplace add githonllc/avouch` and `/plugin install avouch@avouch`.
 
 The plugin has two skills:
-- `avouch-cli`: checks an ontology and runs `avouch query`.
-- `aquery-scan` (also `/aquery-scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document.
+- `cli` (`/avouch:cli`): checks an ontology and runs `avouch query`.
+- `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document.
 
-The skills run the CLI with `npx -y @githonllc/avouch@<version>`, pinned to the version of this repository. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git (`npx -y github:githonllc/avouch`). `skills/aquery-scan/fixture/` is the test project for the skill.
+Before 0.1.3 the two skills were named `avouch-cli` and `aquery-scan`.
+
+The skills run the CLI with `npx -y @githonllc/avouch@<version>`, pinned to the version of this repository. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git (`npx -y github:githonllc/avouch`). `skills/scan/fixture/` is the test project for the skill.
 
 ## Publishing
 
