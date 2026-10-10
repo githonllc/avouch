@@ -75,7 +75,12 @@ export function missingFields(schemaJson: string, ttl: string) {
 describe("vocab.ttl", () => {
   it("every schema field has a vocab term", () => {
     const { fields, excluded, missing } = missingFields(schemaText, ttlText);
-    console.log(`fields=${fields.length} excluded=${JSON.stringify(excluded)} terms=${vocabTerms(ttlText).size}`);
+    // the two narrow rules match exactly these paths; a wider match fails here
+    expect(fields.filter((f) => RULES.find((r) => r.match(f.pointer))?.id === "objectType.properties").map((f) => f.pointer)).toEqual(["/$defs/objectType/properties/properties"]);
+    expect(excluded["valueType.ref"]).toBe(2);
+    // the root rule matches only fields defined directly in the root `properties`
+    const root = Object.keys(JSON.parse(schemaText).properties);
+    expect(excluded["root-section"]).toBe(root.length);
     const msg = missing.map((m) => `  ${m.name} at ${m.pointer}`).join("\n");
     expect(missing, `schema fields without a vocab term:\n${msg}\nadd a term to vocab.ttl or an exclusion rule with its reason`).toEqual([]);
   });
