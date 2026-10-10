@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Rules for agents and maintainers who work in this repository. This file is tracked, so it is also published. Do not put internal discussion, issue text or private names here.
+Rules for agents and maintainers who work in this repository. This file is tracked, so it is public on GitHub. Do not put internal discussion, issue text or private names here.
 
 ## Two remotes
 
@@ -22,7 +22,7 @@ gh repo set-default githonllc/avouch
 2. The baseline for a review or a diff is `public/main` (`git fetch public`, then `public/main..HEAD`).
 3. Everything on `public` is public, including commit messages, pull request text, branch names, authors and emails, and it cannot be taken back. Write it as public text: no internal issue text, internal links, private names or customer names.
 4. Internal issues and the two repositories' numbers: both repositories number their issues from 1, so a bare `#n` is ambiguous. On `public`, `#n` means a public issue or pull request. Do not refer to internal issues from `public` at all; restate what a public reader needs instead. In an internal issue, link public work as `githonllc/avouch#<n>`.
-5. The private-content scan (`scripts/scan-private.mjs`) runs in CI and in the release workflow on `public`. Run it locally with the private patterns before you push, because the CI scan runs after the push.
+5. The private-content scan (`scripts/scan-private.mjs`) runs in CI and in the release workflow on `public`, after the push. Run it locally before you push: `node scripts/scan-private.mjs`. A maintainer who holds the private pattern list (kept in a private repository, the source of the secret `PRIVATE_PATTERNS`) sets it in the environment variable `PRIVATE_PATTERNS` for the same run.
 
 ## Release
 
