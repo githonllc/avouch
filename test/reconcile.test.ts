@@ -6,7 +6,7 @@ import { parse } from "yaml";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
 import type { Value } from "../src/evaluate";
 import type { Stage1Ontology, Type } from "../src/expr";
-import { projectSnapshot, reconcile, type Decode, type Reported, type RuntimeCase } from "../src/reconcile";
+import { domainResults, projectSnapshot, reconcile, type Decode, type Reported, type RuntimeCase } from "../src/reconcile";
 
 const library = parse(ontologyText) as Stage1Ontology;
 const identity: Decode = (raw) => raw as Value;
@@ -166,12 +166,35 @@ describe("reconcile: results that cannot be reconciled", () => {
     expect(one(baseCase({}, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "RETURNED" });
   });
 
-  it("an invocation result is never unmapped, even without a decision table", () => {
+  it("an invocation result other than SCOPE_DENIED is never unmapped, even without a decision table", () => {
     const ont = structuredClone(library);
     delete ont.actionTypes.RETURN!.decision;
     const c = baseCase({ reported: { result: "PERMISSION_DENIED" }, expected: { result: "PERMISSION_DENIED" } }, ont);
     c.inputs = { ...c.inputs, actor: { ...c.inputs.actor, keys: [] } };
     expect(one(c, ont)).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "PERMISSION_DENIED" } });
+  });
+
+  it("a reported SCOPE_DENIED is unmapped: it is internal and never reported", () => {
+    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" } }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("a reported SCOPE_DENIED is unmapped also when the evaluator gives SCOPE_DENIED internally", () => {
+    const stores = baseStores();
+    stores.loans.push({ id: "LN-9", branch_id: "BR-2", state: "ACTIVE", due_date: "2026-01-15", return_condition: null });
+    const c = baseCase({ reported: { result: "SCOPE_DENIED" }, expected: { result: "SCOPE_DENIED" } }, library, stores);
+    c.inputs = { ...c.inputs, bindings: { loan_id: "LN-9" } };
+    expect(one(c)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("a reported SCOPE_DENIED is unmapped even when an unchecked decision table gives it", () => {
+    const ont = structuredClone(library);
+    ont.actionTypes.RETURN!.decision!.otherwise!.result = "SCOPE_DENIED";
+    ont.dispositions!.SCOPE_DENIED = structuredClone(ont.dispositions!.RETURNED);
+    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" } }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("a reported SCOPE_DENIED without an expectation is expectation_missing: step 3 comes before step 6", () => {
+    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" }, expected: null }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_missing" });
   });
 
   it("INDETERMINATE is not reconciled; the detail is its reason", () => {
@@ -181,6 +204,13 @@ describe("reconcile: results that cannot be reconciled", () => {
     expect(one(baseCase({}, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "indeterminate", detail: "unspecified" });
   });
 
+  it("a reported SCOPE_DENIED is unmapped before INDETERMINATE", () => {
+    const ont = structuredClone(library);
+    const ret = ont.actionTypes.RETURN!;
+    ret.conditions = ret.conditions.map((c) => (c.id === "loan_active" ? { id: "loan_active", unspecified: "x" } : c));
+    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" } }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
   it("returns one row per case, in input order", () => {
     const rows = reconcile(library, [baseCase({ id: "a", reported: null }), baseCase({ id: "b" }), baseCase({ id: "c", reported: { result: "REPLAYED" } })]);
     expect(rows.map((r) => [r.id, r.status])).toEqual([
@@ -188,6 +218,33 @@ describe("reconcile: results that cannot be reconciled", () => {
       ["b", "match"],
       ["c", "cannot_reconcile"],
     ]);
+  });
+});
+
+describe("domainResults", () => {
+  it("gives each distinct decision row result in row order, then the otherwise result", () => {
+    expect(domainResults(library, "BORROW")).toEqual(["REJECTED", "REFERRED", "BORROWED"]);
+    expect(domainResults(library, "RETURN")).toEqual(["REJECTED", "RETURNED_LATE", "RETURNED"]);
+  });
+
+  it("gives none for an action without a decision table", () => {
+    const ont = structuredClone(library);
+    delete ont.actionTypes.RETURN!.decision;
+    expect(domainResults(ont, "RETURN")).toEqual([]);
+  });
+
+  it("gives the otherwise result once when a decision row already gives it, in row order", () => {
+    const ont = structuredClone(library);
+    ont.actionTypes.RETURN!.decision!.otherwise!.result = "REJECTED";
+    expect(domainResults(ont, "RETURN")).toEqual(["REJECTED", "RETURNED_LATE"]);
+  });
+
+  it("throws for an unknown action", () => {
+    expect(() => domainResults(library, "NOPE")).toThrow("unknown action NOPE");
+  });
+
+  it("never gives SCOPE_DENIED", () => {
+    for (const id of Object.keys(library.actionTypes)) expect(domainResults(library, id), id).not.toContain("SCOPE_DENIED");
   });
 });
 

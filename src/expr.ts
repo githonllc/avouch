@@ -45,6 +45,7 @@ export const DISPOSITION_CLASSES = ["rejected", "recorded", "pending", "applied"
 export type DispositionClass = (typeof DISPOSITION_CLASSES)[number];
 // The fixed invocation result set of the format. The first two belong to the idempotency envelope. A disposition id may
 // not be one of these names.
+// Every invocation-layer result, SCOPE_DENIED included. SCOPE_DENIED is internal and never reported (SPEC section 9).
 export const INVOCATION_RESULTS = ["REPLAYED", "IDEMPOTENCY_CONFLICT", "INVALID_BINDING", "SCOPE_DENIED", "PERMISSION_DENIED"] as const;
 // principals: the actor kinds the form admits; its cite is ignored by evaluation.
 export type Principals = { kinds: string[]; cite?: unknown };

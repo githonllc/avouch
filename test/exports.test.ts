@@ -9,4 +9,9 @@ describe("package root exports", () => {
     }
     expect((root as Record<string, unknown>).MAX_NULLABLE_REFS).toBe(8);
   });
+
+  it("exposes domainResults and no combined reportable-results export", () => {
+    expect(typeof (root as Record<string, unknown>).domainResults).toBe("function");
+    expect("reportableResults" in root).toBe(false);
+  });
 });
