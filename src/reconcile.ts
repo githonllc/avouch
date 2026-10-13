@@ -14,11 +14,12 @@ export interface RuntimeCase {
   expected: Reported | null; // the scenario expectation; null = none
 }
 
-export type CannotReconcile = "envelope" | "runtime_missing" | "expectation_missing" | "snapshot_missing" | "evaluator_error" | "runtime_unmapped" | "indeterminate";
+export type CannotReconcile = "envelope" | "runtime_missing" | "expectation_missing" | "snapshot_missing" | "evaluator_error" | "runtime_unmapped" | "indeterminate" | "expectation_unmapped";
 
+// `row` (the decision row that decide chose) is present only when the evaluator result is a domain result.
 export type ReconcileRow =
-  | { id: string; action: string; status: "match"; result: Reported }
-  | { id: string; action: string; status: "mismatch"; evaluator: Reported; reported: Reported; expected: Reported }
+  | { id: string; action: string; status: "match"; result: Reported; row?: number | "otherwise" }
+  | { id: string; action: string; status: "mismatch"; evaluator: Reported; reported: Reported; expected: Reported; row?: number | "otherwise" }
   | { id: string; action: string; status: "cannot_reconcile"; reason: CannotReconcile; detail?: string };
 
 /** Decodes one stored value of a property with a declared type; undefined = cannot decode. Never called with null. */
@@ -76,6 +77,7 @@ export function domainResults(ont: Stage1Ontology, actionId: string): readonly s
 // expectation is reported as such, never filled in from the decision table. Envelope results are not decisions (the
 // evaluator does not implement the envelope; a replay does not recompute domain conditions), so decide is not called.
 // A reported result that the action cannot give (runtime_unmapped) means the runtime did not report its domain result.
+// An expected result that the action cannot give (expectation_unmapped) is a defect of the scenario.
 export function reconcile(ont: Stage1Ontology, cases: readonly RuntimeCase[]): ReconcileRow[] {
   return cases.map((c): ReconcileRow => {
     const head = { id: c.id, action: c.action };
@@ -92,12 +94,16 @@ export function reconcile(ont: Stage1Ontology, cases: readonly RuntimeCase[]): R
     } catch (e) {
       return cannot("evaluator_error", e instanceof Error ? e.message : String(e));
     }
-    // SCOPE_DENIED is internal (SPEC section 9, Existence is not revealed): never a reportable result.
-    const reportable = reported.result !== "SCOPE_DENIED" && (INVOCATION.includes(reported.result) || domainResults(ont, c.action).includes(reported.result));
-    if (!reportable) return cannot("runtime_unmapped", reported.result);
+    // A result this action can give: not SCOPE_DENIED (internal: SPEC section 9, Existence is not revealed), and an
+    // invocation result or one of its domain results. Defects of the input (runtime, then scenario) come before INDETERMINATE.
+    const results = domainResults(ont, c.action);
+    const mapped = (r: string): boolean => r !== "SCOPE_DENIED" && (INVOCATION.includes(r) || results.includes(r));
+    if (!mapped(reported.result)) return cannot("runtime_unmapped", reported.result);
+    if (!mapped(expected.result)) return cannot("expectation_unmapped", expected.result);
     if (d.layer === "indeterminate") return cannot("indeterminate", d.reason);
     const { result, reason } = externalResult(d);
     const evaluator: Reported = reason !== undefined ? { result, reason } : { result };
-    return same(evaluator, reported) && same(evaluator, expected) ? { ...head, status: "match", result: evaluator } : { ...head, status: "mismatch", evaluator, reported, expected };
+    const row = d.layer === "domain" ? { row: d.row } : {};
+    return same(evaluator, reported) && same(evaluator, expected) ? { ...head, status: "match", result: evaluator, ...row } : { ...head, status: "mismatch", evaluator, reported, expected, ...row };
   });
 }
