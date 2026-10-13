@@ -620,6 +620,16 @@ describe("an incomplete snapshot throws", () => {
     const e = { action: "probe", snapshot: snap, scope: "b1", bindings: { person: "p1" }, actor: staff, now: NOW };
     expect(() => evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), e)).toThrow(/has no branch_id/);
   });
+  it("a navigated pure link that is not in snapshot.links", () => {
+    const snap: Snapshot = { objects: snapshot.objects };
+    const e = (person: string | null) => ({ action: "probe", snapshot: snap, scope: "b1", bindings: { person }, actor: staff, now: NOW });
+    expect(() => evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), e("p1"))).toThrow("snapshot lacks link book_author");
+    // From a null optional ref the link is not read: no throw.
+    expect(evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), e(null))).toBe("F");
+    // An empty link table is passed as [].
+    const empty = { ...e("p1"), snapshot: { ...snap, links: { book_author: [] } } };
+    expect(evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), empty)).toBe("F");
+  });
 });
 
 describe("names are own keys, never prototype members", () => {
@@ -832,7 +842,7 @@ describe("more input checks", () => {
     const bad2 = withAction({ ...base.actionTypes.hold!, decision: { hitPolicy: "first", rows: rows("REFUSED"), otherwise: { result: "NOPE" } } });
     expect(() => decide(bad2, "x", snapshot, "b1", { e: "A" }, staff, NOW)).toThrow(/NOPE has no disposition/);
   });
-  it("an object type or pure link named toString, absent from the snapshot, has no rows", () => {
+  it("an object type named toString absent from the snapshot has no rows; a pure link named toString must be in snapshot.links", () => {
     const ont = withAction(
       { parameters: { odd: { type: { ref: "toString" } }, book: { type: { ref: "Book" }, optional: true } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
       {
@@ -842,7 +852,9 @@ describe("more input checks", () => {
     );
     expect(decide(ont, "x", snapshot, "b1", { odd: "o1" }, staff, NOW)).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "odd", reason: "not_found" });
     const e = { action: "x", snapshot, scope: "b1", bindings: { odd: null, book: "bk1" }, actor: staff, now: NOW };
-    expect(evalPredicate(ont, exists("p", nav("book", "toString", "forward")), e)).toBe("F");
+    expect(() => evalPredicate(ont, exists("p", nav("book", "toString", "forward")), e)).toThrow("snapshot lacks link toString");
+    expect(evalPredicate(ont, exists("p", nav("book", "toString", "forward")), { ...e, snapshot: { ...snapshot, links: { ...snapshot.links, toString: [] } } })).toBe("F");
+    expect(evalPredicate(ont, exists("p", nav("book", "toString", "forward")), { ...e, bindings: { odd: null, book: null } })).toBe("F");
   });
   it("a ref with more than one dot, or a property of now, throws", () => {
     expect(() => val(ref("now.x"))).toThrow(/now has no properties/);

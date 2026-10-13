@@ -25,17 +25,32 @@ export type ReconcileRow =
 /** Decodes one stored value of a property with a declared type; undefined = cannot decode. Never called with null. */
 export type Decode = (raw: unknown, type: Type) => Value | undefined;
 export type TypeDefect = { object: string; prop: string; row: string; value: unknown };
+/** For each pure link id: the columns of its table that hold the `from` and `to` ids. */
+export type LinkColumns = Readonly<Record<string, { readonly from: string; readonly to: string }>>;
 
 // Stored rows (physical values) -> a typed snapshot. Each property with a declared type is decoded and then checked with
 // fitsType; a value that cannot be decoded or does not fit is a defect and keeps its raw value. Null is never decoded.
-// An absent column is not projected (decide throws when it reads it: an incomplete snapshot). Pure link tables fail closed.
+// An absent column is not projected (decide throws when it reads it: an incomplete snapshot). A pure link is projected only with a linkColumns entry; without one it fails closed.
 export function projectSnapshot(
   ont: Stage1Ontology,
   stores: Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>,
   decode: Decode,
+  linkColumns?: LinkColumns,
 ): { snapshot: Snapshot; defects: TypeDefect[] } {
   const datasources = new Set(Object.values(ont.objectTypes).map((o) => o.datasource));
-  for (const l of ont.linkTypes) if (l.table !== undefined && !datasources.has(l.table)) throw new Error(`pure link ${l.id} is not projected`);
+  const links: NonNullable<Snapshot["links"]> = {};
+  for (const l of ont.linkTypes) {
+    if (l.table === undefined || datasources.has(l.table)) continue;
+    const cols = own(linkColumns, l.id);
+    if (cols === undefined) throw new Error(`pure link ${l.id} is not projected`);
+    if (!Object.hasOwn(stores, l.table)) throw new Error(`snapshot lacks store ${l.table}`);
+    links[l.id] = stores[l.table].map((stored) => {
+      const { from: _from, to: _to, ...row }: Record<string, unknown> = stored;
+      if (Object.hasOwn(stored, cols.from) && stored[cols.from] !== undefined) row.from = stored[cols.from];
+      if (Object.hasOwn(stored, cols.to) && stored[cols.to] !== undefined) row.to = stored[cols.to];
+      return row as Record<string, Value>;
+    });
+  }
   const objects: Snapshot["objects"] = {};
   const defects: TypeDefect[] = [];
   for (const [object, o] of Object.entries(ont.objectTypes)) {
@@ -52,7 +67,7 @@ export function projectSnapshot(
       return row as Record<string, Value>;
     });
   }
-  return { snapshot: { objects }, defects };
+  return { snapshot: Object.keys(links).length > 0 ? { objects, links } : { objects }, defects };
 }
 
 // Strict on reason: both absent is equal; INVALID_BINDING with different reasons is not.

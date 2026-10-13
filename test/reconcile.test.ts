@@ -369,6 +369,48 @@ describe("projectSnapshot: physical type mapping", () => {
     expect(() => projectSnapshot(ont, { things: [], thing_tags: [] }, bool01)).toThrow("pure link thing_tag is not projected");
   });
 
+  const tagged = () => thing([{ id: "thing_tag", from: "Thing", to: "Thing", via: "tag_id", table: "thing_tags" }]);
+  const cols = { thing_tag: { from: "thing_id", to: "tag_id" } };
+
+  it("projects a pure link with linkColumns: all columns are kept, from and to come from the mapped columns", () => {
+    const decode = vi.fn(bool01);
+    const out = projectSnapshot(tagged(), { things: [], thing_tags: [{ thing_id: "t1", tag_id: "t2", from: "junk", k: 1 }] }, decode, cols);
+    expect(out).toStrictEqual({ snapshot: { objects: { Thing: [] }, links: { thing_tag: [{ thing_id: "t1", tag_id: "t2", k: 1, from: "t1", to: "t2" }] } }, defects: [] });
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it("a mapped column absent from a link row is not projected", () => {
+    const out = projectSnapshot(tagged(), { things: [], thing_tags: [{ thing_id: "t1", to: "junk" }] }, bool01, cols);
+    expect(out.snapshot.links).toStrictEqual({ thing_tag: [{ thing_id: "t1", from: "t1" }] });
+  });
+
+  it("a mapped column whose value is undefined is not projected", () => {
+    const out = projectSnapshot(tagged(), { things: [], thing_tags: [{ thing_id: undefined, tag_id: "t2" }] }, bool01, cols);
+    expect(out.snapshot.links).toStrictEqual({ thing_tag: [{ thing_id: undefined, tag_id: "t2", to: "t2" }] });
+  });
+
+  it("a pure link with linkColumns but without its store throws", () => {
+    expect(() => projectSnapshot(tagged(), { things: [] }, bool01, cols)).toThrow("snapshot lacks store thing_tags");
+  });
+
+  it("a pure link without an own linkColumns entry still throws; other entries are ignored", () => {
+    expect(() => projectSnapshot(tagged(), { things: [], thing_tags: [] }, bool01, { other: { from: "a", to: "b" } })).toThrow("pure link thing_tag is not projected");
+    expect(() => projectSnapshot(tagged(), { things: [], thing_tags: [] }, bool01, {})).toThrow("pure link thing_tag is not projected");
+  });
+
+  it("an empty link table projects to []", () => {
+    expect(projectSnapshot(tagged(), { things: [], thing_tags: [] }, bool01, cols).snapshot.links).toStrictEqual({ thing_tag: [] });
+  });
+
+  it("linkColumns is read by own key: a pure link named toString needs its own entry", () => {
+    const ont = thing([{ id: "toString", from: "Thing", to: "Thing", via: "tag_id", table: "thing_tags" }]);
+    expect(() => projectSnapshot(ont, { things: [], thing_tags: [] }, bool01, {})).toThrow("pure link toString is not projected");
+  });
+
+  it("a pure link without linkColumns throws before a missing object store", () => {
+    expect(() => projectSnapshot(tagged(), {}, bool01)).toThrow("pure link thing_tag is not projected");
+  });
+
   it("a link whose table is an object datasource is not a pure link", () => {
     const ont = thing([{ id: "thing_self", from: "Thing", to: "Thing", via: "parent_id", table: "things" }]);
     expect(projectSnapshot(ont, { things: [] }, bool01).defects).toEqual([]);

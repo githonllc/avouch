@@ -4,7 +4,7 @@
 import { checkPredicate, fitsType, own, RESERVED_NAMES, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
-// Object rows must carry a string `id`. Pure link rows are {from, to} (plus the scope field when scoped).
+// Object rows must carry a string `id`. Pure link rows are {from, to} (plus the scope field when scoped). A navigated pure link must be a key of links (an empty table is []); else decide throws.
 export type Row = Readonly<Record<string, Value>>;
 export interface Snapshot {
   objects: Record<string, readonly Row[]>;
@@ -101,7 +101,8 @@ class Session {
   linkRows(link: Stage1Ontology["linkTypes"][number]): readonly Row[] {
     let rows = this.links.get(link.id);
     if (rows === undefined) {
-      const all = own(this.env.snapshot.links, link.id) ?? [];
+      const all = own(this.env.snapshot.links, link.id);
+      if (all === undefined) throw new Error(`snapshot lacks link ${link.id}`);
       const by = this.ont.scope?.by;
       const tenantEnd = this.mode(link.from) === "tenant" || this.mode(link.to) === "tenant";
       rows = by !== undefined && tenantEnd ? all.filter((r) => field(r, by, `${link.id} link row`) === this.env.scope) : all;
