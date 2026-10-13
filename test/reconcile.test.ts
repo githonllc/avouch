@@ -35,7 +35,7 @@ const one = (c: RuntimeCase, ont: Stage1Ontology = library) => {
 
 describe("reconcile: three-way equality", () => {
   it("evaluator, runtime and scenario agree -> match", () => {
-    expect(one(baseCase())).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "RETURNED" } });
+    expect(one(baseCase())).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "RETURNED" }, row: "otherwise" });
   });
 
   it("the runtime differs from the evaluator -> mismatch, all three results shown", () => {
@@ -46,6 +46,7 @@ describe("reconcile: three-way equality", () => {
       evaluator: { result: "RETURNED" },
       reported: { result: "RETURNED_LATE" },
       expected: { result: "RETURNED" },
+      row: "otherwise",
     });
   });
 
@@ -57,6 +58,7 @@ describe("reconcile: three-way equality", () => {
       evaluator: { result: "RETURNED" },
       reported: { result: "RETURNED" },
       expected: { result: "REJECTED" },
+      row: "otherwise",
     });
   });
 
@@ -88,6 +90,32 @@ describe("reconcile: three-way equality", () => {
       expected: notFound,
     });
   });
+
+  it("a match on a domain result carries the decision row", () => {
+    const late: Reported = { result: "RETURNED_LATE" };
+    const c = baseCase({ reported: late, expected: late });
+    c.inputs = { ...c.inputs, now: Date.UTC(2026, 0, 20) };
+    expect(one(c)).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: late, row: 1 });
+  });
+
+  it("a row for an invocation result has no row key", () => {
+    const c = baseCase({ reported: { result: "PERMISSION_DENIED" }, expected: { result: "PERMISSION_DENIED" } });
+    c.inputs = { ...c.inputs, actor: { ...c.inputs.actor, keys: [] } };
+    expect(one(c)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "PERMISSION_DENIED" } });
+  });
+
+  it("a mismatch on a domain result carries the decision row", () => {
+    const c = baseCase({ reported: { result: "RETURNED" }, expected: { result: "RETURNED" } });
+    c.inputs = { ...c.inputs, now: Date.UTC(2026, 0, 20) };
+    expect(one(c)).toEqual({ id: "inv-1", action: "RETURN", status: "mismatch", evaluator: { result: "RETURNED_LATE" }, reported: { result: "RETURNED" }, expected: { result: "RETURNED" }, row: 1 });
+  });
+
+  it("a mismatch on an invocation result has no row key", () => {
+    const notFound: Reported = { result: "INVALID_BINDING", reason: "not_found" };
+    const c = baseCase({ reported: notFound, expected: notFound });
+    c.inputs = { ...c.inputs, bindings: { loan_id: "LN-1", x: "1" } };
+    expect(one(c)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "mismatch", evaluator: { result: "INVALID_BINDING", reason: "unknown_param" }, reported: notFound, expected: notFound });
+  });
 });
 
 describe("reconcile: an absent reason", () => {
@@ -97,6 +125,7 @@ describe("reconcile: an absent reason", () => {
       action: "RETURN",
       status: "match",
       result: { result: "RETURNED" },
+      row: "otherwise",
     });
   });
 });
@@ -209,6 +238,45 @@ describe("reconcile: results that cannot be reconciled", () => {
     const ret = ont.actionTypes.RETURN!;
     ret.conditions = ret.conditions.map((c) => (c.id === "loan_active" ? { id: "loan_active", unspecified: "x" } : c));
     expect(one(baseCase({ reported: { result: "SCOPE_DENIED" } }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("an expected result that the action cannot give is expectation_unmapped; the detail is that result", () => {
+    expect(one(baseCase({ expected: { result: "NOPE_RESULT" } }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_unmapped", detail: "NOPE_RESULT" });
+  });
+
+  it("an expected SCOPE_DENIED is expectation_unmapped", () => {
+    expect(one(baseCase({ expected: { result: "SCOPE_DENIED" } }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("without a decision table an expected domain result is expectation_unmapped", () => {
+    const ont = structuredClone(library);
+    delete ont.actionTypes.RETURN!.decision;
+    const c = baseCase({ reported: { result: "PERMISSION_DENIED" }, expected: { result: "RETURNED" } }, ont);
+    c.inputs = { ...c.inputs, actor: { ...c.inputs.actor, keys: [] } };
+    expect(one(c, ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_unmapped", detail: "RETURNED" });
+  });
+
+  it("an unmapped expectation comes before INDETERMINATE", () => {
+    const ont = structuredClone(library);
+    const ret = ont.actionTypes.RETURN!;
+    ret.conditions = ret.conditions.map((c) => (c.id === "loan_active" ? { id: "loan_active", unspecified: "x" } : c));
+    expect(one(baseCase({ expected: { result: "NOPE_RESULT" } }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_unmapped", detail: "NOPE_RESULT" });
+  });
+
+  it("an unmapped reported result comes before an unmapped expectation", () => {
+    expect(one(baseCase({ reported: { result: "BORROWED" }, expected: { result: "NOPE_RESULT" } }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "BORROWED" });
+  });
+
+  it("an expected envelope result is an invocation result: it is compared, not unmapped", () => {
+    expect(one(baseCase({ expected: { result: "REPLAYED" } }))).toEqual({
+      id: "inv-1",
+      action: "RETURN",
+      status: "mismatch",
+      evaluator: { result: "RETURNED" },
+      reported: { result: "RETURNED" },
+      expected: { result: "REPLAYED" },
+      row: "otherwise",
+    });
   });
 
   it("returns one row per case, in input order", () => {
