@@ -59,11 +59,17 @@ const same = (a: Reported, b: Reported): boolean => a.result === b.result && a.r
 const ENVELOPE = ["REPLAYED", "IDEMPOTENCY_CONFLICT"];
 const INVOCATION: readonly string[] = INVOCATION_RESULTS;
 
-// The results a runtime may report for an action: the invocation results and the results its decision table gives.
-function mapped(ont: Stage1Ontology, action: string, result: string): boolean {
-  if (INVOCATION.includes(result)) return true;
-  const decision = own(ont.actionTypes, action)?.decision;
-  return (decision?.rows ?? []).some((r) => r.result === result) || decision?.otherwise?.result === result;
+// The domain results of an action: each distinct result of its decision rows, in row order, then of otherwise.
+// An action without a decision table gives none. Names only; the class is ont.dispositions[name].class. For an ontology
+// that passes the check, every name is a key of dispositions and none is an invocation result (R1).
+export function domainResults(ont: Stage1Ontology, actionId: string): readonly string[] {
+  const action = own(ont.actionTypes, actionId);
+  if (action === undefined) throw new Error(`unknown action ${actionId}`);
+  const names: string[] = [];
+  for (const r of action.decision?.rows ?? []) if (!names.includes(r.result)) names.push(r.result);
+  const o = action.decision?.otherwise;
+  if (o !== undefined && !names.includes(o.result)) names.push(o.result);
+  return names;
 }
 
 // One row per case, in input order. The evaluator result is computed only to compare: a missing runtime result or
@@ -86,7 +92,9 @@ export function reconcile(ont: Stage1Ontology, cases: readonly RuntimeCase[]): R
     } catch (e) {
       return cannot("evaluator_error", e instanceof Error ? e.message : String(e));
     }
-    if (!mapped(ont, c.action, reported.result)) return cannot("runtime_unmapped", reported.result);
+    // SCOPE_DENIED is internal (SPEC section 9, Existence is not revealed): never a reportable result.
+    const reportable = reported.result !== "SCOPE_DENIED" && (INVOCATION.includes(reported.result) || domainResults(ont, c.action).includes(reported.result));
+    if (!reportable) return cannot("runtime_unmapped", reported.result);
     if (d.layer === "indeterminate") return cannot("indeterminate", d.reason);
     const { result, reason } = externalResult(d);
     const evaluator: Reported = reason !== undefined ? { result, reason } : { result };

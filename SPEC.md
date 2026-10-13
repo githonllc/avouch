@@ -308,13 +308,13 @@ Types:
 | 3 | `expected` is `null` | `cannot_reconcile`, `expectation_missing` |
 | 4 | `snapshot` is `null` | `cannot_reconcile`, `snapshot_missing` |
 | 5 | `decide(ont, action, snapshot, scope, bindings, actor, now)` throws | `cannot_reconcile`, `evaluator_error`; `detail` is the error message |
-| 6 | `reported.result` is neither an invocation result (`INVOCATION_RESULTS`) nor the `result` of a decision row or of `otherwise` of this action | `cannot_reconcile`, `runtime_unmapped`; `detail` is `reported.result` |
+| 6 | `reported.result` is `SCOPE_DENIED`, or is neither an invocation result (`INVOCATION_RESULTS`) nor the `result` of a decision row or of `otherwise` of this action | `cannot_reconcile`, `runtime_unmapped`; `detail` is `reported.result` |
 | 7 | the result is INDETERMINATE | `cannot_reconcile`, `indeterminate`; `detail` is its reason |
 | 8 | otherwise: `evaluator` is `externalResult` of the result without `param` (a domain result is `{result}`; `INVALID_BINDING` keeps `reason`) | `match` with `result = evaluator` when the three results are pairwise equal; else `mismatch` |
 
 Two `Reported` values are equal when `result` is equal and `reason` is equal (both absent counts as equal).
 
-A missing runtime result is never filled in from the decision table; neither is a missing expectation. The evaluator result is computed only to compare. Envelope results are not reconciled: the evaluator does not implement the envelope, and a replay does not recompute domain conditions, so a replay is not a new decision. An action without a decision table gives no domain result, so every reported result other than an invocation result is unmapped for it.
+A missing runtime result is never filled in from the decision table; neither is a missing expectation. The evaluator result is computed only to compare. Envelope results are not reconciled: the evaluator does not implement the envelope, and a replay does not recompute domain conditions, so a replay is not a new decision. An action without a decision table gives no domain result, so every reported result other than `INVALID_BINDING` and `PERMISSION_DENIED` is unmapped for it (envelope results stop at step 1).
 
 Once an invocation is inside the domain path of an action with a decision table, the runtime must report the domain result explicitly. A coarse signal, such as the status of a receipt, must not stand in for it: a coarse value can share a name with the expected result and give a false match. `runtime_missing` (nothing reported) and `runtime_unmapped` (a value the action cannot give) record the two ways this evidence fails.
 
@@ -330,7 +330,7 @@ The physical type mapping is checked here: the profile supplies `decode`, which 
 
 ### Existence is not revealed
 
-`SCOPE_DENIED` is internal. `externalResult` maps it and `INVALID_BINDING` `not_found` to one value, `{result: INVALID_BINDING, param, reason: not_found}`, so a caller cannot learn that an id exists in another tenant. Other reasons, such as `type`, are reported as they are.
+`SCOPE_DENIED` is internal. `externalResult` maps it and `INVALID_BINDING` `not_found` to one value, `{result: INVALID_BINDING, param, reason: not_found}`, so a caller cannot learn that an id exists in another tenant. Other reasons, such as `type`, are reported as they are. A runtime must not report `SCOPE_DENIED`; `reconcile` gives `runtime_unmapped` for it.
 
 ### Known limit
 
