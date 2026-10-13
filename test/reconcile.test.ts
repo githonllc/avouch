@@ -402,6 +402,15 @@ describe("projectSnapshot: physical type mapping", () => {
     expect(projectSnapshot(tagged(), { things: [], thing_tags: [] }, bool01, cols).snapshot.links).toStrictEqual({ thing_tag: [] });
   });
 
+  it("linkColumns is read by own key: a pure link named toString needs its own entry", () => {
+    const ont = thing([{ id: "toString", from: "Thing", to: "Thing", via: "tag_id", table: "thing_tags" }]);
+    expect(() => projectSnapshot(ont, { things: [], thing_tags: [] }, bool01, {})).toThrow("pure link toString is not projected");
+  });
+
+  it("a pure link without linkColumns throws before a missing object store", () => {
+    expect(() => projectSnapshot(tagged(), {}, bool01)).toThrow("pure link thing_tag is not projected");
+  });
+
   it("a link whose table is an object datasource is not a pure link", () => {
     const ont = thing([{ id: "thing_self", from: "Thing", to: "Thing", via: "parent_id", table: "things" }]);
     expect(projectSnapshot(ont, { things: [] }, bool01).defects).toEqual([]);
