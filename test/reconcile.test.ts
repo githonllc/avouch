@@ -89,6 +89,15 @@ describe("reconcile: three-way equality", () => {
     expect(one(plain)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "mismatch", evaluator: { result: "INVALID_BINDING", reason: "missing" }, reported: notFound, expected: notFound });
   });
 
+  it("an optional projected ref parameter that is absent is missing: the projection did not run, a mismatch", () => {
+    const projected = structuredClone(library);
+    projected.actionTypes.RETURN.parameters!.loan_id.projectedFrom = ["loan_ref"];
+    projected.actionTypes.RETURN.parameters!.loan_id.optional = true;
+    const c = baseCase({}, projected);
+    c.inputs = { ...c.inputs, bindings: {} };
+    expect(one(c, projected)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "mismatch", evaluator: { result: "INVALID_BINDING", reason: "missing" }, reported: RETURNED, expected: RETURNED });
+  });
+
   it("the INVALID_BINDING reason is part of equality", () => {
     const notFound: Reported = { result: "INVALID_BINDING", reason: "not_found" };
     const c = baseCase({ reported: notFound, expected: notFound });
