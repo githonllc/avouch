@@ -475,12 +475,12 @@ ofv:set a rdf:Property ;
 
 ofv:optional a rdf:Property ;
   rdfs:label "optional" ;
-  rdfs:comment "The caller may leave the parameter out; it is then null. YAML: actionTypes.<ID>.parameters.<n>.optional" ;
+  rdfs:comment "The caller may leave the parameter out; it is then null. Not for a projected parameter: it is always given, and null is a value. YAML: actionTypes.<ID>.parameters.<n>.optional" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:projectedFrom a rdf:Property ;
   rdfs:label "projectedFrom" ;
-  rdfs:comment "Request fields (an alternate key) that the project's projection resolves to this ref parameter. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
+  rdfs:comment "Request fields (an alternate key) that the project's projection resolves to this ref parameter. A projected parameter is always given; null means the projection found nothing. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:principals a rdf:Property ;

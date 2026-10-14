@@ -501,6 +501,20 @@ describe("projected parameters", () => {
         conditions: [],
         decision: otherwiseNoted,
       },
+      tally: {
+        parameters: { n: { type: "integer", optional: true, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      group: {
+        parameters: { members: { type: { set: { ref: "Member" } }, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      noFields: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
+      noStrings: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [1] as unknown as string[] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
     },
   };
   const at = (action: string, bindings: Bindings, actor: Actor = staff) => run(action, bindings, actor, "b1", projected);
@@ -529,6 +543,17 @@ describe("projected parameters", () => {
     expect(at("enrol", { taken: "m3" })).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "taken" }));
   it("a projected parameter that is not a ref (an unchecked ontology): null is missing", () =>
     expect(at("count", { n: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "n", reason: "missing" }));
+  it("an optional parameter that is not a ref: projectedFrom is ignored, absent and null are allowed", () => {
+    expect(at("tally", {})).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+    expect(at("tally", { n: null })).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+  });
+  it("a set of refs is not projected: a required null is missing", () =>
+    expect(at("group", { members: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "members", reason: "missing" }));
+  it("a ref with no field names is not projected: a required null is missing", () => {
+    const missing = { layer: "invocation", result: "INVALID_BINDING", param: "loan", reason: "missing" };
+    expect(at("noFields", { loan: null })).toEqual(missing);
+    expect(at("noStrings", { loan: null })).toEqual(missing);
+  });
 });
 
 describe("permission", () => {

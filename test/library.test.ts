@@ -529,19 +529,25 @@ describe("toy library project", () => {
       it("the quote names each field instead of the parameter name", () => expect(check(applyPatch(ont, projectedFrom(["Loan"])), facts()).violations).toEqual([]));
       it("a field not in the quote is projection_field_not_in_quote", () =>
         expect(triples(check(applyPatch(ont, projectedFrom(["Loan", "isbn"])), facts()))).toEqual([["R2", "projection_field_not_in_quote", "BORROW:member_id:isbn"]]));
-      it("on a parameter that is not a ref it is R1, and R2 checks the fields", () => {
+      it("a repeated field not in the quote is reported once", () =>
+        expect(triples(check(applyPatch(ont, projectedFrom(["Loan", "isbn", "isbn"])), facts())).filter((x) => x[0] === "R2")).toEqual([
+          ["R2", "projection_field_not_in_quote", "BORROW:member_id:isbn"],
+        ]));
+      it("on a parameter that is not a ref it is R1, and R2 checks the parameter name", () => {
         const t = extra({ type: "enum", projectedFrom: ["BORROW"] });
         expect(t).toContainEqual(r1);
-        expect(t.filter((x) => x[0] === "R2")).toEqual([]);
+        expect(t.filter((x) => x[0] === "R2")).toEqual([["R2", "parameter_not_in_quote", "BORROW:extra"]]);
       });
       it("an empty or repeated list is R1", () => {
         expect(extra({ type: { ref: "Member" }, projectedFrom: [] })).toContainEqual(r1);
         expect(extra({ type: { ref: "Member" }, projectedFrom: ["BORROW", "BORROW"] })).toContainEqual(r1);
       });
-      it("an empty list falls back to the parameter name check", () => {
-        const t = triples(check(applyPatch(ont, projectedFrom([])), facts()));
-        expect(t).toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.member_id"]);
-        expect(t).toContainEqual(["R2", "parameter_not_in_quote", "BORROW:member_id"]);
+      it("an empty list or a list without a field name falls back to the parameter name check", () => {
+        for (const fields of [[], [1]]) {
+          const t = triples(check(applyPatch(ont, projectedFrom(fields)), facts()));
+          expect(t).toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.member_id"]);
+          expect(t).toContainEqual(["R2", "parameter_not_in_quote", "BORROW:member_id"]);
+        }
       });
     });
     it("a parameter cite quote not verbatim in its section is R2 through the cite walk", () => {

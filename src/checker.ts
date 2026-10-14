@@ -1,7 +1,7 @@
 // Format-level ontology checker (rules R1–R12). Pure functions: no I/O. Project facts arrive through SourceFacts (contract.ts).
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
-import { derivedPropertyType, isObj, newReads, type Stage1Ontology } from "./expr.js";
+import { derivedPropertyType, isObj, newReads, projectedFields, type Stage1Ontology } from "./expr.js";
 import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -333,8 +333,9 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     for (const [n, pv] of Object.entries(isObj(c.parameters) ? c.parameters : {})) {
       if (!isObj(pv) || !isStr(pv.cite?.quote)) continue;
       // A projected parameter is not a request field: its quote names the fields it is projected from.
-      if (Array.isArray(pv.projectedFrom) && pv.projectedFrom.length > 0) {
-        for (const f of pv.projectedFrom.filter(isStr))
+      const fields = projectedFields(pv);
+      if (fields !== null) {
+        for (const f of fields)
           if (!IDENT(f).test(pv.cite.quote)) v("R2", `${cid}:${n}:${f}`, `parameter ${n} is projected from ${f}, which does not appear in its cite quote`, "projection_field_not_in_quote");
       } else if (!IDENT(n).test(pv.cite.quote)) v("R2", `${cid}:${n}`, `parameter ${n} does not appear in its cite quote`, "parameter_not_in_quote");
       for (const x of Array.isArray(pv.values) ? pv.values.filter(isStr) : [])
