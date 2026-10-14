@@ -230,6 +230,11 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const pf = isObj(pv) ? pv.projectedFrom : undefined;
       if (pf !== undefined && !(isObj(pv.type) && isStr(pv.type.ref) && Array.isArray(pf) && pf.length > 0 && pf.every(isStr) && new Set(pf).size === pf.length))
         v("R1", `${p}.parameters.${n}`, "projectedFrom needs type {ref: <Object>} and a non-empty list of distinct non-empty field names");
+      // Each field is a request input: the projection reads it from the request and only adds its own binding.
+      else if (pf !== undefined)
+        for (const f of pf)
+          if (!own(params, f) || projectedFields(isObj(params[f]) ? params[f] : {}) !== null)
+            v("R1", `${p}.parameters.${n}`, `projectedFrom field ${f} must be a declared parameter of ${cid} that is not projected`);
     }
     const pids = new Set<string>();
     for (const [i, pc] of arr(c.conditions).entries()) {
