@@ -332,6 +332,8 @@ The physical type mapping is checked here: the profile supplies `decode`, which 
 
 `Invocation.disposition` stays the optional Stage 0 field of the fact contract. `reconcile` does not read it.
 
+The command line reads and writes these types as JSON lines, one `RuntimeCase` or one `ReconcileRow` per line (`avouch reconcile`, `avouch gate verify`; README, "Runtime consistency on the command line"). A `Value` is a JSON string, number, boolean, null or array. An optional field that is absent (`reason`, `detail`, `row`, a binding that is not given) is an absent key; a binding with the value null is `null`. The coverage rule of `avouch gate verify` is a rule of the tool, not of this format.
+
 ### Existence is not revealed
 
 `SCOPE_DENIED` is internal. `externalResult` maps it and `INVALID_BINDING` `not_found` to one value, `{result: INVALID_BINDING, param, reason: not_found}`, so a caller cannot learn that an id exists in another tenant. Other reasons, such as `type`, are reported as they are. A runtime must not report `SCOPE_DENIED`; `reconcile` gives `runtime_unmapped` for it. A scenario must not expect it either; `reconcile` gives `expectation_unmapped` for it (step 7).
