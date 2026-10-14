@@ -480,7 +480,7 @@ ofv:optional a rdf:Property ;
 
 ofv:projectedFrom a rdf:Property ;
   rdfs:label "projectedFrom" ;
-  rdfs:comment "Request fields (an alternate key) that the project's projection resolves to this ref parameter. A projected parameter is always given; null means the projection found nothing. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
+  rdfs:comment "Request fields (an alternate key; each a declared parameter of the same action that is not projected) that the project's projection resolves to this ref parameter. A projected parameter is always given; null means the projection found nothing. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:principals a rdf:Property ;

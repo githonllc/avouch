@@ -522,20 +522,24 @@ describe("toy library project", () => {
         expect(r.violations.some((x) => x.msg.includes("values must be a non-empty list"))).toBe(true);
       });
     describe("projectedFrom", () => {
-      const projectedFrom = (value: unknown) => [...mut("lib-r2-parameter-not-in-quote"), { op: "add", path: "/actionTypes/BORROW/parameters/member_id/projectedFrom", value }];
+      // member_id projected from book_id, a declared parameter of BORROW that is not projected; the quote names the fields.
+      const projectedFrom = (value: unknown, quote = "BORROW takes book_id") => [
+        { op: "add" as const, path: "/actionTypes/BORROW/parameters/member_id/projectedFrom", value },
+        { op: "replace" as const, path: "/actionTypes/BORROW/parameters/member_id/cite/quote", value: quote },
+      ];
       const extra = (value: object) =>
         triples(check(applyPatch(ont, [{ op: "add", path: "/actionTypes/BORROW/parameters/extra", value: { ...value, cite: { doc: "L6", quote: "BORROW creates a Loan" } } }]), facts()));
       const r1 = ["R1", "generic", "actionTypes.BORROW.parameters.extra"];
-      it("the quote names each field instead of the parameter name", () => expect(check(applyPatch(ont, projectedFrom(["Loan"])), facts()).violations).toEqual([]));
+      it("the quote names each field instead of the parameter name", () => expect(check(applyPatch(ont, projectedFrom(["book_id"])), facts()).violations).toEqual([]));
       it("a field not in the quote is projection_field_not_in_quote", () =>
-        expect(triples(check(applyPatch(ont, projectedFrom(["Loan", "isbn"])), facts()))).toEqual([["R2", "projection_field_not_in_quote", "BORROW:member_id:isbn"]]));
+        expect(triples(check(applyPatch(ont, projectedFrom(["book_id"], "BORROW creates a Loan")), facts()))).toEqual([["R2", "projection_field_not_in_quote", "BORROW:member_id:book_id"]]));
       it("a repeated field not in the quote is reported once", () =>
-        expect(triples(check(applyPatch(ont, projectedFrom(["Loan", "isbn", "isbn"])), facts())).filter((x) => x[0] === "R2")).toEqual([
-          ["R2", "projection_field_not_in_quote", "BORROW:member_id:isbn"],
+        expect(triples(check(applyPatch(ont, projectedFrom(["book_id", "book_id"], "BORROW creates a Loan")), facts())).filter((x) => x[0] === "R2")).toEqual([
+          ["R2", "projection_field_not_in_quote", "BORROW:member_id:book_id"],
         ]));
       it("on a parameter that is not a ref it is R1, and R2 checks the parameter name", () => {
         const t = extra({ type: "enum", projectedFrom: ["BORROW"] });
-        expect(t).toContainEqual(r1);
+        expect(t.filter((x) => x[0] === "R1")).toEqual([r1]);
         expect(t.filter((x) => x[0] === "R2")).toEqual([["R2", "parameter_not_in_quote", "BORROW:extra"]]);
       });
       it("an empty or repeated list is R1", () => {
@@ -548,6 +552,45 @@ describe("toy library project", () => {
           expect(t).toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.member_id"]);
           expect(t).toContainEqual(["R2", "parameter_not_in_quote", "BORROW:member_id"]);
         }
+      });
+    });
+    describe("projectedFrom fields are request inputs", () => {
+      const member = ["R1", "generic", "actionTypes.BORROW.parameters.member_id"];
+      const P = "/actionTypes/BORROW/parameters";
+      const run = (patch: object[]) => check(applyPatch(ont, patch as never), facts());
+      it("a field that is not a declared parameter is R1", () => {
+        const r = run([{ op: "add", path: `${P}/member_id/projectedFrom`, value: ["book_id", "takes"] }, { op: "replace", path: `${P}/member_id/cite/quote`, value: "BORROW takes book_id" }]);
+        expect(triples(r)).toEqual([member]);
+        expect(r.violations[0].msg).toContain("projectedFrom field takes");
+      });
+      it("an undeclared field that is not in the quote is both R1 and R2", () => {
+        const t = triples(run([{ op: "add", path: `${P}/member_id/projectedFrom`, value: ["takes"] }, { op: "replace", path: `${P}/member_id/cite/quote`, value: "BORROW creates a Loan" }]));
+        expect(t).toContainEqual(member);
+        expect(t).toContainEqual(["R2", "projection_field_not_in_quote", "BORROW:member_id:takes"]);
+        expect(t).toHaveLength(2);
+      });
+      it("a field that names the parameter itself is R1", () => expect(triples(run([{ op: "add", path: `${P}/member_id/projectedFrom`, value: ["member_id"] }]))).toEqual([member]));
+      it("a field that is a projected parameter is R1", () =>
+        expect(
+          triples(
+            run([
+              { op: "add", path: `${P}/member_id/projectedFrom`, value: ["book_id"] },
+              { op: "replace", path: `${P}/member_id/cite/quote`, value: "BORROW takes book_id" },
+              { op: "add", path: `${P}/book_id/projectedFrom`, value: ["member_id"] },
+              { op: "replace", path: `${P}/book_id/cite/quote`, value: "BORROW takes member_id" },
+            ]),
+          ),
+        ).toEqual([member, ["R1", "generic", "actionTypes.BORROW.parameters.book_id"]]));
+      it("a field whose own projectedFrom is empty is one R1 on that field, none on the referrer (decide treats that field as not projected)", () => {
+        const t = run([
+          { op: "add", path: `${P}/p1`, value: { type: { ref: "Member" }, projectedFrom: [], cite: { doc: "L6", quote: "BORROW creates a Loan" } } },
+          { op: "add", path: `${P}/p2`, value: { type: { ref: "Member" }, projectedFrom: ["p1"], cite: { doc: "L6", quote: "BORROW creates p1" } } },
+        ]);
+        expect(triples(t).filter((x) => x[0] === "R1")).toEqual([["R1", "generic", "actionTypes.BORROW.parameters.p1"]]);
+      });
+      it("a projectedFrom with a bad shape is one R1, not checked field by field", () => {
+        for (const value of [[""], ["takes", 1], ["takes", "takes"]])
+          expect(triples(run([{ op: "add", path: `${P}/member_id/projectedFrom`, value }])).filter((x) => x[0] === "R1")).toEqual([member]);
       });
     });
     it("a parameter cite quote not verbatim in its section is R2 through the cite walk", () => {
