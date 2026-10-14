@@ -28,6 +28,17 @@ Only generic needs go into the format. A special-case need stays in the project 
 
 Example: objects shared by several contexts (a shared kernel) are a cross-project pattern. The format already expresses them: the shared objects get their own context, and actions that write them declare `crossContext`. An exemption such as "writes to shared objects need no declaration" fails criteria 2 and 3, so it is not in the format.
 
+### Limit of the expression language
+
+The expression language (section 9) is a restricted predicate language that can be checked statically. It reads domain facts and decides the conditions of decision tables. It is not a language in which a project implements its rules, for two reasons: the ontology states the rules independently of the runtime, so that agreement in `reconcile` means something; and the static checks of section 9 (types, the UNKNOWN analysis) must stay decidable.
+
+So a new expression node must meet the three criteria above and do one of these two things:
+
+- read a fact that no node reads now: of the snapshot, the invocation or the caller, including a field of a parameter or of a stored value;
+- decide a bounded claim over facts: a comparison, a quantifier over a finite collection, or a count or sum over a finite collection inside a comparison.
+
+Value nodes such as `{lit}`, `plus` and `dateIn` only give a comparison its operands. Not admitted: user-defined functions, recursion, unbounded iteration, nodes that build new collections, records or strings, and other arithmetic than `plus`, `dateIn` and the count or sum above.
+
 ## 2. Concepts
 
 A key is foundation when Palantir Foundry has the same concept (names follow https://www.palantir.com/docs/foundry/ontology/overview/ and the pages for each type). A key is extension when Palantir has no analog; the rule that uses it is named.
@@ -155,7 +166,7 @@ Stage 1A; runtime consistency is Stage 1B. Code: `src/expr.ts` (AST, types, stat
 
 ### Expressions and two-level evaluation
 
-Every node is a single-key map. The reserved names `now`, `actor` and `self` are exported as `RESERVED_NAMES`. The node set is fixed (`EXPR_NODES`):
+Every node is a single-key map. The reserved names `now`, `actor` and `self` are exported as `RESERVED_NAMES`. The node set is fixed (`EXPR_NODES`); section 1, "Limit of the expression language", says which new nodes can be admitted:
 
 | Level | Nodes | Result |
 |---|---|---|
