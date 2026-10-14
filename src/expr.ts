@@ -55,11 +55,17 @@ export type DecisionRow = { when: { passes: string } | { fails: string }; result
 export type Decision = { hitPolicy: "first"; rows: DecisionRow[]; otherwise?: { result: string; next?: unknown } };
 export type Condition = { id: string; expr?: Expr; unspecified?: string };
 export type ActionType = {
-  parameters?: Record<string, { type?: Type; optional?: true; values?: string[] }>;
+  parameters?: Record<string, { type?: Type; optional?: true; values?: string[]; projectedFrom?: string[] }>;
   permission: Permission;
   conditions: Condition[];
   decision?: Decision;
 };
+// The distinct request fields of a projected parameter, or null: only a scalar {ref: T} parameter with at least one field is
+// projected; on any other parameter projectedFrom has no effect.
+export function projectedFields(p: { type?: unknown; projectedFrom?: unknown }): string[] | null {
+  const fs = Array.isArray(p.projectedFrom) ? [...new Set(p.projectedFrom.filter((f): f is string => typeof f === "string"))] : [];
+  return isObj(p.type) && typeof p.type.ref === "string" && fs.length > 0 ? fs : null;
+}
 
 // Only the keys evaluation reads; other keys (cite, cites, ...) may be present and are ignored.
 export interface Stage1Ontology {

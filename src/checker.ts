@@ -1,7 +1,7 @@
 // Format-level ontology checker (rules R1–R12). Pure functions: no I/O. Project facts arrive through SourceFacts (contract.ts).
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
-import { derivedPropertyType, isObj, newReads, type Stage1Ontology } from "./expr.js";
+import { derivedPropertyType, isObj, newReads, projectedFields, type Stage1Ontology } from "./expr.js";
 import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -227,6 +227,9 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const vs = isObj(pv) ? pv.values : undefined;
       if (vs !== undefined && !(pv.type === "enum" && Array.isArray(vs) && vs.length > 0 && vs.every(isStr) && new Set(vs).size === vs.length))
         v("R1", `${p}.parameters.${n}`, "values needs type enum and a non-empty list of distinct non-empty strings");
+      const pf = isObj(pv) ? pv.projectedFrom : undefined;
+      if (pf !== undefined && !(isObj(pv.type) && isStr(pv.type.ref) && Array.isArray(pf) && pf.length > 0 && pf.every(isStr) && new Set(pf).size === pf.length))
+        v("R1", `${p}.parameters.${n}`, "projectedFrom needs type {ref: <Object>} and a non-empty list of distinct non-empty field names");
     }
     const pids = new Set<string>();
     for (const [i, pc] of arr(c.conditions).entries()) {
@@ -329,7 +332,12 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!facts.containsTerm(cid)) newNames.push(`${cid} (doc_term ${c.doc_term} in ${c.doc})`);
     for (const [n, pv] of Object.entries(isObj(c.parameters) ? c.parameters : {})) {
       if (!isObj(pv) || !isStr(pv.cite?.quote)) continue;
-      if (!IDENT(n).test(pv.cite.quote)) v("R2", `${cid}:${n}`, `parameter ${n} does not appear in its cite quote`, "parameter_not_in_quote");
+      // A projected parameter is not a request field: its quote names the fields it is projected from.
+      const fields = projectedFields(pv);
+      if (fields !== null) {
+        for (const f of fields)
+          if (!IDENT(f).test(pv.cite.quote)) v("R2", `${cid}:${n}:${f}`, `parameter ${n} is projected from ${f}, which does not appear in its cite quote`, "projection_field_not_in_quote");
+      } else if (!IDENT(n).test(pv.cite.quote)) v("R2", `${cid}:${n}`, `parameter ${n} does not appear in its cite quote`, "parameter_not_in_quote");
       for (const x of Array.isArray(pv.values) ? pv.values.filter(isStr) : [])
         if (!IDENT(x).test(pv.cite.quote)) v("R2", `${cid}:${n}:${x}`, `parameter ${n} value ${x} does not appear in its cite quote`, "parameter_value_not_in_quote");
     }

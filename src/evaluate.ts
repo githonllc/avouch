@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPredicate, fitsType, own, RESERVED_NAMES, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. Pure link rows are {from, to} (plus the scope field when scoped). A navigated pure link must be a key of links (an empty table is []); else decide throws.
@@ -350,7 +350,9 @@ function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor:
   for (const [name, p] of Object.entries(params)) {
     const v = own(bindings, name);
     if (v === null || v === undefined) {
-      if (p.optional === true) continue;
+      // A projected ref parameter is always given: null means the projection found nothing (not_found at the binding step).
+      const projected = projectedFields(p) !== null;
+      if (v === null ? p.optional === true || projected : p.optional === true && !projected) continue;
       return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "missing" };
     }
     if (!fitsType(v, p.type!)) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "type" };
@@ -377,6 +379,7 @@ function resolve(s: Session, actionId: string): DecideResult {
     const elem = isSet ? t.set : t;
     if (typeof elem === "string" || !("ref" in elem)) continue;
     const v = own(s.env.bindings, name);
+    if (v === null && p.optional !== true && projectedFields(p) !== null) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "not_found" };
     if (v === null || v === undefined) continue;
     for (const id of isSet ? (v as readonly Value[]) : [v]) {
       if (s.byId(elem.ref).has(id as string)) continue;

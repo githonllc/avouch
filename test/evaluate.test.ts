@@ -477,6 +477,85 @@ describe("evaluation order", () => {
     expect(run("checkout", { member: "m3", book: "bk1" }, nobody)).toEqual({ layer: "invocation", result: "PERMISSION_DENIED" }));
 });
 
+describe("projected parameters", () => {
+  // cancel: a required projected ref (null = the projection found nothing). enrol: an optional one (null = no other object).
+  const projected: Stage1Ontology = {
+    ...base,
+    actionTypes: {
+      ...base.actionTypes,
+      cancel: {
+        parameters: { loan: { type: { ref: "Loan" }, projectedFrom: ["source", "external_ref"] }, member: { type: { ref: "Member" } } },
+        permission: { keys: ["loan.create"] },
+        conditions: [{ id: "open", expr: eq(ref("loan.state"), lit("OPEN")) }],
+        decision: { hitPolicy: "first", rows: [{ when: { fails: "open" }, result: "REFUSED" }], otherwise: { result: "NOTED" } },
+      },
+      enrol: {
+        parameters: { taken: { type: { ref: "Member" }, optional: true, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [{ id: "free", expr: isNull(ref("taken")) }],
+        decision: { hitPolicy: "first", rows: [{ when: { fails: "free" }, result: "REFUSED" }], otherwise: { result: "LENT" } },
+      },
+      count: {
+        parameters: { n: { type: "integer", projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      tally: {
+        parameters: { n: { type: "integer", optional: true, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      group: {
+        parameters: { members: { type: { set: { ref: "Member" } }, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      noFields: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
+      noStrings: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [1] as unknown as string[] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
+    },
+  };
+  const at = (action: string, bindings: Bindings, actor: Actor = staff) => run(action, bindings, actor, "b1", projected);
+  const notFound = { layer: "invocation", result: "INVALID_BINDING", param: "loan", reason: "not_found" };
+
+  it("required, null: not_found at the binding step", () => expect(at("cancel", { loan: null, member: "m2" })).toEqual(notFound));
+  it("required, absent: missing", () =>
+    expect(at("cancel", { member: "m2" })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "loan", reason: "missing" }));
+  it("required, id: binds as usual", () =>
+    expect(at("cancel", { loan: "l1", member: "m2" })).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" }));
+  it("required, null: permission comes first", () => expect(at("cancel", { loan: null, member: "m2" }, nobody)).toEqual({ layer: "invocation", result: "PERMISSION_DENIED" }));
+  it("required, null: the shape step comes first", () =>
+    expect(at("cancel", { loan: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "member", reason: "missing" }));
+  it("required, null: binding goes in declaration order", () => expect(at("cancel", { loan: null, member: "nope" })).toEqual(notFound));
+  it("required, null: externalResult is not_found", () =>
+    expect(externalResult(at("cancel", { loan: null, member: "m2" }) as Exclude<DecideResult, { layer: "indeterminate" }>)).toEqual({
+      result: "INVALID_BINDING",
+      param: "loan",
+      reason: "not_found",
+    }));
+  it("optional, null: an ordinary value", () => expect(at("enrol", { taken: null })).toEqual({ layer: "domain", result: "LENT", class: "applied", row: "otherwise" }));
+  it("optional, absent: missing (the projection always gives the binding)", () =>
+    expect(at("enrol", {})).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "taken", reason: "missing" }));
+  it("optional, id: binds as usual", () => expect(at("enrol", { taken: "m2" })).toEqual({ layer: "domain", result: "REFUSED", class: "rejected", row: 0 }));
+  it("optional, an id outside the scope: SCOPE_DENIED (the projection must pass null)", () =>
+    expect(at("enrol", { taken: "m3" })).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "taken" }));
+  it("a projected parameter that is not a ref (an unchecked ontology): null is missing", () =>
+    expect(at("count", { n: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "n", reason: "missing" }));
+  it("an optional parameter that is not a ref: projectedFrom is ignored, absent and null are allowed", () => {
+    expect(at("tally", {})).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+    expect(at("tally", { n: null })).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+  });
+  it("a set of refs is not projected: a required null is missing", () =>
+    expect(at("group", { members: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "members", reason: "missing" }));
+  it("a ref with no field names is not projected: a required null is missing", () => {
+    const missing = { layer: "invocation", result: "INVALID_BINDING", param: "loan", reason: "missing" };
+    expect(at("noFields", { loan: null })).toEqual(missing);
+    expect(at("noStrings", { loan: null })).toEqual(missing);
+  });
+});
+
 describe("permission", () => {
   const passed = { layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" };
   const who = (keys: string[], kind = "user"): Actor => ({ id: "u9", keys, kind });
