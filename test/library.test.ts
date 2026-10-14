@@ -581,7 +581,7 @@ describe("toy library project", () => {
             ]),
           ),
         ).toEqual([member, ["R1", "generic", "actionTypes.BORROW.parameters.book_id"]]));
-      it("a field whose own projectedFrom has a bad shape is one R1 on that field, none on the referrer", () => {
+      it("a field whose own projectedFrom is empty is one R1 on that field, none on the referrer (decide treats that field as not projected)", () => {
         const t = run([
           { op: "add", path: `${P}/p1`, value: { type: { ref: "Member" }, projectedFrom: [], cite: { doc: "L6", quote: "BORROW creates a Loan" } } },
           { op: "add", path: `${P}/p2`, value: { type: { ref: "Member" }, projectedFrom: ["p1"], cite: { doc: "L6", quote: "BORROW creates p1" } } },
