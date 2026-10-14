@@ -14,4 +14,8 @@ describe("package root exports", () => {
     expect(typeof (root as Record<string, unknown>).domainResults).toBe("function");
     expect("reportableResults" in root).toBe(false);
   });
+
+  it("exposes verifyCoverage", () => {
+    expect(typeof (root as Record<string, unknown>).verifyCoverage).toBe("function");
+  });
 });

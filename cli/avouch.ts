@@ -2,7 +2,9 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { CONFIG_FILE, runCheck } from "./check.js";
+import { GATE_USAGE, runGate } from "./gate.js";
 import { QUERY_USAGE, runQuery } from "./query.js";
+import { RECONCILE_USAGE, runReconcile } from "./reconcile.js";
 
 const CHECK_USAGE = "usage: avouch check <ontology.yaml> [--adapter <module|config.json>]";
 
@@ -34,8 +36,12 @@ async function main(): Promise<number> {
   const args = process.argv.slice(2);
   if (args[0] === "check") return check(args.slice(1));
   if (args[0] === "query") return runQuery(args.slice(1));
+  if (args[0] === "reconcile") return runReconcile(args.slice(1));
+  if (args[0] === "gate") return runGate(args.slice(1));
   console.error(CHECK_USAGE);
   console.error(QUERY_USAGE);
+  console.error(RECONCILE_USAGE);
+  console.error(GATE_USAGE);
   return 2;
 }
 

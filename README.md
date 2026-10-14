@@ -39,8 +39,10 @@ Read in this order:
 | `src/checker.ts` | `check(ontology, facts)` returns the violations |
 | `src/patch.ts` | JSON-pointer patch that the mutation tests use |
 | `src/query.ts` | read-only queries over an ontology (`avouch query`) |
+| `src/reconcile.ts` | runtime consistency: `reconcile`, `projectSnapshot` (SPEC section 9) |
+| `src/coverage.ts` | decision-row coverage of reconcile rows, with a baseline (`verifyCoverage`, `avouch gate verify`) |
 | `src/markdown.ts` | built-in adapter for plain Markdown sources (`avouch.json`); see `docs/adapter-guide.md` section 7 |
-| `cli/` | command line: `avouch check` (`check.ts`) and `avouch query` (`query.ts`) |
+| `cli/` | command line: `avouch check` (`check.ts`), `avouch query` (`query.ts`), `avouch reconcile` (`reconcile.ts`) and `avouch gate verify` (`gate.ts`) |
 | `tsconfig.build.json` | configuration for the JavaScript and type declaration build |
 | `dist/` | build output; not tracked in version control |
 | `examples/library/` | toy project: source document, ontology, mutations, adapter, profile, evidence |
@@ -60,6 +62,9 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 - `test/cli.test.ts`: command line results, schema errors, checker violations and adapter errors.
 - `test/query.test.ts`: the query functions on the toy ontology and on patched variants of it.
 - `test/query-cli.test.ts`: `avouch query`: the JSON envelope, the stamp (git and check), exit codes, text output, and that a query writes no file.
+- `test/coverage.test.ts`: `verifyCoverage` on the toy ontology and on patched variants of it: units, gaps, stale baseline entries, failing reconcile rows, and the shape checks.
+- `test/reconcile-cli.test.ts`: `avouch reconcile`: JSON lines in and out, exit codes, and the line number in each input error.
+- `test/gate-cli.test.ts`: `avouch gate verify`: the pipeline from cases to the gate, text and JSON output, the check with `--adapter`, and exit codes.
 - `test/markdown.test.ts`: the built-in Markdown adapter: the toy library gives the same findings as with its own adapter (outside the rules the generic adapter cannot check), and each parse convention.
 - `test/boundary.test.ts`: the runtime (`src/` and `examples/`) imports only relative paths inside this package. It imports no npm package and no file outside the package.
 
@@ -117,6 +122,71 @@ The stamp tells which specification answered:
 - `check`: `not_run`, or, with `--adapter`, the result of the same check as `avouch check` (`pass` or `fail`, with the counts). A failed check does not change the exit code.
 
 Exit code 0 means there is a result. 1 means there is no result: the id is not declared, or the list is empty (the envelope is still printed). 2 means invalid arguments, or a file, parsing or adapter error.
+
+## Runtime consistency on the command line
+
+`avouch reconcile` compares the result that the runtime reported with the result of the evaluator and with the scenario expectation (SPEC section 9, Runtime consistency). `avouch gate verify` checks that the reconciled cases cover each decision row. Both commands read files and write no file. They do not run project code: the project's test harness writes the cases.
+
+```sh
+avouch reconcile <ontology.yaml> --cases <cases.jsonl>
+avouch gate verify <ontology.yaml> --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--adapter <module|config.json>]
+```
+
+### reconcile
+
+The cases file has one `RuntimeCase` (SPEC section 9) per line, as JSON. Empty lines are skipped. A case can have more keys than `RuntimeCase`; they are ignored. The command prints one `ReconcileRow` per case, as one JSON line, in input order. For example, `avouch reconcile library.ontology.yaml --cases cases.jsonl > rows.jsonl` writes the input of `gate verify`.
+
+Exit code 0 means that each case gave a row, also a `mismatch` or a `cannot_reconcile` row: the command does not judge the rows. 2 means invalid arguments, a file or parse error, or a line that is not a `RuntimeCase`; the message gives the file and the line number. The command does not use exit code 1.
+
+### gate verify
+
+The unit of coverage is the decision row. Each row of a decision table and its `otherwise` is one unit. A unit has the name `<action>:rows.<i>` (`i` from 0) or `<action>:otherwise`, as in the R12 keys. A unit is verified when a `match` row has its action, its `row` and the result of that row. A `mismatch` row does not verify its unit. An action without a decision table has no units; it is printed as `no_table` and does not change the result. The command checks every action of the ontology.
+
+Verified means: for one case, `decide` reached this row, and the runtime result and the expected result are the same as the result of `decide`. The runtime does not report which row it ran. A case without an expected result never verifies a unit: `reconcile` gives `expectation_missing` for it, and the gate prints it as `unasserted`. An action with `permission: unknown` never reaches its decision table in `decide`, so all its units stay as `uncovered` entries until the permission is written.
+
+A gap is a condition that a decision row names and that is declared without an expression (`unspecified`). `decide` stops at the first row that names a gap, so the units from that row to `otherwise` are blocked: they are printed as `blocked` and are not reported as uncovered. Each gap needs an exemption with a reason in the baseline. When a gap gets an expression, the units it blocked become ordinary units. The change that adds the expression must also add cases or `uncovered` entries for them.
+
+The baseline is a JSON file. In this example, the condition `loan_active` has no expression:
+
+```json
+{
+  "avouchCoverage": 1,
+  "uncovered": [
+    { "action": "BORROW", "row": 3, "when": { "fails": "returns_in_good_condition" }, "result": "REFERRED" },
+    { "action": "BORROW", "row": "otherwise", "when": null, "result": "BORROWED" }
+  ],
+  "exempt": [
+    { "action": "RETURN", "condition": "loan_active", "kind": "unspecified", "reason": "the source does not state when a loan is active" }
+  ]
+}
+```
+
+- `uncovered` lists units that have no `match` yet, each with the `when` and `result` of its row. An entry for a unit that is now verified fails the gate. The tool does not stop new entries; review the baseline diff for that.
+- `exempt` lists gaps, each with a non-empty `reason`.
+- Both keys are required. A key that is not shown above is an error (exit code 2).
+- Without `--baseline`, both lists are empty.
+- Units are named by position. When rows are added, removed or moved, the positions change; an `uncovered` entry whose `when` or `result` is not the same as in the ontology is stale (`moved`).
+
+The canonical form of the file is `JSON.stringify(baseline, null, 2)` with a final line break, the keys in the order shown above, `uncovered` in unit order (actions in code-unit order, then rows from 0, then `otherwise`) and `exempt` in action order, then condition order. The gate does not check the form. `--json` prints `uncovered` and `unexempted` in the shape and order of the baseline entries; to make a first baseline, copy them and add a reason to each `unexempted` entry.
+
+The gate fails (exit code 1) when:
+
+| Output | Cause |
+|---|---|
+| `uncovered` | a unit has no `match`, is not blocked, and is not in `uncovered` of the baseline |
+| `unexempted` | a gap has no entry in `exempt` |
+| `unreasoned` | an `exempt` entry has no reason, or only white space |
+| `stale` | an `uncovered` entry names a unit that does not exist, that has another `when` or `result` (`moved`), that is verified or that is blocked, or repeats an entry; an `exempt` entry names a condition that is not a gap, or repeats an entry |
+| `failed` | a reconcile row names an action that the ontology does not have (`action_unknown`); a reconcile row is a `mismatch`; a `cannot_reconcile` row has the reason `runtime_missing`, `runtime_unmapped`, `expectation_unmapped`, `snapshot_missing` or `evaluator_error`, or the reason `indeterminate` with the detail `no_row_matched`; a `match` row names a row that the action does not have, or a result that is not the result of that row (`row_unknown`) |
+| `check` | with `--adapter`, the same check as `avouch check` fails |
+
+The reasons `envelope`, `expectation_missing` and `indeterminate` with another detail do not fail the gate. A replay is not a decision; a case without an expectation states nothing to compare. An `indeterminate` result does not fail the gate, except `no_row_matched`; the units that it leaves unverified stay `uncovered` or `blocked`, so the gate still sees them. `no_row_matched` means that no row applies and the table has no `otherwise`.
+
+Known limit: when a case has no expected result, `reconcile` gives `expectation_missing` before it checks the runtime result. So the gate does not see a runtime result that the action cannot give (`runtime_unmapped`) in such a case.
+
+Exit code 0 means the gate passes. 1 means it fails. 2 means invalid arguments (also a repeated option), a file or parse error, an ontology without an `actionTypes` mapping, or a rows or baseline file with a wrong shape. Without `--json`, the command prints one `FAIL` line for each failure, `INFO` lines (`check`, `blocked`, `no_table`, `unasserted`), and a summary line that starts with `PASS` or `FAIL`. `--json` prints `{avouchGate: 1, gate: "verify", check, result}`.
+
+The same gate is a function in the package root, for tests that run without a file system or child processes: `verifyCoverage(ontology, rows, baseline)` returns the `result` object (`src/coverage.ts`). The command is a thin wrapper around it. The function does not run the check.
 
 ## Claude Code plugin
 
