@@ -500,7 +500,7 @@ describe("toy library project", () => {
 
     it("an undeclared parameter is R1 on the condition", () =>
       expect(triples(check(applyPatch(ont, mut("lib-r1-param-undeclared")), facts()))).toEqual([["R1", "generic", crit]]));
-    it("an actor other than id or keys is R1 on the condition", () =>
+    it("an actor other than id, keys or kind is R1 on the condition", () =>
       expect(triples(check(applyPatch(ont, mut("lib-r1-actor-unknown")), facts()))).toEqual([["R1", "generic", crit]]));
     it("a parameter name not in its quote is parameter_not_in_quote", () =>
       expect(triples(check(applyPatch(ont, mut("lib-r2-parameter-not-in-quote")), facts()))).toEqual([["R2", "parameter_not_in_quote", "BORROW:member_id"]]));
