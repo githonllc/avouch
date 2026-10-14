@@ -2,8 +2,8 @@
 export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "R8" | "R9" | "R10" | "R11" | "R12";
 export const RULES: readonly RuleId[] = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12"];
 
-/** A name as a whole identifier: not preceded or followed by a letter, a digit or `_`. */
-export const IDENT = (s: string) => new RegExp(`(?<![A-Za-z0-9_])${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_])`);
+/** A name as a whole identifier: not preceded or followed by a letter, a digit or `_`. The empty string matches nothing. */
+export const IDENT = (s: string) => (s === "" ? /(?!)/ : new RegExp(`(?<![A-Za-z0-9_])${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_])`));
 
 export interface Source { anchor: string; locator?: string }
 export interface Fact<T> { value: T; source: Source }

@@ -5,6 +5,7 @@ import { parse } from "yaml";
 import doc from "../examples/library/library.md?raw";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
 import { check } from "../src/checker";
+import { IDENT } from "../src/contract";
 import { applyPatch, type Op } from "../src/patch";
 import { decide, evalPredicate, type Row, type Snapshot } from "../src/evaluate";
 import type { Expr } from "../src/expr";
@@ -122,6 +123,19 @@ describe("stage 1 checks", () => {
     expect(triples(run([{ op: "replace", path: "/objectTypes/Book/properties/title", value: { class: "unknown", type: "enum" } }]))).toEqual([
       ["R2", "type_without_provenance", "Book.title"],
     ]));
+
+  it("an empty string literal compared with an enum property is literal_unsupported (an empty string never appears)", () => {
+    const expr = { eq: [{ ref: "book_id.state" }, { lit: "" }] };
+    // the quote ends in punctuation: the degenerate empty pattern matched there
+    const quote = { op: "replace" as const, path: "/actionTypes/BORROW/conditions/1/cites/0/cite/quote", value: "BORROW creates a Loan for an AVAILABLE Book and a Member who is not blocked." };
+    expect(triples(run([quote, { op: "replace", path: "/actionTypes/BORROW/conditions/1/expr", value: expr }]))).toEqual([["R4", "literal_unsupported", "BORROW:book_available:"]]);
+  });
+
+  it("IDENT matches whole identifiers only; the empty string matches nothing", () => {
+    expect(IDENT("").test("API only.")).toBe(false);
+    expect(IDENT("api").test("API only.")).toBe(false);
+    expect(IDENT("api").test("an api call")).toBe(true);
+  });
 
   it("a set literal element not in the condition quotes is literal_unsupported, keyed by that element", () => {
     const expr = { in: [{ ref: "book_id.state" }, { lit: ["AVAILABLE", "ON_LOAN"] }] };
@@ -341,6 +355,11 @@ describe("stage 1 checks: row order by position cite, and each rule's logic", ()
   it("a derived literal not in the derived property's own quote is literal_unsupported", () =>
     expect(triples(run([{ op: "add", path: "/derivedProperties/active_loan", value: activeLoan({ cite: { doc: "L3", quote: "due_date is set by BORROW." } }) }]))).toEqual([
       ["R4", "literal_unsupported", "derivedProperties.active_loan:ACTIVE"],
+    ]));
+
+  it("an empty derived literal is literal_unsupported", () =>
+    expect(triples(run([{ op: "add", path: "/derivedProperties/active_loan", value: activeLoan({ expr: { eq: [{ ref: "self.state" }, { lit: "" }] }, cite: { doc: "L3", quote: "due_date is set by BORROW." } }) }]))).toEqual([
+      ["R4", "literal_unsupported", "derivedProperties.active_loan:"],
     ]));
 
   describe("canonical_values in an expression", () => {
