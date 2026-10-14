@@ -927,7 +927,7 @@
         },
         "expr": {
           "$ref": "#/$defs/expr",
-          "description": "The claim as a predicate expression. R1: it type-checks in the action (parameters, `actor.id`, `actor.keys`, `now`, quantifier variables). R4: every literal must occur as a whole identifier in one of the `cites` quotes (else `literal_unsupported`, key `<ID>:<condition id>:<value>`)."
+          "description": "The claim as a predicate expression. R1: it type-checks in the action (parameters, `actor.id`, `actor.keys`, `actor.kind`, `now`, quantifier variables). R4: every literal must occur as a whole identifier in one of the `cites` quotes (else `literal_unsupported`, key `<ID>:<condition id>:<value>`)."
         },
         "unspecified": {
           "type": "string",
@@ -936,7 +936,7 @@
         },
         "reads": {
           "type": "array",
-          "description": "What the criterion reads. Items: `Object.prop` (a declared property), a derived id (a key of `derivedProperties`; its `reads` are checked instead), a value read `{prop, values}`, a parameter read `{param, values?}` (a key of this action's `parameters`) or an actor read `{actor: id | keys}`. R1: each item must resolve. R4: every property read, directly or through a derived id, must be class canonical (derived, policy and unknown fail R4 `precondition_reads_non_canonical`, key `<ID>:<Object.prop>`). A value read passes if the property is canonical, or if every value is in that property's `canonical_values.values`. Parameter and actor reads are not properties; R4 does not classify them. Each value of a parameter read must appear in one of this condition's cite quotes (R4 `parameter_value_unsupported`, key `<ID>:<criterion id>:<value>`).",
+          "description": "What the criterion reads. Items: `Object.prop` (a declared property), a derived id (a key of `derivedProperties`; its `reads` are checked instead), a value read `{prop, values}`, a parameter read `{param, values?}` (a key of this action's `parameters`) or an actor read `{actor: id | keys | kind}`. R1: each item must resolve. R4: every property read, directly or through a derived id, must be class canonical (derived, policy and unknown fail R4 `precondition_reads_non_canonical`, key `<ID>:<Object.prop>`). A value read passes if the property is canonical, or if every value is in that property's `canonical_values.values`. Parameter and actor reads are not properties; R4 does not classify them. Each value of a parameter read must appear in one of this condition's cite quotes (R4 `parameter_value_unsupported`, key `<ID>:<criterion id>:<value>`).",
           "items": {
             "oneOf": [
               {
@@ -979,8 +979,8 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["actor"],
-                "description": "Actor read: the precondition reads the caller — `id` (its identity) or `keys` (its effective permission keys, for example which `permission.any_of` alternative it satisfies).",
-                "properties": { "actor": { "enum": ["id", "keys"] } }
+                "description": "Actor read: the precondition reads the caller — `id` (its identity), `keys` (its effective permission keys, for example which `permission.any_of` alternative it satisfies) or `kind` (its actor kind, as in `principals`).",
+                "properties": { "actor": { "enum": ["id", "keys", "kind"] } }
               }
             ]
           }
@@ -1135,7 +1135,7 @@
           "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "now, actor.id, actor.keys, a parameter, or <binding>.<property> (one dot)."
+            "description": "now, actor.id, actor.keys, actor.kind, a parameter, or <binding>.<property> (one dot)."
           },
           "lit": {
             "oneOf": [

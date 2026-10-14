@@ -117,6 +117,7 @@ describe("nullability", () => {
       expect(mn("member_id.person_id")).toBe(true);
       expect(mn("now")).toBe(false);
       expect(mn("actor.id")).toBe(false);
+      expect(mn("actor.kind")).toBe(false);
     }
   });
 

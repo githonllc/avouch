@@ -215,7 +215,8 @@ function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string
   if (head === "actor") {
     if (prop === "id") return "id";
     if (prop === "keys") return { set: "string" };
-    throw new ExprError(at, `actor.${prop ?? ""} is not readable; use actor.id or actor.keys`);
+    if (prop === "kind") return "enum";
+    throw new ExprError(at, `actor.${prop ?? ""} is not readable; use actor.id, actor.keys or actor.kind`);
   }
   if (head === "self" && ctx.self === undefined) throw new ExprError(at, "self is valid only in a derived property expression");
   const obj = objectBinding(ont, head, ctx);

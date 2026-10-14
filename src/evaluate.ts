@@ -150,7 +150,8 @@ function readRef(s: Session, f: Frame, path: string): Value {
   if (head === "actor") {
     if (prop === "id") return s.env.actor.id;
     if (prop === "keys") return s.env.actor.keys;
-    throw new Error(`actor.${prop ?? ""} is not readable; use actor.id or actor.keys`);
+    if (prop === "kind") return s.env.actor.kind;
+    throw new Error(`actor.${prop ?? ""} is not readable; use actor.id, actor.keys or actor.kind`);
   }
   const o = objVar(s, f, head);
   if (prop === undefined) {
