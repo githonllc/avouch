@@ -513,6 +513,18 @@ describe("projected parameters", () => {
         conditions: [],
         decision: otherwiseNoted,
       },
+      register: {
+        parameters: { external_id: { type: "id", optional: true }, existing: { type: { ref: "Member" }, optional: true, projectedFrom: ["external_id"] } },
+        permission: { none: "anyone" },
+        conditions: [{ id: "unique", expr: isNull(ref("existing")) }],
+        decision: { hitPolicy: "first", rows: [{ when: { fails: "unique" }, result: "REFUSED" }], otherwise: { result: "LENT" } },
+      },
+      registerByKey: {
+        parameters: { existing: { type: { ref: "Member" }, optional: true, projectedFrom: ["external_id"] }, external_id: { type: "id" } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
       noFields: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
       noStrings: { parameters: { loan: { type: { ref: "Loan" }, projectedFrom: [1] as unknown as string[] } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
     },
@@ -546,6 +558,19 @@ describe("projected parameters", () => {
   it("an optional parameter that is not a ref: projectedFrom is ignored, absent and null are allowed", () => {
     expect(at("tally", {})).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
     expect(at("tally", { n: null })).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+  });
+  describe("optional alternate key", () => {
+    const lent = { layer: "domain", result: "LENT", class: "applied", row: "otherwise" };
+    it("key field absent: the projection passes null", () => expect(at("register", { existing: null })).toEqual(lent));
+    it("key field null: the projection passes null", () => expect(at("register", { external_id: null, existing: null })).toEqual(lent));
+    it("key given, no object has it: null", () => expect(at("register", { external_id: "E1", existing: null })).toEqual(lent));
+    it("key given, an object has it: the id", () => expect(at("register", { external_id: "E1", existing: "m2" })).toEqual({ layer: "domain", result: "REFUSED", class: "rejected", row: 0 }));
+    it("the projection did not run: missing", () =>
+      expect(at("register", { external_id: "E1" })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "existing", reason: "missing" }));
+    it("a required key field that is absent is missing itself, after the null projected binding", () =>
+      expect(at("registerByKey", { existing: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "external_id", reason: "missing" }));
+    it("a key field of the wrong type is type, whatever the projection passes", () =>
+      expect(at("register", { external_id: "", existing: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "external_id", reason: "type" }));
   });
   it("a set of refs is not projected: a required null is missing", () =>
     expect(at("group", { members: null })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "members", reason: "missing" }));
