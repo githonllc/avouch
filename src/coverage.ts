@@ -36,7 +36,8 @@ export interface CoverageResult {
 }
 
 // Which reasons of cannot_reconcile fail the gate. A replay is not a decision; a case without an expectation states
-// nothing to compare; INDETERMINATE comes from a gap, which the baseline exempts (but no_row_matched fails: see below).
+// nothing to compare; INDETERMINATE does not fail (except no_row_matched: see below), and the units that it leaves
+// unverified stay uncovered or blocked, so the gate still sees them.
 const FAILS: Record<CannotReconcile, boolean> = {
   envelope: false,
   expectation_missing: false,
@@ -49,7 +50,7 @@ const FAILS: Record<CannotReconcile, boolean> = {
 };
 
 const sortStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const show = (x: unknown) => (typeof x === "string" ? x : JSON.stringify(x) ?? String(x));
+const show = (x: unknown) => JSON.stringify(x) ?? String(x);
 const isRow = (x: unknown): x is number | "otherwise" => x === "otherwise" || (typeof x === "number" && Number.isSafeInteger(x) && x >= 0);
 const sameWhen = (a: CoverageDebt["when"], b: QueryRow["when"]) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -104,12 +105,14 @@ function checkBaseline(b: unknown): asserts b is CoverageBaseline {
 type Unit = { action: string; q: QueryRow; gap: string | null };
 
 // Coverage of the decision rows of every action of the ontology by the match rows. baseline null = both lists empty.
-// Throws for rows or a baseline with a wrong shape (the message starts with "rows[<i>]:" or "baseline:").
+// Throws for an ontology without an actionTypes object, or rows or a baseline with a wrong shape (the message starts
+// with "ontology:", "rows" or "baseline:").
 export function verifyCoverage(ont: unknown, rows: readonly ReconcileRow[], baseline: CoverageBaseline | null): CoverageResult {
+  if (!isObj(ont) || !isObj(ont.actionTypes)) throw new Error("ontology: actionTypes is not an object");
+  const actionTypes = ont.actionTypes;
   checkRows(rows);
   if (baseline !== null) checkBaseline(baseline);
   const base = baseline ?? { avouchCoverage: 1, uncovered: [], exempt: [] };
-  const actionTypes = isObj(ont) && isObj(ont.actionTypes) ? ont.actionTypes : {};
 
   // 1. Units and gaps. A gap: a condition that a row names (as its own or as an earlier row's) and that has no expression.
   const units: Unit[] = [];

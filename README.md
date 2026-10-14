@@ -180,11 +180,11 @@ The gate fails (exit code 1) when:
 | `failed` | a reconcile row names an action that the ontology does not have (`action_unknown`); a reconcile row is a `mismatch`; a `cannot_reconcile` row has the reason `runtime_missing`, `runtime_unmapped`, `expectation_unmapped`, `snapshot_missing` or `evaluator_error`, or the reason `indeterminate` with the detail `no_row_matched`; a `match` row names a row that the action does not have, or a result that is not the result of that row (`row_unknown`) |
 | `check` | with `--adapter`, the same check as `avouch check` fails |
 
-The reasons `envelope`, `expectation_missing` and `indeterminate` with another detail do not fail the gate. A replay is not a decision; a case without an expectation states nothing to compare; an `indeterminate` result comes from a gap, which the baseline exempts. `no_row_matched` means that no row applies and the table has no `otherwise`.
+The reasons `envelope`, `expectation_missing` and `indeterminate` with another detail do not fail the gate. A replay is not a decision; a case without an expectation states nothing to compare. An `indeterminate` result does not fail the gate, except `no_row_matched`; the units that it leaves unverified stay `uncovered` or `blocked`, so the gate still sees them. `no_row_matched` means that no row applies and the table has no `otherwise`.
 
 Known limit: when a case has no expected result, `reconcile` gives `expectation_missing` before it checks the runtime result. So the gate does not see a runtime result that the action cannot give (`runtime_unmapped`) in such a case.
 
-Exit code 0 means the gate passes. 1 means it fails. 2 means invalid arguments, a file or parse error, or a rows or baseline file with a wrong shape. Without `--json`, the command prints one `FAIL` line for each failure, `INFO` lines (`check`, `blocked`, `no_table`, `unasserted`), and a summary line that starts with `PASS` or `FAIL`. `--json` prints `{avouchGate: 1, gate: "verify", check, result}`.
+Exit code 0 means the gate passes. 1 means it fails. 2 means invalid arguments (also a repeated option), a file or parse error, an ontology without an `actionTypes` mapping, or a rows or baseline file with a wrong shape. Without `--json`, the command prints one `FAIL` line for each failure, `INFO` lines (`check`, `blocked`, `no_table`, `unasserted`), and a summary line that starts with `PASS` or `FAIL`. `--json` prints `{avouchGate: 1, gate: "verify", check, result}`.
 
 The same gate is a function in the package root, for tests that run without a file system or child processes: `verifyCoverage(ontology, rows, baseline)` returns the `result` object (`src/coverage.ts`). The command is a thin wrapper around it. The function does not run the check.
 

@@ -139,6 +139,21 @@ describe("avouch gate verify", () => {
     expect(avouch("gate", "verify", ontology, "--rows", badRows).stderr).toContain("rows.jsonl:1: invalid JSON");
   });
 
+  it("an ontology without actionTypes gives exit 2 and the ontology file", () => {
+    const path = temporaryFile("ontology.yaml", "foo: 1\n");
+    const r = avouch("gate", "verify", path, "--rows", rowsFile());
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain(`${path}: ontology: actionTypes is not an object`);
+    expect(r.stdout).toBe("");
+  });
+
+  it("a repeated option gives exit 2", () => {
+    const r = avouch("gate", "verify", ontology, "--rows", "a.jsonl", "--rows", "b.jsonl");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("repeated option --rows");
+    expect(r.stderr).toContain("usage: avouch gate verify");
+  });
+
   it("an exemption without a reason fails; the units of the gap are blocked", () => {
     const ont = structuredClone(library);
     ont.actionTypes.RETURN!.conditions = ont.actionTypes.RETURN!.conditions.map((c) => (c.id === "loan_active" ? { id: "loan_active", unspecified: "x" } : c));

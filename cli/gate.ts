@@ -55,7 +55,7 @@ async function verify(args: string[]): Promise<number> {
     result = verifyCoverage(ont, rows as ReconcileRow[], baseline as CoverageBaseline | null);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`${msg.startsWith("baseline:") ? baselineFile : rowsFile}: ${msg}`);
+    throw new Error(`${msg.startsWith("baseline:") ? baselineFile : msg.startsWith("ontology:") ? pos[0] : rowsFile}: ${msg}`);
   }
   let check: QueryStamp["check"] = { status: "not_run" };
   if (adapter !== undefined) {

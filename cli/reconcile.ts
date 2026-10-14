@@ -15,6 +15,7 @@ export function parseOptions(args: string[], values: readonly string[], flags: r
   const opts = new Map<string, string | true>();
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
+    if (opts.has(a)) throw new Error(`repeated option ${a}`);
     if (flags.includes(a)) opts.set(a, true);
     else if (values.includes(a)) {
       if (i + 1 >= args.length) throw new Error(`${a} needs a file`);

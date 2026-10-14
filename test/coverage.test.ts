@@ -180,6 +180,12 @@ describe("verifyCoverage: baseline of uncovered units", () => {
     expect(verifyCoverage(removed, [], baseline([debt("RETURN", 1)])).stale).toEqual([{ list: "uncovered", action: "RETURN", row: 1, why: "no_such_row" }]);
   });
 
+  it("an entry whose row has only another result is stale moved", () => {
+    const entry = debt("RETURN", 0);
+    const changed = patched([{ op: "replace", path: "/actionTypes/RETURN/decision/rows/0/result", value: "RETURNED" }]);
+    expect(verifyCoverage(changed, [], baseline([entry])).stale).toEqual([{ list: "uncovered", action: "RETURN", row: 0, why: "moved" }]);
+  });
+
   it("an entry for a blocked unit is stale blocked", () => {
     const ont = gapOnt();
     const r = verifyCoverage(ont, [], baseline([debt("RETURN", 1, ont)], [{ ...gap("RETURN", "loan_active"), reason: "x" }]));
@@ -244,6 +250,14 @@ describe("verifyCoverage: gaps and exemptions", () => {
 describe("verifyCoverage: shape checks", () => {
   const throwsWith = (rows: unknown, base: unknown, prefix: string) =>
     expect(() => verifyCoverage(library, rows as ReconcileRow[], base as CoverageBaseline)).toThrow(new RegExp(`^${prefix.replace(/[[\]().]/g, "\\$&")}`));
+
+  it("rejects an ontology without an actionTypes object", () => {
+    for (const ont of [{ foo: 1 }, { actionTypes: [] }, null]) expect(() => verifyCoverage(ont, [], null)).toThrow("ontology: actionTypes is not an object");
+  });
+
+  it("quotes a string in a message, so that it is not taken for a number", () => {
+    throwsWith([{ id: "a", action: "RETURN", status: "match", result: { result: "RETURNED" }, row: "0" }], null, 'rows[0]: row "0" is not');
+  });
 
   it("rejects a reconcile row with a wrong shape", () => {
     throwsWith([{ id: "a", action: "RETURN", status: "ok" }], null, "rows[0]: status");
