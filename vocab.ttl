@@ -324,7 +324,7 @@ ofv:param a rdf:Property ;
 
 ofv:actor a rdf:Property ;
   rdfs:label "actor" ;
-  rdfs:comment "The caller read by a criterion: id or keys. YAML: actionTypes.<ID>.conditions[].reads[].actor" ;
+  rdfs:comment "The caller read by a criterion: id, keys or kind. YAML: actionTypes.<ID>.conditions[].reads[].actor" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:submissionCriteria a rdf:Property ;

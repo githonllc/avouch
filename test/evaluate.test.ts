@@ -743,9 +743,32 @@ describe("more input errors throw up front", () => {
       const ont = withAction({ parameters: { [name]: { type: "timestamp" as const, optional: true as const } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted });
       expect(() => decide(ont, "x", snapshot, "b1", {}, staff, NOW)).toThrow(/reserved name/);
     });
-  it("reading an actor property other than id or keys throws", () => {
-    expect(() => val(ref("actor.kind"))).toThrow(/actor\.kind/);
+  it("reading an actor property other than id, keys or kind throws", () => {
+    expect(() => val(ref("actor.groups"))).toThrow(/actor\.groups/);
+    expect(val(ref("actor.kind"))).toBe("user");
     expect(val(ref("actor.id"))).toBe("u1");
+  });
+});
+
+describe("actor.kind", () => {
+  const svc: Actor = { id: "u9", keys: [], kind: "service" };
+  it("eq with a literal", () => {
+    expect(pred(eq(ref("actor.kind"), lit("user")))).toBe("T");
+    expect(pred(eq(ref("actor.kind"), lit("user")), {}, "b1", svc)).toBe("F");
+  });
+  it("neq with a literal", () => expect(pred({ neq: [ref("actor.kind"), lit("user")] }, {}, "b1", svc)).toBe("T"));
+  it("in a literal set", () => expect(pred(inSet(ref("actor.kind"), lit(["user", "service"])), {}, "b1", svc)).toBe("T"));
+  it("a condition on the caller kind decides end to end", () => {
+    const intake: Stage1Ontology["actionTypes"][string] = {
+      parameters: { ext: { type: "id", optional: true } },
+      permission: { none: "anyone" },
+      conditions: [{ id: "service_carries_ext", expr: { or: [{ neq: [ref("actor.kind"), lit("service")] }, { isNotNull: [ref("ext")] }] } }],
+      decision: { hitPolicy: "first", rows: [{ when: { fails: "service_carries_ext" }, result: "REFUSED" }], otherwise: { result: "LENT" } },
+    };
+    const ont: Stage1Ontology = { ...base, actionTypes: { ...base.actionTypes, intake } };
+    expect(run("intake", {}, svc, "b1", ont)).toEqual({ layer: "domain", result: "REFUSED", class: "rejected", row: 0 });
+    expect(run("intake", { ext: "x1" }, svc, "b1", ont)).toEqual({ layer: "domain", result: "LENT", class: "applied", row: "otherwise" });
+    expect(run("intake", {}, staff, "b1", ont)).toEqual({ layer: "domain", result: "LENT", class: "applied", row: "otherwise" });
   });
 });
 
@@ -798,6 +821,14 @@ describe("static type rules", () => {
   it("a quantifier variable may not take a parameter name", () => rejects(exists("loan", loansOf), /is a parameter name/));
   it("a quantifier variable may not reuse an outer variable", () =>
     rejects(exists("x", nav("loan", "loan_member", "forward"), exists("x", nav("x", "member_person", "forward"))), /outer quantifier/));
+  it("actor.kind is an enum", () => {
+    accepts(eq(ref("actor.kind"), lit("api")));
+    accepts(eq(ref("actor.kind"), ref("e")));
+    rejects(eq(ref("actor.kind"), ref("actor.id")), /compares enum with id/);
+    rejects(eq(ref("actor.kind"), ref("m")), /compares enum with \{ref: Member\}/);
+    const ont: Stage1Ontology = { ...base, derivedProperties: { ...base.derivedProperties, by_user: { of: "Member", type: "boolean", expr: eq(ref("actor.kind"), lit("user")) } } };
+    accepts(derived("by_user", "m"), ont);
+  });
   it("self is valid only in a derived property expression", () => rejects(eq(ref("self.state"), lit("GOOD")), /self is valid only/));
   it("a derived expression must have the declared type", () => {
     const ont: Stage1Ontology = { ...base, derivedProperties: { ...base.derivedProperties, loan_risk: { of: "Loan", type: "timestamp", expr: ref("self.state") } } };

@@ -60,7 +60,7 @@ describe("ontology JSON Schema", () => {
     const o = structuredClone(ontology);
     const c = o.actionTypes.RETURN;
     c.parameters = { loan_id: { cite: { doc: "L6", quote: "x" } } };
-    c.conditions.push(probe([{ actor: "id" }, { prop: "Loan.state", values: ["ACTIVE"] }, { param: "loan_id" }, { param: "loan_id", values: ["1"] }, { actor: "keys" }]));
+    c.conditions.push(probe([{ actor: "id" }, { prop: "Loan.state", values: ["ACTIVE"] }, { param: "loan_id" }, { param: "loan_id", values: ["1"] }, { actor: "keys" }, { actor: "kind" }]));
     const ok = validate(o);
     expect(validate.errors ?? []).toEqual([]);
     expect(ok).toBe(true);

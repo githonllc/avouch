@@ -247,7 +247,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           if (r.values !== undefined && !(Array.isArray(r.values) && r.values.length > 0 && r.values.every(isStr)))
             v("R1", `${p}.conditions.${pc.id}`, `parameter read ${JSON.stringify(r)}: values must be a non-empty list of non-empty strings`);
         } else if (isObj(r) && "actor" in r) {
-          if (r.actor !== "id" && r.actor !== "keys") v("R1", `${p}.conditions.${pc.id}`, `actor read ${JSON.stringify(r)} must be {actor: id} or {actor: keys}`);
+          if (r.actor !== "id" && r.actor !== "keys" && r.actor !== "kind") v("R1", `${p}.conditions.${pc.id}`, `actor read ${JSON.stringify(r)} must be {actor: id}, {actor: keys} or {actor: kind}`);
         } else if (isObj(r)) {
           if (!isStr(r.prop) || propClass(r.prop) === null || !Array.isArray(r.values) || r.values.length === 0)
             v("R1", `${p}.conditions.${pc.id}`, `value read ${JSON.stringify(r)} needs a declared prop and values[]`);

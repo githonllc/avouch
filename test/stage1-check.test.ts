@@ -25,6 +25,11 @@ const docWith = (from: string, to: string) => {
 
 describe("stage 1 checks", () => {
   describe("R1: expressions", () => {
+    const kindCond = (lit: string) => run([{ op: "replace", path: "/actionTypes/BORROW/conditions/0/expr", value: { neq: [{ ref: "actor.kind" }, { lit }] } }]);
+    it("actor.kind compared with a quoted literal passes", () => expect(kindCond("Person").violations).toEqual([]));
+    it("actor.kind compared with an unquoted literal is R4 literal_unsupported", () =>
+      expect(triples(kindCond("api"))).toEqual([["R4", "literal_unsupported", "BORROW:borrower_is_caller:api"]]));
+
     it("a cycle of derived properties is R1", () => {
       const d = (other: string) => ({
         of: "Loan", doc: "L3", doc_term: "A Loan is overdue", type: "date",
