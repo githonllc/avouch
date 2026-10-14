@@ -478,6 +478,11 @@ ofv:optional a rdf:Property ;
   rdfs:comment "The caller may leave the parameter out; it is then null. YAML: actionTypes.<ID>.parameters.<n>.optional" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
+ofv:projectedFrom a rdf:Property ;
+  rdfs:label "projectedFrom" ;
+  rdfs:comment "Request fields (an alternate key) that the project's projection resolves to this ref parameter. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
 ofv:principals a rdf:Property ;
   rdfs:label "principals" ;
   rdfs:comment "Actor kinds that one permission alternative admits, with its own citation; an actor of another kind is denied. YAML: actionTypes.<ID>.permission.principals, actionTypes.<ID>.permission.any_of[].principals" ;

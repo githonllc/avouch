@@ -27,7 +27,7 @@ export type QueryRow = { row: number | "otherwise"; when: { passes: string } | {
 export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
   permission: { form: "unknown" } | { form: "none"; reason: S; cite: QueryCite | null; principals: QueryAlt["principals"] } | { form: "keys"; alternatives: QueryAlt[] };
   idempotencyKey: { required: boolean; cite: QueryCite | null } | null;
-  parameters: { name: string; type: Type | null; optional: boolean; values: string[] | null; cite: QueryCite | null }[];
+  parameters: { name: string; type: Type | null; optional: boolean; values: string[] | null; projectedFrom: string[] | null; cite: QueryCite | null }[];
   conditions: { id: string; expr: Expr | null; exprText: S; unspecified: S; reads: unknown[]; cites: QueryCite[]; scenarios: string[] }[];
   decision: { order: QueryCite | null; rows: QueryRow[] /* otherwise, when present, is last */ } | null;
   edits: { prop: string; cite: QueryCite | null /* edit_cites */ }[]; creates: string[]; deletes: string[]; emits: string[];
@@ -358,6 +358,7 @@ export function queryAction(ont: unknown, id: string): QueryAction | null {
       type: typeOf(map(p).type),
       optional: map(p).optional === true,
       values: Array.isArray(map(p).values) ? map(p).values.filter((x: unknown) => typeof x === "string") : null,
+      projectedFrom: Array.isArray(map(p).projectedFrom) ? map(p).projectedFrom.filter((x: unknown) => typeof x === "string") : null,
       cite: citeOf(map(p).cite),
     })),
     conditions: conditionsOf(a).map((c) => ({

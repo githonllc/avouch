@@ -673,7 +673,7 @@
           "type": "object",
           "propertyNames": { "minLength": 1 },
           "additionalProperties": { "$ref": "#/$defs/parameter" },
-          "description": "Optional action parameters: parameter name → {cite}. Foundation: Palantir action parameters (\"Parameters are the inputs of an action type.\"). A condition reads a parameter as `{param: <name>}` or, in an expression, as `{ref: <name>}`. R1: must be a mapping; each entry carries a cite. R2: the cite quote must occur verbatim, and the parameter name must appear in it (R2 `parameter_not_in_quote`, key `<ID>:<name>`), and so must each of its `values` (R2 `parameter_value_not_in_quote`, key `<ID>:<name>:<value>`). A declared parameter that no condition reads is not a failure."
+          "description": "Optional action parameters: parameter name → {cite}. Foundation: Palantir action parameters (\"Parameters are the inputs of an action type.\"). A condition reads a parameter as `{param: <name>}` or, in an expression, as `{ref: <name>}`. R1: must be a mapping; each entry carries a cite. R2: the cite quote must occur verbatim, and the parameter name must appear in it (R2 `parameter_not_in_quote`, key `<ID>:<name>`), or, for a parameter with `projectedFrom`, each of its fields (R2 `projection_field_not_in_quote`, key `<ID>:<name>:<field>`), and so must each of its `values` (R2 `parameter_value_not_in_quote`, key `<ID>:<name>:<value>`). A declared parameter that no condition reads is not a failure."
         },
         "edits": {
           "type": "array",
@@ -1009,17 +1009,22 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["cite"],
-      "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote.",
+      "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote. `projectedFrom` (only with `type: {ref: <Object>}`) lists the request fields, an alternate key, that the project's projection resolves to this ref; the cite quote must name each field instead of the parameter name (R2 `projection_field_not_in_quote`); a null value of a required projected parameter is `INVALID_BINDING` `not_found`, and an absent one is `missing`, also with `optional: true` (SPEC section 9).",
       "properties": {
         "cite": { "$ref": "#/$defs/cite" },
         "type": { "$ref": "#/$defs/valueType" },
         "optional": { "const": true },
-        "values": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+        "values": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "projectedFrom": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
       },
       "allOf": [
         {
           "if": { "required": ["values"] },
           "then": { "required": ["type"], "properties": { "type": { "const": "enum" } } }
+        },
+        {
+          "if": { "required": ["projectedFrom"] },
+          "then": { "required": ["type"], "properties": { "type": { "type": "object", "required": ["ref"] } } }
         }
       ]
     },

@@ -55,7 +55,7 @@ export type DecisionRow = { when: { passes: string } | { fails: string }; result
 export type Decision = { hitPolicy: "first"; rows: DecisionRow[]; otherwise?: { result: string; next?: unknown } };
 export type Condition = { id: string; expr?: Expr; unspecified?: string };
 export type ActionType = {
-  parameters?: Record<string, { type?: Type; optional?: true; values?: string[] }>;
+  parameters?: Record<string, { type?: Type; optional?: true; values?: string[]; projectedFrom?: string[] }>;
   permission: Permission;
   conditions: Condition[];
   decision?: Decision;

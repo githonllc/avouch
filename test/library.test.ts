@@ -521,6 +521,29 @@ describe("toy library project", () => {
         expect([...new Set(r.violations.map((x) => x.rule))]).toEqual(["R1"]);
         expect(r.violations.some((x) => x.msg.includes("values must be a non-empty list"))).toBe(true);
       });
+    describe("projectedFrom", () => {
+      const projectedFrom = (value: unknown) => [...mut("lib-r2-parameter-not-in-quote"), { op: "add", path: "/actionTypes/BORROW/parameters/member_id/projectedFrom", value }];
+      const extra = (value: object) =>
+        triples(check(applyPatch(ont, [{ op: "add", path: "/actionTypes/BORROW/parameters/extra", value: { ...value, cite: { doc: "L6", quote: "BORROW creates a Loan" } } }]), facts()));
+      const r1 = ["R1", "generic", "actionTypes.BORROW.parameters.extra"];
+      it("the quote names each field instead of the parameter name", () => expect(check(applyPatch(ont, projectedFrom(["Loan"])), facts()).violations).toEqual([]));
+      it("a field not in the quote is projection_field_not_in_quote", () =>
+        expect(triples(check(applyPatch(ont, projectedFrom(["Loan", "isbn"])), facts()))).toEqual([["R2", "projection_field_not_in_quote", "BORROW:member_id:isbn"]]));
+      it("on a parameter that is not a ref it is R1, and R2 checks the fields", () => {
+        const t = extra({ type: "enum", projectedFrom: ["BORROW"] });
+        expect(t).toContainEqual(r1);
+        expect(t.filter((x) => x[0] === "R2")).toEqual([]);
+      });
+      it("an empty or repeated list is R1", () => {
+        expect(extra({ type: { ref: "Member" }, projectedFrom: [] })).toContainEqual(r1);
+        expect(extra({ type: { ref: "Member" }, projectedFrom: ["BORROW", "BORROW"] })).toContainEqual(r1);
+      });
+      it("an empty list falls back to the parameter name check", () => {
+        const t = triples(check(applyPatch(ont, projectedFrom([])), facts()));
+        expect(t).toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.member_id"]);
+        expect(t).toContainEqual(["R2", "parameter_not_in_quote", "BORROW:member_id"]);
+      });
+    });
     it("a parameter cite quote not verbatim in its section is R2 through the cite walk", () => {
       const r = check(applyPatch(ont, [{ op: "replace", path: "/actionTypes/BORROW/parameters/member_id/cite/quote", value: "member_id is not in L6" }]), facts());
       expect(triples(r)).toContainEqual(["R2", "generic", ".actionTypes.BORROW.parameters.member_id.cite"]);

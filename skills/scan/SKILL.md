@@ -59,7 +59,7 @@ Write the ontology in the shape of `examples/library/library.ontology.yaml` of t
 
 - objects, properties (with `class`), state machines;
 - links (`*_id` fields);
-- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, deletes, emits, link effects. Use `deletes` only when the document says the rows are removed ("removes", "deletes"); a status or `deleted_at` marker is an `edits`;
+- actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, deletes, emits, link effects. When the document's API takes an alternate key for an object (for example `source` and `external_ref`), declare a ref parameter with `projectedFrom: [source, external_ref]` and cite the text that names those fields. Use `deletes` only when the document says the rows are removed ("removes", "deletes"); a status or `deleted_at` marker is an `edits`;
 - dispositions.
 
 When the documents name no bounded context, use one context named after the project and record it as a gap.

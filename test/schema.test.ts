@@ -164,4 +164,21 @@ describe("ontology JSON Schema", () => {
     expect(rejects((x) => delete x.actionTypes.BORROW.parameters.return_condition.type)).toBe(false);
     expect(rejects((x) => (x.actionTypes.BORROW.parameters.return_condition.type = { set: "enum" }))).toBe(false);
   });
+
+  it("(i) projectedFrom on a ref parameter validates; empty, repeated, empty-string, untyped or not a scalar ref is rejected", () => {
+    const o = structuredClone(ontology);
+    o.actionTypes.BORROW.parameters.extra = { type: { ref: "Member" }, projectedFrom: ["source", "external_ref"], cite: { doc: "L6", quote: "BORROW takes member_id" } };
+    expect(validate(o)).toBe(true);
+    const rejects = (mutate: (x: any) => void) => {
+      const x = structuredClone(o);
+      mutate(x.actionTypes.BORROW.parameters.extra);
+      return validate(x);
+    };
+    expect(rejects((p) => (p.projectedFrom = []))).toBe(false);
+    expect(rejects((p) => (p.projectedFrom = ["a", "a"]))).toBe(false);
+    expect(rejects((p) => (p.projectedFrom = [""]))).toBe(false);
+    expect(rejects((p) => delete p.type)).toBe(false);
+    expect(rejects((p) => (p.type = "id"))).toBe(false);
+    expect(rejects((p) => (p.type = { set: { ref: "Member" } }))).toBe(false);
+  });
 });
