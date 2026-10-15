@@ -439,5 +439,5 @@ describe("soundness property: concrete result in the abstract result (seeded)", 
     expect(checked).toBeGreaterThan(10000);
     expect(u).toBeGreaterThan(1000);
     expect(bodyU).toBeGreaterThan(50);
-  });
+  }, 30_000); // 0.8 s on a developer machine; one shared CI run took 5.4 s, above the 5 s default
 });
