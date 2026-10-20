@@ -38,6 +38,12 @@ describe("ontology JSON Schema", () => {
     expect(ok).toBe(true);
   });
 
+  it("a state machine property validates", () => {
+    const o = structuredClone(ontology);
+    o.stateMachines.Book.property = "state";
+    expect(validate(o)).toBe(true);
+  });
+
   it("evidence has no enum: any non-empty string validates", () => {
     const o = structuredClone(ontology);
     o.actionTypes.BORROW.evidence = "anyEvidenceId";
@@ -105,6 +111,8 @@ describe("ontology JSON Schema", () => {
     ["link effect with two kinds", (o) => (o.actionTypes.RETURN.link_effects.loan_member.effect = "x"), "/actionTypes/RETURN/link_effects/loan_member"],
     ["canonical property without cite", (o) => delete o.objectTypes.Book.properties.state.cite, "/objectTypes/Book/properties/state"],
     ["unknown field on a state machine", (o) => (o.stateMachines.Book.colour = "x"), "/stateMachines/Book"],
+    ["empty state machine property", (o) => (o.stateMachines.Book.property = ""), "/stateMachines/Book/property"],
+    ["non-string state machine property", (o) => (o.stateMachines.Book.property = 7), "/stateMachines/Book/property"],
     ["crossContext with both via and unspecified", (o) => (o.actionTypes.BORROW.crossContext.unspecified = "x"), "/actionTypes/BORROW/crossContext"],
     ["unknown field in crossContext", (o) => (o.actionTypes.BORROW.crossContext.extra = true), "/actionTypes/BORROW/crossContext"],
     ["empty context name", (o) => (o.contexts[""] = Object.values(o.contexts)[0]), "/contexts"],

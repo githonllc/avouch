@@ -61,7 +61,7 @@ Parameters and parameter and actor reads (`parameters`, `{param}`, `{actor}`) ne
 - `crossContextMechanisms`: the legal `via` values of `crossContext` (R5).
 - `actionIdPattern`: the pattern of an action id (R1).
 - `linkFieldPattern`: the pattern of a field that holds a link (R6).
-- `stateProperty`: the name of the state property (R1, R3).
+- `stateProperty`: the default name of the state property (R1, R3). An ontology machine names another property of its object with `stateMachines.<Object>.property`.
 
 ## 6. Run the example
 

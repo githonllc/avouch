@@ -38,7 +38,7 @@ export type QueryObject = { id: string; context: S; datasource: S; doc: S; outOf
   properties: { name: string; class: S; type: Type | null; cite: QueryCite | null; canonicalValues: { values: string[]; cite: QueryCite | null } | null;
     materializedFrom: { reads: string[]; cites: QueryCite[] } | null }[];
   derived: { id: string; type: Type | null; docTerm: S; exprText: S; cite: QueryCite | null }[];
-  stateMachine: { doc: S; initial: S; terminal: string[]; transitions: { from: S; to: S; by: string[]; outOfScope: S }[] } | null;
+  stateMachine: { doc: S; property: S; initial: S; terminal: string[]; transitions: { from: S; to: S; by: string[]; outOfScope: S }[] } | null;
   links: { id: string; end: "from" | "to"; other: S; cardinality: S; via: S }[];
   writers: { action: string; edits: string[]; creates: boolean; deletes: boolean }[]; readers: { action: string; condition: string; props: string[] }[];
   unanalyzed: QueryWrites["unanalyzed"] /* conditions ("<action>:<condition>") and derived properties that do not type-check */ };
@@ -471,6 +471,7 @@ export function queryObject(ont: unknown, id: string): QueryObject | null {
     stateMachine: sm
       ? {
           doc: str(sm.doc),
+          property: str(sm.property),
           initial: str(sm.initial),
           terminal: strs(sm.terminal),
           transitions: arr(sm.transitions)
