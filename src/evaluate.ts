@@ -4,7 +4,7 @@
 import { checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
-// Object rows must carry a string `id`. Pure link rows are {from, to} (plus the scope field when scoped). A navigated pure link must be a key of links (an empty table is []); else decide throws.
+// Object rows must carry a string `id`. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
 export type Row = Readonly<Record<string, Value>>;
 export interface Snapshot {
   objects: Record<string, readonly Row[]>;
@@ -43,9 +43,9 @@ export class UndefinedDerived extends Error {
 
 type TV = "T" | "F" | "U";
 
-// A field of a snapshot row. An absent key is an incomplete snapshot and throws; null is a value.
+// A field of a snapshot row. An absent key, or the value undefined, is an incomplete snapshot and throws; null is a value.
 function field(row: Row, key: string, what: string): Value {
-  if (!Object.hasOwn(row, key)) throw new Error(`snapshot ${what} has no ${key}`);
+  if (!Object.hasOwn(row, key) || row[key] === undefined) throw new Error(`snapshot ${what} has no ${key}`);
   return row[key];
 }
 
@@ -78,7 +78,8 @@ class Session {
   }
 
   allRows(type: string): readonly Row[] {
-    const rows = own(this.env.snapshot.objects, type) ?? [];
+    const rows = own(this.env.snapshot.objects, type);
+    if (rows === undefined) throw new Error(`snapshot lacks object type ${type}`);
     for (const r of rows) if (typeof r.id !== "string") throw new Error(`a ${type} row has no string id`);
     return rows;
   }
@@ -103,6 +104,11 @@ class Session {
     if (rows === undefined) {
       const all = own(this.env.snapshot.links, link.id);
       if (all === undefined) throw new Error(`snapshot lacks link ${link.id}`);
+      for (const r of all)
+        for (const k of ["from", "to"] as const) {
+          const v = field(r, k, `${link.id} link row`);
+          if (typeof v !== "string") throw new Error(`snapshot ${link.id} link row: ${k} = ${JSON.stringify(v)} is not a string id`);
+        }
       const by = this.ont.scope?.by;
       const tenantEnd = this.mode(link.from) === "tenant" || this.mode(link.to) === "tenant";
       rows = by !== undefined && tenantEnd ? all.filter((r) => field(r, by, `${link.id} link row`) === this.env.scope) : all;

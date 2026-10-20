@@ -437,6 +437,22 @@ describe("toy library project", () => {
           "R1 generic actionTypes.BORROW", "R1 generic objectTypes.Book.properties.isbn", "R2 property_not_field Book.isbn",
         ]);
       });
+      // An own key __proto__, as YAML and JSON parsing give it; an assignment (or applyPatch) would set the prototype instead.
+      const ownProto = (o: object, value: unknown) => Object.defineProperty({ ...o }, "__proto__", { value, enumerable: true, writable: true, configurable: true });
+      const r1 = (o: unknown) => check(o, facts()).violations.filter((x) => x.rule === "R1").map((x) => [x.key, x.msg]);
+      it("R1 rejects an object type named __proto__", () => {
+        const o = { ...ont, objectTypes: ownProto(ont.objectTypes, ont.objectTypes.Branch) };
+        expect(Object.hasOwn(o.objectTypes, "__proto__")).toBe(true);
+        expect(r1(o)).toContainEqual(["objectTypes.__proto__", "__proto__ is a reserved name"]);
+      });
+      it("R1 rejects a property named __proto__", () => {
+        const book = { ...ont.objectTypes.Book, properties: ownProto(ont.objectTypes.Book.properties, ont.objectTypes.Book.properties.title) };
+        expect(r1({ ...ont, objectTypes: { ...ont.objectTypes, Book: book } })).toContainEqual(["objectTypes.Book.properties.__proto__", "__proto__ is a reserved name"]);
+      });
+      it("R1 rejects a link type with the id __proto__", () => {
+        const o = applyPatch(ont, [{ op: "add", path: "/linkTypes/-", value: { ...ont.linkTypes[0], id: "__proto__" } }]);
+        expect(r1(o)).toContainEqual(["linkTypes.__proto__", "__proto__ is a reserved name"]);
+      });
     });
   });
 

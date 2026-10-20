@@ -140,7 +140,10 @@
     "objectTypes": {
       "type": "object",
       "propertyNames": {
-        "minLength": 1
+        "minLength": 1,
+        "not": {
+          "const": "__proto__"
+        }
       },
       "description": "Declared objects: object name → definition. Foundation: Palantir object type. R1: must be a mapping. R2: the name must occur as a whole identifier in the section of its `doc` anchor. R5: the name must be a member of its context's list.",
       "additionalProperties": {
@@ -249,7 +252,10 @@
         "properties": {
           "type": "object",
           "propertyNames": {
-            "minLength": 1
+            "minLength": 1,
+            "not": {
+              "const": "__proto__"
+            }
           },
           "description": "Modelled properties: property name → classification. Foundation: Palantir property. R1: required (use {}). R2: each name must be a field of the object's source field list (else R2 `property_not_field`). Only properties listed here can be referenced by edits, conditions, derivedProperties.reads and materializedFrom.reads (R1).",
           "additionalProperties": {
@@ -506,6 +512,9 @@
         "id": {
           "type": "string",
           "minLength": 1,
+          "not": {
+            "const": "__proto__"
+          },
           "description": "Unique link id (R1); the key used in `actionTypes.<ID>.link_effects`."
         },
         "from": {
