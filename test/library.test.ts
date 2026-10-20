@@ -70,6 +70,15 @@ describe("toy library project", () => {
     expect(r.violations.map((x) => [x.rule, x.kind, x.key])).toEqual([["R8", "fact_missing", "facts.eventCatalog"]]);
   });
 
+  it("without the stateMachines fact, R3 checks only the doc anchor of each machine", () => {
+    const patch = parse(Object.entries(mutations).find(([f]) => f.endsWith("lib-r3-transition-binding.yaml"))![1]).patch;
+    const keys = (o: unknown) => check(o, { ...facts(), stateMachines: undefined }).violations.map((x) => [x.rule, x.kind, x.key]);
+    expect(keys(applyPatch(ont, patch))).toEqual([["R3", "fact_missing", "facts.stateMachines"]]);
+    const badDoc = structuredClone(ont);
+    badDoc.stateMachines.Book.doc = "§ no such anchor";
+    expect(keys(badDoc)).toEqual([["R3", "fact_missing", "facts.stateMachines"], ["R3", "generic", "stateMachines.Book"]]);
+  });
+
   it("a disabled rule drops its violations and prints a reason", () => {
     const patch = parse(Object.entries(mutations).find(([f]) => f.endsWith("lib-r8-unknown-event.yaml"))![1]).patch;
     const r = check(applyPatch(ont, patch), facts({ ...config, rules: { ...config.rules, R8: { disabled: "x" } } }));

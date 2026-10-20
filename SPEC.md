@@ -140,7 +140,7 @@ The adapter may read the ontology instance (for example to list action ids in a 
 |---|---|---|
 | R1, R4, R11, R12 | none | none |
 | R2 | `storeCatalog` | store catalog membership |
-| R3 | `stateMachines` | authoritative anchor check; graph comparison |
+| R3 | `stateMachines` | all except the `doc` anchor check (`stateMachines.<O>.doc` must give exactly one source section) |
 | R3 | `transitionTriggers` | trigger binding checks |
 | R5 | `contextMembers` | membership and entity coverage |
 | R6 | `evidence` | `none_but_written` |
