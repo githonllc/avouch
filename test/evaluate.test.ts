@@ -832,6 +832,35 @@ describe("an incomplete snapshot throws", () => {
     const empty = { ...e("p1"), snapshot: { ...snap, links: { book_author: [] } } };
     expect(evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), empty)).toBe("F");
   });
+  const without = (type: string): Snapshot => ({ ...snapshot, objects: Object.fromEntries(Object.entries(snapshot.objects).filter(([k]) => k !== type)) });
+  it("an object type that evaluation reads and that is not a key of snapshot.objects", () => {
+    expect(() => decide(base, "checkout", without("Book"), "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("snapshot lacks object type Book");
+    const e = { action: "probe", snapshot: without("Book"), scope: "b1", bindings: { person: "p1" }, actor: staff, now: NOW };
+    expect(() => evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), e)).toThrow("snapshot lacks object type Book");
+  });
+  it("an object type that evaluation does not read may be absent; an empty table is []", () => {
+    expect(decide(base, "hold", { objects: {} }, "b1", { e: "A" }, staff, NOW)).toEqual({ layer: "domain", result: "HELD", class: "pending", row: 0 });
+    expect(decide(base, "checkout", { ...snapshot, objects: { ...snapshot.objects, Book: [] } }, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "book", reason: "not_found" });
+  });
+  it("a pure link row whose from or to is not a string", () => {
+    const e = (row: Row) => ({ action: "probe", snapshot: { ...snapshot, links: { book_author: [row] } }, scope: "b1", bindings: { person: "p1" }, actor: staff, now: NOW });
+    const q = exists("x", nav("person", "book_author", "reverse"));
+    expect(() => evalPredicate(base, q, e({ from: "bk1", to: 1, branch_id: "b1" }))).toThrow("snapshot book_author link row: to = 1 is not a string id");
+    expect(() => evalPredicate(base, q, e({ from: 7, to: "p1", branch_id: "b1" }))).toThrow("snapshot book_author link row: from = 7 is not a string id");
+    expect(() => evalPredicate(base, q, e({ from: null, to: "p1", branch_id: "b1" }))).toThrow("snapshot book_author link row: from = null is not a string id");
+    // Every row of the link is checked when the link is read, also a row in another scope.
+    const other = { ...e({ from: "bk1", to: "p1", branch_id: "b1" }), snapshot: { ...snapshot, links: { book_author: [{ from: "bk1", to: "p1", branch_id: "b1" }, { from: "bk2", to: 2, branch_id: "b2" }] } } };
+    expect(() => evalPredicate(base, q, other)).toThrow("snapshot book_author link row: to = 2 is not a string id");
+    expect(evalPredicate(base, q, e({ from: "bk1", to: "p1", branch_id: "b1" }))).toBe("T");
+  });
+  it("a row field whose value is undefined is absent", () => {
+    const m = { ...snapshot, objects: { ...snapshot.objects, Member: snapshot.objects.Member.map((r) => (r.id === "m2" ? { ...r, branch_id: undefined as unknown as null } : r)) } };
+    expect(() => decide(base, "checkout", m, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("snapshot Member row m2 has no branch_id");
+    const l = { ...snapshot, objects: { ...snapshot.objects, Loan: [{ ...snapshot.objects.Loan[0]!, member_id: undefined as unknown as null }] } };
+    expect(() => evalPredicate(base, exists("x", nav("loan", "loan_member", "forward")), { action: "probe", snapshot: l, scope: "b1", bindings: { loan: "l1" }, actor: staff, now: NOW })).toThrow("snapshot Loan row l1 has no member_id");
+    const s = { ...snapshot, objects: { ...snapshot.objects, Member: [{ id: "m2", branch_id: "b1", person_id: "p2", state: undefined as unknown as null }] } };
+    expect(() => evalPredicate(base, eq(ref("m.state"), lit("GOOD")), { action: "probe", snapshot: s, scope: "b1", bindings: { m: "m2" }, actor: staff, now: NOW })).toThrow("snapshot Member row m2 has no state");
+  });
 });
 
 describe("names are own keys, never prototype members", () => {
@@ -1075,7 +1104,7 @@ describe("more input checks", () => {
     const bad2 = withAction({ ...base.actionTypes.hold!, decision: { hitPolicy: "first", rows: rows("REFUSED"), otherwise: { result: "NOPE" } } });
     expect(() => decide(bad2, "x", snapshot, "b1", { e: "A" }, staff, NOW)).toThrow(/NOPE has no disposition/);
   });
-  it("an object type named toString absent from the snapshot has no rows; a pure link named toString must be in snapshot.links", () => {
+  it("an object type or a pure link named toString must be in the snapshot", () => {
     const ont = withAction(
       { parameters: { odd: { type: { ref: "toString" } }, book: { type: { ref: "Book" }, optional: true } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
       {
@@ -1083,7 +1112,8 @@ describe("more input checks", () => {
         linkTypes: [...base.linkTypes, { id: "toString", from: "Book", to: "Person", via: "person_id", table: "odd_links" }],
       },
     );
-    expect(decide(ont, "x", snapshot, "b1", { odd: "o1" }, staff, NOW)).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "odd", reason: "not_found" });
+    expect(() => decide(ont, "x", snapshot, "b1", { odd: "o1" }, staff, NOW)).toThrow("snapshot lacks object type toString");
+    expect(decide(ont, "x", { ...snapshot, objects: { ...snapshot.objects, toString: [] } }, "b1", { odd: "o1" }, staff, NOW)).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "odd", reason: "not_found" });
     const e = { action: "x", snapshot, scope: "b1", bindings: { odd: null, book: "bk1" }, actor: staff, now: NOW };
     expect(() => evalPredicate(ont, exists("p", nav("book", "toString", "forward")), e)).toThrow("snapshot lacks link toString");
     expect(evalPredicate(ont, exists("p", nav("book", "toString", "forward")), { ...e, snapshot: { ...snapshot, links: { ...snapshot.links, toString: [] } } })).toBe("F");

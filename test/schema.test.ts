@@ -208,4 +208,21 @@ describe("ontology JSON Schema", () => {
     expect(rejects((p) => (p.optional = true))).toBe(false);
     expect(rejects((p) => (p.projectedFrom = ["source"]))).toBe(false);
   });
+
+  it("an object type, a property or a link type named __proto__ is rejected", () => {
+    // An own key __proto__, as YAML and JSON parsing give it; an assignment would set the prototype instead.
+    const ownProto = (o: object, value: unknown) => Object.defineProperty({ ...o }, "__proto__", { value, enumerable: true, writable: true, configurable: true });
+    const o = structuredClone(ontology);
+    o.objectTypes = ownProto(o.objectTypes, structuredClone(ontology.objectTypes.Branch));
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/objectTypes");
+    const p = structuredClone(ontology);
+    p.objectTypes.Book.properties = ownProto(p.objectTypes.Book.properties, structuredClone(ontology.objectTypes.Book.properties.title));
+    expect(validate(p)).toBe(false);
+    expect(paths()).toContain("/objectTypes/Book/properties");
+    const l = structuredClone(ontology);
+    l.linkTypes.push({ ...l.linkTypes[0], id: "__proto__" });
+    expect(validate(l)).toBe(false);
+    expect(paths()).toContain(`/linkTypes/${l.linkTypes.length - 1}/id`);
+  });
 });

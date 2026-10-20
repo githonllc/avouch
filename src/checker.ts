@@ -91,6 +91,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
 
   for (const [name, o] of Object.entries(objects)) {
     const p = `objectTypes.${name}`;
+    if (name === "__proto__") v("R1", p, "__proto__ is a reserved name"); // a snapshot key: an assignment would set the prototype
     if (!isObj(o)) {
       v("R1", p, "not a mapping");
       continue;
@@ -103,6 +104,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       if (!isObj(nl) || !isStr((nl as Any).reason) || !isObj((nl as Any).cite)) v("R1", `${p}.non_link_fields.${f}`, "needs reason and cite");
     if (o.non_link_fields !== undefined && !isObj(o.non_link_fields)) v("R1", p, "non_link_fields must be a mapping");
     for (const [pn, pr] of Object.entries(isObj(o.properties) ? o.properties : {})) {
+      if (pn === "__proto__") v("R1", `${p}.properties.${pn}`, "__proto__ is a reserved name");
       if (!isObj(pr) || !CLASSES.includes((pr as Any).class)) v("R1", `${p}.properties.${pn}`, `class must be one of ${CLASSES}`);
       else if ((pr as Any).class !== "unknown" && !isObj((pr as Any).cite)) v("R1", `${p}.properties.${pn}`, "class other than unknown needs a cite");
       const cv = isObj(pr) ? (pr as Any).canonical_values : undefined;
@@ -136,6 +138,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       v("R1", p, "link id missing");
       continue;
     }
+    if (l.id === "__proto__") v("R1", `linkTypes.${l.id}`, "__proto__ is a reserved name");
     if (linkIds.has(l.id)) v("R1", `linkTypes.${l.id}`, "duplicate link id");
     linkIds.add(l.id);
     if (!objType(l.from) || !objType(l.to)) v("R1", `linkTypes.${l.id}`, `from/to must be declared object types`);
