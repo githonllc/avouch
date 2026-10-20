@@ -1,7 +1,7 @@
 // Format-level ontology checker (rules R1–R12). Pure functions: no I/O. Project facts arrive through SourceFacts (contract.ts).
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
-import { derivedPropertyType, isObj, newReads, projectedFields, type Stage1Ontology } from "./expr.js";
+import { derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
 import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -242,6 +242,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
         for (const f of pf)
           if (!own(params, f) || projectedFields(isObj(params[f]) ? params[f] : {}) !== null)
             v("R1", `${p}.parameters.${n}`, `projectedFrom field ${f} must be a declared parameter of ${cid} that is not projected`);
+      if (isObj(pv) && pv.unresolved !== undefined && !resolvesInDomain(pv))
+        v("R1", `${p}.parameters.${n}`, "unresolved: domain needs a required scalar {ref: <Object>} parameter without projectedFrom");
     }
     const pids = new Set<string>();
     for (const [i, pc] of arr(c.conditions).entries()) {

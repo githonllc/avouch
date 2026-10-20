@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. Pure link rows are {from, to} (plus the scope field when scoped). A navigated pure link must be a key of links (an empty table is []); else decide throws.
@@ -322,7 +322,8 @@ function predicate(s: Session, f: Frame, e: Expr): TV {
 
 const topFrame = (env: Env): Frame => ({ action: env.action, vars: {} });
 
-// Value expressions. `bindings` are taken as having passed decide's shape and binding layers.
+// Value expressions. `bindings` are taken as having passed decide's shape and binding layers: a ref with
+// `unresolved: domain` whose id does not resolve is passed as null, as decide binds it.
 export function evalValue(ont: Stage1Ontology, expr: Expr, env: Env): Value {
   return value(new Session(ont, env), topFrame(env), expr);
 }
@@ -374,6 +375,8 @@ const condId = (row: DecisionRow): string => ("passes" in row.when ? row.when.pa
 function resolve(s: Session, actionId: string): DecideResult {
   const action = s.ont.actionTypes[actionId];
   // A ref parameter binds one object; each element of a set-of-ref parameter is a referenced object too (array order).
+  // A scalar ref with `unresolved: domain` binds to null when its id is not visible.
+  const unresolved: string[] = []; // unresolved: domain parameters whose id did not resolve
   for (const [name, p] of Object.entries(action.parameters ?? {})) {
     const t = p.type!;
     const isSet = typeof t !== "string" && "set" in t;
@@ -384,13 +387,20 @@ function resolve(s: Session, actionId: string): DecideResult {
     if (v === null || v === undefined) continue;
     for (const id of isSet ? (v as readonly Value[]) : [v]) {
       if (s.byId(elem.ref).has(id as string)) continue;
+      // Absent and out of scope give the same null, so existence in another tenant is not revealed.
+      if (resolvesInDomain(p)) {
+        unresolved.push(name);
+        break;
+      }
       if (s.allRows(elem.ref).some((r) => r.id === id)) return { layer: "invocation", result: "SCOPE_DENIED", param: name };
       return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "not_found" };
     }
   }
+  const b = s.env.bindings;
+  const d = unresolved.length === 0 ? s : new Session(s.ont, { ...s.env, bindings: Object.fromEntries(Object.keys(action.parameters ?? {}).filter((n) => Object.hasOwn(b, n)).map((n) => [n, unresolved.includes(n) ? null : b[n]])) });
   const decision = action.decision;
   if (decision === undefined) return { layer: "indeterminate", reason: "no_decision_table" };
-  const frame = topFrame(s.env);
+  const frame = topFrame(d.env);
   const cache = new Map<string, TV | { undefinedDerived?: string }>();
   const disposition = (result: string) => own(s.ont.dispositions, result)!.class; // checked by decide before evaluation
   for (const [i, row] of decision.rows.entries()) {
@@ -401,7 +411,7 @@ function resolve(s: Session, actionId: string): DecideResult {
       if (cond.expr === undefined) v = {};
       else
         try {
-          v = predicate(s, frame, cond.expr);
+          v = predicate(d, frame, cond.expr);
         } catch (err) {
           if (!(err instanceof UndefinedDerived)) throw err;
           v = { undefinedDerived: err.derived };

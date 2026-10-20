@@ -554,6 +554,25 @@ describe("toy library project", () => {
         }
       });
     });
+    describe("unresolved", () => {
+      const extra = (value: object) =>
+        triples(check(applyPatch(ont, [{ op: "add", path: "/actionTypes/BORROW/parameters/extra", value: { ...value, cite: { doc: "L6", quote: "BORROW creates a Loan" } } }]), facts()));
+      const r1 = ["R1", "generic", "actionTypes.BORROW.parameters.extra"];
+      it("unresolved: domain on a required scalar ref parameter is not R1", () => expect(extra({ type: { ref: "Member" }, unresolved: "domain" }).filter((x) => x[0] === "R1")).toEqual([]));
+      it("another value, or a parameter that is not a required scalar ref without projectedFrom, is R1 once", () => {
+        for (const value of [
+          { type: "enum", unresolved: "domain" },
+          { type: { set: { ref: "Member" } }, unresolved: "domain" },
+          { type: { ref: "Member" }, optional: true, unresolved: "domain" },
+          { type: { ref: "Member" }, projectedFrom: ["book_id"], unresolved: "domain" },
+          { type: { ref: "Member" }, unresolved: "null" },
+          { type: { ref: "Member" }, unresolved: true },
+          { type: { ref: "Member" }, optional: false, unresolved: "domain" },
+          { type: { ref: "Member", set: { ref: "Member" } }, unresolved: "domain" },
+        ])
+          expect(extra(value).filter((x) => x[0] === "R1"), JSON.stringify(value)).toEqual([r1]);
+      });
+    });
     describe("projectedFrom fields are request inputs", () => {
       const member = ["R1", "generic", "actionTypes.BORROW.parameters.member_id"];
       const P = "/actionTypes/BORROW/parameters";

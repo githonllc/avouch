@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
 import type { Value } from "../src/evaluate";
-import type { Stage1Ontology, Type } from "../src/expr";
+import type { Expr, Stage1Ontology, Type } from "../src/expr";
 import { domainResults, projectSnapshot, reconcile, type Decode, type Reported, type RuntimeCase } from "../src/reconcile";
 
 const library = parse(ontologyText) as Stage1Ontology;
@@ -96,6 +96,25 @@ describe("reconcile: three-way equality", () => {
     const c = baseCase({}, projected);
     c.inputs = { ...c.inputs, bindings: {} };
     expect(one(c, projected)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "mismatch", evaluator: { result: "INVALID_BINDING", reason: "missing" }, reported: RETURNED, expected: RETURNED });
+  });
+
+  it("a ref with unresolved: domain: an absent id and an id of another branch match the domain result", () => {
+    const soft = structuredClone(library);
+    const ret = soft.actionTypes.RETURN;
+    Object.assign(ret.parameters!.loan_id, { unresolved: "domain" });
+    const cites = [{ cite: { doc: "L6", quote: "RETURN closes an ACTIVE Loan" } }];
+    const loanFound = { id: "loan_found", expr: { isNotNull: [{ ref: "loan_id" }] } as Expr, cites };
+    const notFound = { when: { fails: "loan_found" }, result: "REJECTED", cites };
+    ret.conditions.unshift(loanFound);
+    ret.decision!.rows.unshift(notFound);
+    const stores = baseStores();
+    stores.loans.push({ ...LOAN, id: "LN-2", branch_id: "BR-2" });
+    const rejected: Reported = { result: "REJECTED" };
+    for (const loan_id of ["LN-9", "LN-2"]) {
+      const c = baseCase({ reported: rejected, expected: rejected }, soft, stores);
+      c.inputs = { ...c.inputs, bindings: { loan_id } };
+      expect(one(c, soft)).toStrictEqual({ id: "inv-1", action: "RETURN", status: "match", result: rejected, row: 0 });
+    }
   });
 
   it("the INVALID_BINDING reason is part of equality", () => {
