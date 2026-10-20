@@ -714,6 +714,104 @@ describe("set-of-ref parameters bind each element", () => {
   });
 });
 
+describe("unresolved: domain binds an id that does not resolve to null", () => {
+  const member = { type: { ref: "Member" }, unresolved: "domain" } as const;
+  const found = { id: "found", expr: { isNotNull: [ref("member")] } };
+  const soft = {
+    ...base,
+    actionTypes: {
+      ...base.actionTypes,
+      arrive: {
+        parameters: { member, book: { type: { ref: "Book" } } },
+        permission: { keys: ["loan.create"] },
+        conditions: [found, { id: "good", expr: eq(ref("member.state"), lit("GOOD")) }],
+        decision: { hitPolicy: "first", rows: [{ when: { fails: "found" }, result: "NOTED" }, { when: { fails: "good" }, result: "REFUSED" }], otherwise: { result: "LENT" } },
+      },
+      arriveSet: { parameters: { others: { type: { set: { ref: "Member" } }, unresolved: "domain" } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
+      arriveOpt: { parameters: { member: { type: { ref: "Member" }, optional: true, unresolved: "domain" } }, permission: { none: "anyone" }, conditions: [], decision: otherwiseNoted },
+      arriveProj: {
+        parameters: { member: { type: { ref: "Member" }, projectedFrom: ["key"], unresolved: "domain" }, key: { type: "id" } },
+        permission: { none: "anyone" },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+      arriveNav: {
+        parameters: { member },
+        permission: { none: "anyone" },
+        conditions: [{ id: "no_loans", expr: none("l", nav("member", "loan_member", "reverse")) }],
+        decision: { hitPolicy: "first", rows: [{ when: { passes: "no_loans" }, result: "NOTED" }], otherwise: { result: "LENT" } },
+      },
+      arriveRaw: {
+        parameters: { member },
+        permission: { none: "anyone" },
+        conditions: [{ id: "is_nope", expr: eq(ref("member"), lit("nope")) }, found],
+        decision: {
+          hitPolicy: "first",
+          rows: [{ when: { passes: "is_nope" }, result: "HELD", next: { actions: ["confirm"] } }, { when: { fails: "found" }, result: "NOTED" }],
+          otherwise: { result: "LENT" },
+        },
+      },
+      arriveN: {
+        parameters: { member, n: { type: "integer" } },
+        permission: { none: "anyone" },
+        conditions: [{ id: "c", expr: and(isNull(ref("member")), eq(ref("n"), lit(1))) }],
+        decision: { hitPolicy: "first", rows: [{ when: { passes: "c" }, result: "NOTED" }], otherwise: { result: "LENT" } },
+      },
+    },
+  } as Stage1Ontology;
+  const at = (action: string, bindings: Bindings, actor: Actor = staff, scope: string | null = "b1", ont: Stage1Ontology = soft, snap: Snapshot = snapshot) =>
+    run(action, bindings, actor, scope, ont, snap);
+  const noted = { layer: "domain", result: "NOTED", class: "recorded", row: 0 };
+  const invalid = (param: string, reason: string) => ({ layer: "invocation", result: "INVALID_BINDING", param, reason });
+
+  it("an absent id binds to null, and the row that tests it gives the result", () => expect(at("arrive", { member: "nope", book: "bk1" })).toEqual(noted));
+  it("an id that exists only in another branch binds to null too, not SCOPE_DENIED", () => expect(at("arrive", { member: "m3", book: "bk1" })).toEqual(noted));
+  it("externalResult is the same for an absent id and an id of another branch", () => {
+    const absent = at("arrive", { member: "nope", book: "bk1" });
+    const other = at("arrive", { member: "m3", book: "bk1" });
+    if (absent.layer === "indeterminate" || other.layer === "indeterminate") throw new Error("unexpected INDETERMINATE");
+    expect(externalResult(absent)).toEqual(externalResult(other));
+    expect(externalResult(other)).toEqual({ result: "NOTED" });
+  });
+  it("an id that exists only as a Book binds to null", () => expect(at("arrive", { member: "bk1", book: "bk1" })).toEqual(noted));
+  it("a visible id binds as before", () => {
+    expect(at("arrive", { member: "m2", book: "bk1" })).toEqual({ layer: "domain", result: "LENT", class: "applied", row: "otherwise" });
+    expect(at("arrive", { member: "m4", book: "bk1" })).toEqual({ layer: "domain", result: "REFUSED", class: "rejected", row: 1 });
+  });
+  it("the same id in two branches binds to the row of the scope", () => {
+    expect(at("arrive", { member: "m1", book: "bk1" })).toEqual({ layer: "domain", result: "LENT", class: "applied", row: "otherwise" });
+    expect(at("arrive", { member: "m1", book: "bk2" }, staff, "b2")).toEqual({ layer: "domain", result: "REFUSED", class: "rejected", row: 1 });
+  });
+  it("the shape step does not change", () => {
+    expect(at("arrive", { book: "bk1" })).toEqual(invalid("member", "missing"));
+    expect(at("arrive", { member: null, book: "bk1" })).toEqual(invalid("member", "missing"));
+    expect(at("arrive", { member: "", book: "bk1" })).toEqual(invalid("member", "type"));
+    expect(at("arrive", { member: 1, book: "bk1" })).toEqual(invalid("member", "type"));
+    expect(at("arrive", { member: "m2", book: "bk1", x: 1 })).toEqual(invalid("x", "unknown_param"));
+  });
+  it("the parameters after it are still checked in declaration order", () => {
+    expect(at("arrive", { member: "nope", book: "nope" })).toEqual(invalid("book", "not_found"));
+    expect(at("arrive", { member: "nope", book: "bk2" })).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "book" });
+  });
+  it("permission comes first", () => expect(at("arrive", { member: "nope", book: "bk1" }, nobody)).toEqual({ layer: "invocation", result: "PERMISSION_DENIED" }));
+  it("decide ignores the key on a set, an optional or a projected parameter", () => {
+    expect(at("arriveSet", { others: ["nope"] })).toEqual(invalid("others", "not_found"));
+    expect(at("arriveOpt", { member: "nope" })).toEqual(invalid("member", "not_found"));
+    expect(at("arriveOpt", { member: null })).toEqual({ layer: "domain", result: "NOTED", class: "recorded", row: "otherwise" });
+    expect(at("arriveProj", { member: "m3", key: "k" })).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "member" });
+    expect(at("arriveProj", { member: null, key: "k" })).toEqual(invalid("member", "not_found"));
+  });
+  it("without a declared scope an absent id binds to null", () => {
+    // Without scope, ids must be unique in the type: the snapshot keeps one m1.
+    const snap: Snapshot = { objects: { ...snapshot.objects, Member: snapshot.objects.Member.filter((m) => m.branch_id === "b1") } };
+    expect(at("arrive", { member: "nope", book: "bk1" }, staff, null, { ...soft, scope: undefined }, snap)).toEqual(noted);
+  });
+  it("a navigation from the null binding is empty, so none is T (vacuous truth)", () => expect(at("arriveNav", { member: "nope" })).toEqual(noted));
+  it("{ref: member} reads null, not the id that the caller gave", () => expect(at("arriveRaw", { member: "nope" })).toEqual({ ...noted, row: 1 }));
+  it("the other parameters keep their bindings, also a binding that is not enumerable", () =>
+    expect(at("arriveN", Object.defineProperty({ member: "nope" }, "n", { value: 1, enumerable: false }))).toEqual(noted));
+});
+
 describe("an incomplete snapshot throws", () => {
   it("a tenant row without its scope field", () => {
     const snap: Snapshot = { objects: { ...snapshot.objects, Member: [...snapshot.objects.Member!, { id: "m8", person_id: "p1", state: "GOOD" }] } };

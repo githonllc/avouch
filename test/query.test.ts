@@ -103,7 +103,7 @@ describe("queryAction", () => {
     expect(a.creates).toEqual(["Loan"]);
     expect(a.emits).toEqual(["loan.created"]);
     expect(a.edits).toEqual([{ prop: "Book.state", cite: null }, { prop: "Member.open_loans", cite: null }]);
-    expect(a.parameters[0]).toEqual({ name: "member_id", type: { ref: "Member" }, optional: false, values: null, projectedFrom: null, cite: cite("L6", "BORROW takes member_id") });
+    expect(a.parameters[0]).toEqual({ name: "member_id", type: { ref: "Member" }, optional: false, values: null, projectedFrom: null, unresolved: null, cite: cite("L6", "BORROW takes member_id") });
     expect(a.linkEffects.find((l) => l.link === "member_person")).toEqual({
       link: "member_person", kind: "none", text: "BORROW does not change the Person of a Member", cite: null, scenarios: [],
     });
@@ -121,6 +121,11 @@ describe("queryAction", () => {
       },
     ]);
     expect(queryAction(ont, "RETURN")!.parameters.find((p) => p.name === "return_condition")!.values).toEqual(["GOOD", "DAMAGED"]);
+  });
+
+  it("gives unresolved of a ref parameter", () => {
+    const ont = patched([{ op: "add", path: "/actionTypes/BORROW/parameters/member_id/unresolved", value: "domain" }]);
+    expect(queryAction(ont, "BORROW")!.parameters[0]).toMatchObject({ name: "member_id", unresolved: "domain" });
   });
 
   it("gives the fields of a projected parameter", () => {

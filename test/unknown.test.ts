@@ -121,6 +121,17 @@ describe("nullability", () => {
     }
   });
 
+  it("a ref with unresolved: domain may be null, and so may its properties; where it is ignored it is not", () => {
+    const soft: Op = { op: "add", path: "/actionTypes/BORROW/parameters/book_id/unresolved", value: "domain" };
+    const o = applyPatch(ont, [soft]);
+    expect(mayNullIn(o, facts, BORROW)("book_id")).toBe(true);
+    expect(mayNullIn(o, facts, BORROW)("book_id.state")).toBe(true);
+    expect(mayNullIn(ont, facts, BORROW)("book_id")).toBe(false);
+    expect(mayNullIn(ont, facts, BORROW)("book_id.state")).toBe(false);
+    const projected = applyPatch(ont, [soft, { op: "add", path: "/actionTypes/BORROW/parameters/book_id/projectedFrom", value: ["member_id"] }]);
+    expect(mayNullIn(projected, facts, BORROW)("book_id")).toBe(false);
+  });
+
   it("unknown nullability (no field list, or a field not listed) is analysed as may-be-null", () => {
     const want = [["R12", "quantifier_absorbs_unknown", "RETURN:returned_late:$.exists"]];
     const noList: SourceFacts = { ...facts, fieldList: (a, ot) => (ot === "Loan" ? null : facts.fieldList(a, ot)) };

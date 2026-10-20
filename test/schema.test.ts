@@ -189,4 +189,23 @@ describe("ontology JSON Schema", () => {
     expect(rejects((p) => (p.type = "id"))).toBe(false);
     expect(rejects((p) => (p.type = { set: { ref: "Member" } }))).toBe(false);
   });
+
+  it("(j) unresolved: domain on a required scalar ref parameter validates; other values, other types, optional or projectedFrom are rejected", () => {
+    const o = structuredClone(ontology);
+    o.actionTypes.BORROW.parameters.extra = { type: { ref: "Member" }, unresolved: "domain", cite: { doc: "L6", quote: "BORROW takes member_id" } };
+    expect(validate(o)).toBe(true);
+    const rejects = (mutate: (x: any) => void) => {
+      const x = structuredClone(o);
+      mutate(x.actionTypes.BORROW.parameters.extra);
+      return validate(x);
+    };
+    expect(rejects((p) => (p.unresolved = "null"))).toBe(false);
+    expect(rejects((p) => (p.unresolved = null))).toBe(false);
+    expect(rejects((p) => (p.unresolved = true))).toBe(false);
+    expect(rejects((p) => delete p.type)).toBe(false);
+    expect(rejects((p) => (p.type = "id"))).toBe(false);
+    expect(rejects((p) => (p.type = { set: { ref: "Member" } }))).toBe(false);
+    expect(rejects((p) => (p.optional = true))).toBe(false);
+    expect(rejects((p) => (p.projectedFrom = ["source"]))).toBe(false);
+  });
 });

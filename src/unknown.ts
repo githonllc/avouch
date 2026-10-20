@@ -4,7 +4,7 @@
 // Callers analyse only expressions that type-check. The evaluator throws NoExpression when it reaches a derived property
 // without an expression (the absent-expression rule); absorbingQuantifiers skips such a quantifier body.
 import type { SourceFacts } from "./contract.js";
-import { navType, objectBinding, own, type Expr, type ExprContext, type Quantifier, type Stage1Ontology } from "./expr.js";
+import { navType, objectBinding, own, resolvesInDomain, type Expr, type ExprContext, type Quantifier, type Stage1Ontology } from "./expr.js";
 
 export const MAX_NULLABLE_REFS = 8;
 export type Truth = "T" | "F" | "U";
@@ -131,7 +131,7 @@ function nullability(ont: Stage1Ontology, facts: SourceFacts): (ctx: ExprContext
     const local = head === "self" || Object.hasOwn(ctx.locals, head);
     const param = local || ctx.action === undefined ? undefined : own(ont.actionTypes[ctx.action]?.parameters, head);
     if (!local && param === undefined) return true; // not reachable after the type check; conservative
-    if (param?.optional === true) return true; // an optional parameter, and every property read through it
+    if (param !== undefined && (param.optional === true || resolvesInDomain(param))) return true; // an optional parameter or a ref with unresolved: domain, and every property read through it
     if (prop === undefined) return false; // an object binding, or a required parameter
     const o = objectBinding(ont, head, ctx);
     return o === undefined || fields(o)?.get(prop)?.nullable !== false; // non-null only when the field list says so
@@ -140,7 +140,7 @@ function nullability(ont: Stage1Ontology, facts: SourceFacts): (ctx: ExprContext
 
 // Nullability of the paths in ctx. A field is non-null only when its field list says so; a field that is not listed,
 // or an object without a field list, has unknown nullability and may be null. An optional parameter may be null; so
-// may every property read through it.
+// may every property read through it. A ref parameter with `unresolved: domain` is the same.
 export function mayNullIn(ont: Stage1Ontology, facts: SourceFacts, ctx: ExprContext): MayNull {
   return nullability(ont, facts)(ctx);
 }

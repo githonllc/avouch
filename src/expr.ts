@@ -55,7 +55,7 @@ export type DecisionRow = { when: { passes: string } | { fails: string }; result
 export type Decision = { hitPolicy: "first"; rows: DecisionRow[]; otherwise?: { result: string; next?: unknown } };
 export type Condition = { id: string; expr?: Expr; unspecified?: string };
 export type ActionType = {
-  parameters?: Record<string, { type?: Type; optional?: true; values?: string[]; projectedFrom?: string[] }>;
+  parameters?: Record<string, { type?: Type; optional?: true; values?: string[]; projectedFrom?: string[]; unresolved?: "domain" }>;
   permission: Permission;
   conditions: Condition[];
   decision?: Decision;
@@ -65,6 +65,11 @@ export type ActionType = {
 export function projectedFields(p: { type?: unknown; projectedFrom?: unknown }): string[] | null {
   const fs = Array.isArray(p.projectedFrom) ? [...new Set(p.projectedFrom.filter((f): f is string => typeof f === "string"))] : [];
   return isObj(p.type) && typeof p.type.ref === "string" && fs.length > 0 ? fs : null;
+}
+// Whether an id of p that does not resolve binds to null (`unresolved: domain`): only on a required scalar {ref: T}
+// parameter (no optional key) without projectedFrom. On any other parameter the key has no effect, and R1 reports it.
+export function resolvesInDomain(p: { type?: unknown; optional?: unknown; projectedFrom?: unknown; unresolved?: unknown }): boolean {
+  return p.unresolved === "domain" && isObj(p.type) && typeof p.type.ref === "string" && !("set" in p.type) && p.optional === undefined && p.projectedFrom === undefined;
 }
 
 // Only the keys evaluation reads; other keys (cite, cites, ...) may be present and are ignored.

@@ -488,6 +488,11 @@ ofv:projectedFrom a rdf:Property ;
   rdfs:comment "Request fields (an alternate key; each a declared parameter of the same action that is not projected) that the project's projection resolves to this ref parameter. An optional projected parameter is always given: null when a field is missing or null, or when no object has the key. A required one is omitted when a field is missing or null, and null when no object has the key. YAML: actionTypes.<ID>.parameters.<n>.projectedFrom[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
+ofv:unresolved a rdf:Property ;
+  rdfs:label "unresolved" ;
+  rdfs:comment "How a ref parameter binds an id that does not resolve. The only value is domain: the id binds to null, and a decision row tests it. Only on a required scalar ref parameter without ofv:projectedFrom. YAML: actionTypes.<ID>.parameters.<n>.unresolved" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
 ofv:principals a rdf:Property ;
   rdfs:label "principals" ;
   rdfs:comment "Actor kinds that one permission alternative admits, with its own citation; an actor of another kind is denied. YAML: actionTypes.<ID>.permission.principals, actionTypes.<ID>.permission.any_of[].principals" ;
