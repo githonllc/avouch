@@ -142,7 +142,7 @@ Exit code 0 means that each case gave a row, also a `mismatch` or a `cannot_reco
 
 The unit of coverage is the decision row. Each row of a decision table and its `otherwise` is one unit. A unit has the name `<action>:rows.<i>` (`i` from 0) or `<action>:otherwise`, as in the R12 keys. A unit is verified when a `match` row has its action, its `row` and the result of that row. A `mismatch` row does not verify its unit. An action without a decision table has no units; it is printed as `no_table` and does not change the result. The command checks every action of the ontology.
 
-Verified means: for one case, `decide` reached this row, and the runtime result and the expected result are the same as the result of `decide`. The runtime does not report which row it ran. A case without an expected result never verifies a unit: `reconcile` gives `expectation_missing` for it, and the gate prints it as `unasserted`. An action with `permission: unknown` never reaches its decision table in `decide`, so all its units stay as `uncovered` entries until the permission is written.
+Verified means: for one case, `decide` reached this row, and the runtime result and the expected result are the same as the result of `decide`. The runtime does not report which row it ran. A case without an expected result never verifies a unit: `reconcile` gives `expectation_missing` for it, and the gate prints it as `unasserted`. When the runtime result of such a case is a result that the action cannot give, `reconcile` gives `runtime_unmapped` instead, and the case fails the gate. An action with `permission: unknown` never reaches its decision table in `decide`, so all its units stay as `uncovered` entries until the permission is written.
 
 A gap is a condition that a decision row names and that is declared without an expression (`unspecified`). `decide` stops at the first row that names a gap, so the units from that row to `otherwise` are blocked: they are printed as `blocked` and are not reported as uncovered. Each gap needs an exemption with a reason in the baseline. When a gap gets an expression, the units it blocked become ordinary units. The change that adds the expression must also add cases or `uncovered` entries for them.
 
@@ -181,8 +181,6 @@ The gate fails (exit code 1) when:
 | `check` | with `--adapter`, the same check as `avouch check` fails |
 
 The reasons `envelope`, `expectation_missing` and `indeterminate` with another detail do not fail the gate. A replay is not a decision; a case without an expectation states nothing to compare. An `indeterminate` result does not fail the gate, except `no_row_matched`; the units that it leaves unverified stay `uncovered` or `blocked`, so the gate still sees them. `no_row_matched` means that no row applies and the table has no `otherwise`.
-
-Known limit: when a case has no expected result, `reconcile` gives `expectation_missing` before it checks the runtime result. So the gate does not see a runtime result that the action cannot give (`runtime_unmapped`) in such a case.
 
 Exit code 0 means the gate passes. 1 means it fails. 2 means invalid arguments (also a repeated option), a file or parse error, an ontology without an `actionTypes` mapping, or a rows or baseline file with a wrong shape. Without `--json`, the command prints one `FAIL` line for each failure, `INFO` lines (`check`, `blocked`, `no_table`, `unasserted`), and a summary line that starts with `PASS` or `FAIL`. `--json` prints `{avouchGate: 1, gate: "verify", check, result}`.
 
