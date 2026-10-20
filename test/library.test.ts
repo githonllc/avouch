@@ -641,6 +641,28 @@ describe("toy library project", () => {
     it("(f) without the config an absent field is no violation", () => expect(check(ont, facts()).violations).toEqual([]));
   });
 
+  describe("R3 by-iff-edits when a machine's source facts are unusable", () => {
+    const noBy = (r: ReturnType<typeof check>) => r.violations.filter((v) => v.rule === "R3" && v.msg.includes("but is in no")).map((v) => v.key);
+    const brokenDoc = () => applyPatch(ont, [{ op: "replace", path: "/stateMachines/Book/doc", value: "L99" }]);
+    it("(a) a doc anchor the source lacks: the section violation shows, actions in by are not reported", () => {
+      const r = check(brokenDoc(), facts());
+      expect(r.violations.some((v) => v.rule === "R3" && v.key === "stateMachines.Book")).toBe(true);
+      expect(noBy(r)).toEqual([]);
+    });
+    it("(b) no stateMachines fact for the object: actions in by are not reported", () => {
+      const f = facts();
+      f.stateMachines!.delete("Book");
+      const r = check(ont, f);
+      expect(r.violations.some((v) => v.rule === "R3" && v.key === "stateMachines.Book")).toBe(true);
+      expect(noBy(r)).toEqual([]);
+    });
+    it("(c) on the broken machine, an action that edits the state but is not in by is still reported", () => {
+      const o = brokenDoc();
+      o.actionTypes.EXTRA = structuredClone(o.actionTypes.BORROW);
+      expect(noBy(check(o, facts()))).toEqual(["EXTRA:Book.state"]);
+    });
+  });
+
   describe("per-machine state property (stateMachines.<Object>.property)", () => {
     const triples = (r: ReturnType<typeof check>) => r.violations.map((x) => [x.rule, x.kind, x.key]);
     const withProp = (o: unknown, props: Record<string, unknown>) => {

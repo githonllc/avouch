@@ -365,6 +365,12 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       if (objType(name) && (!isObj(stateMachines[name]) || stateMachines[name].doc !== fact.source.anchor))
         v("R3", `stateMachines.${name}`, `${fact.source.anchor} has a state machine for ${name}; stateMachines.${name}.doc must be ${fact.source.anchor}`);
   const byCmds = new Map<string, Set<string>>(); // object -> commands named in `by`
+  // read from the ontology alone, so a machine whose section or fact is unusable does not turn every state-editing action into a violation
+  for (const [name, st] of Object.entries(stateMachines))
+    if (objType(name) && isObj(st) && Array.isArray(st.transitions))
+      for (const t of st.transitions)
+        if (isObj(t) && Array.isArray(t.by))
+          for (const c of t.by) if (isStr(c)) (byCmds.get(name) ?? byCmds.set(name, new Set()).get(name)!).add(c);
   for (const [name, o] of Object.entries(objects)) {
     if (!isObj(o) || !own(stateMachines, name)) continue;
     const st = stateMachines[name];
@@ -402,8 +408,6 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const want = triggers?.get(name)?.get(e)?.value ?? new Set<string>();
       for (const c of t.by) {
         if (!own(commands, c)) v("R3", `${k}.${e}`, `by ${c} is not a defined command`);
-        if (!byCmds.has(name)) byCmds.set(name, new Set());
-        byCmds.get(name)!.add(c);
         if (triggers !== undefined && !want.has(c)) v("R3", `${name}:${e}:${c}`, `no source transition trigger binds ${c} to ${name} ${t.from} → ${t.to}`, "transition_binding_unsupported");
       }
       if (triggers !== undefined)
