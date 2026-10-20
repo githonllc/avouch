@@ -621,4 +621,62 @@ describe("toy library project", () => {
     });
     it("(f) without the config an absent field is no violation", () => expect(check(ont, facts()).violations).toEqual([]));
   });
+
+  describe("per-machine state property (stateMachines.<Object>.property)", () => {
+    const triples = (r: ReturnType<typeof check>) => r.violations.map((x) => [x.rule, x.kind, x.key]);
+    const withProp = (o: unknown, props: Record<string, unknown>) => {
+      const c = structuredClone(o) as any;
+      for (const [n, p] of Object.entries(props)) c.stateMachines[n].property = p;
+      return c;
+    };
+    const statusDefault = { ...config, stateProperty: "status" } as FormatConfig;
+    it("(a) property equal to the default is clean (backward compatible)", () =>
+      expect(check(withProp(ont, { Book: "state", Loan: "state" }), facts()).violations).toEqual([]));
+    it("(b) profile default status: without property R3 fails on every machine", () =>
+      expect(triples(check(ont, facts(statusDefault))).sort()).toEqual([
+        ["R3", "generic", "BORROW:Book.status"],
+        ["R3", "generic", "RETURN:Book.status"],
+        ["R3", "generic", "RETURN:Loan.status"],
+      ]));
+    it("(c) profile default status: property state on both machines is clean", () =>
+      expect(check(withProp(ont, { Book: "state", Loan: "state" }), facts(statusDefault)).violations).toEqual([]));
+    it("(d) property on one machine only: the other machine keeps the default", () =>
+      expect(check(withProp(ont, { Book: "state" }), facts(statusDefault)).violations).toEqual([
+        { rule: "R3", kind: "generic", key: "RETURN:Loan.status", msg: "RETURN is in a Loan transition's by but does not edit Loan.status" },
+      ]));
+    it("(e) an object whose state column is status passes R3 with property status; Loan is unchanged", () => {
+      const o = structuredClone(ont);
+      o.objectTypes.Book.properties.status = o.objectTypes.Book.properties.state;
+      delete o.objectTypes.Book.properties.state;
+      o.actionTypes.BORROW.edits[0] = "Book.status";
+      o.actionTypes.RETURN.edits[2] = "Book.status";
+      // the rename also fails R1, R2 and R7 (the toy source names the column state); only R3 is asserted
+      const r3 = (x: unknown) => check(x, facts()).violations.filter((v) => v.rule === "R3").map((v) => v.key);
+      expect(r3(o)).toEqual(["BORROW:Book.state", "RETURN:Book.state"]);
+      expect(r3(withProp(o, { Book: "status" }))).toEqual([]);
+    });
+    it("(f) R1: property must be a non-empty string", () => {
+      for (const bad of ["", 7, null])
+        expect(check(withProp(ont, { Book: bad }), facts()).violations).toEqual([
+          { rule: "R1", kind: "generic", key: "stateMachines.Book.property", msg: "must be a non-empty string" },
+        ]);
+    });
+    it("(g) R1: property must be a declared property of the object", () => {
+      const r = check(withProp(ont, { Book: "status" }), facts());
+      expect(r.violations).toContainEqual({ rule: "R1", kind: "generic", key: "stateMachines.Book.property", msg: "status does not resolve to a declared property of Book" });
+      expect(triples(r).filter(([rule]) => rule === "R1")).toEqual([["R1", "generic", "stateMachines.Book.property"]]);
+    });
+    it("(h) canonical_values: the state check follows the machine's property", () => {
+      const o = structuredClone(ont);
+      o.objectTypes.Book.properties.status = {
+        class: "policy",
+        cite: { doc: "L1", quote: "The state of a Book is AVAILABLE, ON_LOAN or WITHDRAWN." },
+        canonical_values: { values: ["AVAILABLE", "LOST"], cite: { doc: "L1", quote: "The state of a Book is AVAILABLE, ON_LOAN or WITHDRAWN." } },
+      };
+      const key = "objectTypes.Book.properties.status.canonical_values";
+      const r1 = (x: unknown) => check(x, facts()).violations.filter((v) => v.rule === "R1" && v.key === key).map((v) => v.msg);
+      expect(r1(o)).toEqual([]);
+      expect(r1(withProp(o, { Book: "status" }))).toEqual(["LOST is not a Book state"]);
+    });
+  });
 });

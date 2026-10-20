@@ -315,7 +315,7 @@
             "values",
             "cite"
           ],
-          "description": "Values of a NON-canonical property that the source explicitly marks as canonical. Extension (R1, R4); no Palantir analog. R1: needs values[] (non-empty) and cite; not allowed when class is canonical; on the configured state property of an object with `stateMachines`, each value must be a state of that object. R4: each value must occur as a whole identifier in this cite's quote (else R4 `canonical_value_unsupported`); a condition value read `{prop, values}` of this property passes R4 only if all its values are in this list.",
+          "description": "Values of a NON-canonical property that the source explicitly marks as canonical. Extension (R1, R4); no Palantir analog. R1: needs values[] (non-empty) and cite; not allowed when class is canonical; on the state property of an object with `stateMachines` (`stateMachines.<Object>.property`, default the configured state property), each value must be a state of that object. R4: each value must occur as a whole identifier in this cite's quote (else R4 `canonical_value_unsupported`); a condition value read `{prop, values}` of this property passes R4 only if all its values are in this list.",
           "properties": {
             "values": {
               "type": "array",
@@ -409,11 +409,16 @@
         "terminal",
         "transitions"
       ],
-      "description": "State machine of the object. Extension (R1, R3); no Palantir analog. R3 compares it with the machine the adapter extracts from the source: the state set, the initial state and the transition set must be equal; `terminal` must equal the source states that have no outgoing edge; every source state must be reachable from the initial state. Also R3: an action appears in some `by` of this object's transitions if and only if its `edits` contains `<Object>.<state property>`.",
+      "description": "State machine of the object. Extension (R1, R3); no Palantir analog. R3 compares it with the machine the adapter extracts from the source: the state set, the initial state and the transition set must be equal; `terminal` must equal the source states that have no outgoing edge; every source state must be reachable from the initial state. Also R3: an action appears in some `by` of this object's transitions if and only if its `edits` contains `<Object>.<state property>`. The state property is `property` when it is given, else the configured state property (profile `stateProperty`, default `state`).",
       "properties": {
         "doc": {
           "$ref": "#/$defs/anchor",
           "description": "The anchor of the source section that holds the state machine (R3: must be exactly the anchor the adapter reports for this object)."
+        },
+        "property": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional. The property of the object that holds its state. Absent: the configured state property (profile `stateProperty`, default `state`). Extension (R1, R3); no Palantir analog. R1: must be a non-empty string and a declared property of the object (else R1, key `stateMachines.<Name>.property`). R1 and R3 use it in place of the configured state property for this object only: the `canonical_values` state check, and `by` if and only if `edits` contains `<Object>.<property>`."
         },
         "initial": {
           "type": "string",

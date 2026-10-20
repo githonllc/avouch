@@ -394,7 +394,8 @@ describe("queryObject", () => {
     expect(loan.readers).toContainEqual({ action: "BORROW", condition: "returns_in_good_condition", props: ["Loan.return_condition"] });
     expect(loan.readers).toContainEqual({ action: "RETURN", condition: "loan_active", props: ["Loan.state"] });
     expect(loan.links).toContainEqual({ id: "loan_book", end: "from", other: "Book", cardinality: "N:1", via: "book_id" });
-    expect(loan.stateMachine).toEqual({ doc: "L5", initial: "ACTIVE", terminal: ["RETURNED"], transitions: [{ from: "ACTIVE", to: "RETURNED", by: ["RETURN"], outOfScope: null }] });
+    expect(loan.stateMachine).toEqual({ doc: "L5", property: null, initial: "ACTIVE", terminal: ["RETURNED"], transitions: [{ from: "ACTIVE", to: "RETURNED", by: ["RETURN"], outOfScope: null }] });
+    expect(queryObject(patched([{ op: "add", path: "/stateMachines/Book/property", value: "state" }]), "Book")!.stateMachine!.property).toBe("state");
     expect(queryObject(clean(), "Person")!.scope).toBe("global");
     expect(queryObject(clean(), "Branch")!.scope).toBe("root");
     const member = queryObject(clean(), "Member")!;

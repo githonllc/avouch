@@ -137,6 +137,11 @@ ofv:stateMachines a rdf:Property ;
   rdfs:comment "State machine of an object type. YAML: stateMachines.<name>" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
+ofv:property a rdf:Property ;
+  rdfs:label "property" ;
+  rdfs:comment "Property of the object that holds its state; default the configured state property. YAML: stateMachines.<name>.property" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
 ofv:initial a rdf:Property ;
   rdfs:label "initial" ;
   rdfs:comment "Initial state. YAML: stateMachines.<name>.initial" ;

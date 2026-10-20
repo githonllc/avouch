@@ -84,6 +84,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   const stateMachines: Record<string, Any> = isObj(ont.stateMachines) ? ont.stateMachines : {};
   if (ont.stateMachines !== undefined && !isObj(ont.stateMachines)) v("R1", "stateMachines", "must be a mapping objectType -> state machine");
   for (const n of Object.keys(stateMachines)) if (!objType(n)) v("R1", `stateMachines.${n}`, "not a declared object type");
+  // the state property of an object: its machine's `property` when that is a non-empty string, else the profile default
+  const stateProp = (o: string): string => (own(stateMachines, o) && isObj(stateMachines[o]) && isStr(stateMachines[o].property) ? stateMachines[o].property : config.stateProperty);
   const gaps: Any[] = arr(ont.knownSourceGaps);
   if (!Array.isArray(ont.knownSourceGaps)) v("R1", "knownSourceGaps", "missing (use [])");
 
@@ -109,7 +111,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
         const states = isObj(sm) ? new Set([sm.initial, ...arr(sm.terminal), ...arr(sm.transitions).flatMap((t: Any) => [t?.from, t?.to])]) : null;
         if (!isObj(cv) || !Array.isArray(cv.values) || cv.values.length === 0 || !isObj(cv.cite)) v("R1", `${p}.properties.${pn}.canonical_values`, "needs values[] and cite");
         else if ((pr as Any).class === "canonical") v("R1", `${p}.properties.${pn}.canonical_values`, "only meaningful on a non-canonical property");
-        else if (pn === config.stateProperty && states) for (const x of cv.values) if (!states.has(x)) v("R1", `${p}.properties.${pn}.canonical_values`, `${x} is not a ${name} state`);
+        else if (pn === stateProp(name) && states) for (const x of cv.values) if (!states.has(x)) v("R1", `${p}.properties.${pn}.canonical_values`, `${x} is not a ${name} state`);
       }
       const rf = isObj(pr) ? (pr as Any).materializedFrom : undefined;
       if (rf !== undefined && (!isObj(rf) || !Array.isArray(rf.reads) || rf.reads.length === 0 || !Array.isArray(rf.cites) || rf.cites.length === 0 || !rf.cites.every((c: Any) => isObj(c) && isObj(c.cite))))
@@ -122,6 +124,11 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     const cls = objects[o].properties[p].class;
     return CLASSES.includes(cls) ? cls : null; // a property without a valid class does not resolve (R1 reports it)
   };
+  for (const [n, sm] of Object.entries(stateMachines)) {
+    if (!objType(n) || !isObj(sm) || sm.property === undefined) continue; // an undeclared object or a machine that is not a mapping is R1 above / below
+    if (!isStr(sm.property)) v("R1", `stateMachines.${n}.property`, "must be a non-empty string");
+    else if (propClass(`${n}.${sm.property}`) === null) v("R1", `stateMachines.${n}.property`, `${sm.property} does not resolve to a declared property of ${n}`);
+  }
   const linkIds = new Set<string>();
   for (const [i, l] of links.entries()) {
     const p = `linkTypes[${i}]`;
@@ -426,10 +433,10 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   if (smFacts !== undefined)
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c)) continue;
-    const stateEdits = new Set(arr(c.edits).filter((e: string) => e.endsWith(`.${config.stateProperty}`)).map((e: string) => e.split(".")[0]));
+    const stateEdits = new Set(arr(c.edits).filter((e: string) => e.endsWith(`.${stateProp(e.split(".")[0])}`)).map((e: string) => e.split(".")[0]));
     for (const o of stateEdits)
-      if (objType(o) && isObj(stateMachines[o]) && !byCmds.get(o)?.has(cid)) v("R3", `${cid}:${o}.${config.stateProperty}`, `${cid} edits ${o}.${config.stateProperty} but is in no ${o} transition's by`);
-    for (const [o, cs] of byCmds) if (cs.has(cid) && !stateEdits.has(o)) v("R3", `${cid}:${o}.${config.stateProperty}`, `${cid} is in a ${o} transition's by but does not edit ${o}.${config.stateProperty}`);
+      if (objType(o) && isObj(stateMachines[o]) && !byCmds.get(o)?.has(cid)) v("R3", `${cid}:${o}.${stateProp(o)}`, `${cid} edits ${o}.${stateProp(o)} but is in no ${o} transition's by`);
+    for (const [o, cs] of byCmds) if (cs.has(cid) && !stateEdits.has(o)) v("R3", `${cid}:${o}.${stateProp(o)}`, `${cid} is in a ${o} transition's by but does not edit ${o}.${stateProp(o)}`);
   }
 
   // ------------------------------------------------------------------------------------------ R4
