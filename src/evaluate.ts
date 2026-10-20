@@ -322,7 +322,8 @@ function predicate(s: Session, f: Frame, e: Expr): TV {
 
 const topFrame = (env: Env): Frame => ({ action: env.action, vars: {} });
 
-// Value expressions. `bindings` are taken as having passed decide's shape and binding layers.
+// Value expressions. `bindings` are taken as having passed decide's shape and binding layers: a ref with
+// `unresolved: domain` whose id does not resolve is passed as null, as decide binds it.
 export function evalValue(ont: Stage1Ontology, expr: Expr, env: Env): Value {
   return value(new Session(ont, env), topFrame(env), expr);
 }
