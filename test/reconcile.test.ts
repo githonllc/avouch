@@ -262,8 +262,35 @@ describe("reconcile: results that cannot be reconciled", () => {
     expect(one(baseCase({ reported: { result: "SCOPE_DENIED" } }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
   });
 
-  it("a reported SCOPE_DENIED without an expectation is expectation_missing: step 3 comes before step 6", () => {
-    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" }, expected: null }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_missing" });
+  it("a reported SCOPE_DENIED without an expectation is runtime_unmapped: the runtime check comes before the expectation check", () => {
+    expect(one(baseCase({ reported: { result: "SCOPE_DENIED" }, expected: null }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "SCOPE_DENIED" });
+  });
+
+  it("a reported result that the action cannot give is runtime_unmapped also without an expectation", () => {
+    expect(one(baseCase({ reported: { result: "BORROWED" }, expected: null }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "BORROWED" });
+  });
+
+  it("a reported result that the action cannot give is runtime_unmapped also without a snapshot", () => {
+    expect(one(baseCase({ reported: { result: "BORROWED" }, snapshot: null }))).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "BORROWED" });
+  });
+
+  it("a reported result that the action cannot give is runtime_unmapped also when decide throws", () => {
+    const c = baseCase({ reported: { result: "BORROWED" } });
+    c.inputs = { ...c.inputs, scope: null };
+    expect(one(c)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "runtime_unmapped", detail: "BORROWED" });
+  });
+
+  it("an action that the ontology does not have is not checked for unmapped results: decide reports it", () => {
+    const row = one(baseCase({ action: "NOPE", reported: { result: "BORROWED" } }));
+    expect(row).toMatchObject({ reason: "evaluator_error" });
+    expect(row).toHaveProperty("detail", expect.stringContaining("unknown action"));
+    expect(one(baseCase({ action: "NOPE", reported: { result: "BORROWED" }, expected: null }))).toMatchObject({ reason: "expectation_missing" });
+  });
+
+  it("a malformed decision table skips the unmapped check: the later steps decide", () => {
+    const ont = structuredClone(library);
+    (ont.actionTypes.RETURN!.decision as unknown as { rows: unknown }).rows = {};
+    expect(one(baseCase({ reported: { result: "BORROWED" }, expected: null }, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "expectation_missing" });
   });
 
   it("INDETERMINATE is not reconciled; the detail is its reason", () => {

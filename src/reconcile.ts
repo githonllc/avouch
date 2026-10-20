@@ -100,6 +100,19 @@ export function reconcile(ont: Stage1Ontology, cases: readonly RuntimeCase[]): R
     const { reported, expected, snapshot } = c;
     if (reported === null) return cannot("runtime_missing");
     if (ENVELOPE.includes(reported.result)) return cannot("envelope");
+    // A result this action can give: not SCOPE_DENIED (internal: SPEC section 9, Existence is not revealed), and an
+    // invocation result or one of its domain results. The check reads only the ontology, so a runtime defect is found
+    // also without an expectation, without a snapshot and when decide throws. An action that the ontology does not
+    // have is not checked here: decide reports it (evaluator_error). A decision table that cannot be read skips the
+    // check too: decide then throws and reports it.
+    let results: readonly string[] | undefined;
+    try {
+      results = own(ont.actionTypes, c.action) !== undefined ? domainResults(ont, c.action) : undefined;
+    } catch {
+      results = undefined;
+    }
+    const mapped = (r: string): boolean => r !== "SCOPE_DENIED" && (INVOCATION.includes(r) || (results ?? []).includes(r));
+    if (results !== undefined && !mapped(reported.result)) return cannot("runtime_unmapped", reported.result);
     if (expected === null) return cannot("expectation_missing");
     if (snapshot === null) return cannot("snapshot_missing");
     const { bindings, actor, scope, now } = c.inputs;
@@ -109,11 +122,7 @@ export function reconcile(ont: Stage1Ontology, cases: readonly RuntimeCase[]): R
     } catch (e) {
       return cannot("evaluator_error", e instanceof Error ? e.message : String(e));
     }
-    // A result this action can give: not SCOPE_DENIED (internal: SPEC section 9, Existence is not revealed), and an
-    // invocation result or one of its domain results. Defects of the input (runtime, then scenario) come before INDETERMINATE.
-    const results = domainResults(ont, c.action);
-    const mapped = (r: string): boolean => r !== "SCOPE_DENIED" && (INVOCATION.includes(r) || results.includes(r));
-    if (!mapped(reported.result)) return cannot("runtime_unmapped", reported.result);
+    // Defects of the input (runtime, then scenario) come before INDETERMINATE.
     if (!mapped(expected.result)) return cannot("expectation_unmapped", expected.result);
     if (d.layer === "indeterminate") return cannot("indeterminate", d.reason);
     const { result, reason } = externalResult(d);

@@ -172,6 +172,14 @@ describe("avouch gate verify", () => {
     expect(r.stdout).toContain("INFO unasserted u-2 RETURN\n");
     expect(lastLine(r.stdout)).toContain("2 unasserted");
   });
+
+  it("a case without an expectation whose runtime result the action cannot give fails as runtime_unmapped", () => {
+    const cases = [baseCase({ id: "u-1", expected: null, reported: { result: "BORROWED" } }), ...returnCases()];
+    const r = avouch("gate", "verify", ontology, "--rows", rowsFile(cases), "--baseline", baselineFile(borrowDebts()));
+    expect(r.status, r.stderr).toBe(1);
+    expect(r.stdout).toContain("FAIL case u-1 RETURN runtime_unmapped\n");
+    expect(lastLine(r.stdout)).toContain("0 unasserted");
+  });
 });
 
 describe("avouch without a known command", () => {
