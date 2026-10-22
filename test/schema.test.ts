@@ -29,6 +29,19 @@ describe("ontology JSON Schema", () => {
     }
   });
 
+  it("class opaque with a cite validates; without a cite or with canonical_values it is rejected", () => {
+    const o = structuredClone(ontology);
+    const tc = o.objectTypes.Book.properties.title.cite;
+    o.objectTypes.Book.properties.title = { class: "opaque", cite: tc };
+    expect(validate(o)).toBe(true);
+    o.objectTypes.Book.properties.title = { class: "opaque" };
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/objectTypes/Book/properties/title");
+    o.objectTypes.Book.properties.title = { class: "opaque", cite: tc, canonical_values: { values: ["title"], cite: tc } };
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/objectTypes/Book/properties/title");
+  });
+
   it("the YAML names the schema on its first line", () =>
     expect(toyText.split("\n")[0]).toBe("# yaml-language-server: $schema=../../ontology.schema.json"));
 

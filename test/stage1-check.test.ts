@@ -150,6 +150,65 @@ describe("stage 1 checks", () => {
     ]);
   });
 
+  describe("property class opaque", () => {
+    const r4 = (r: ReturnType<typeof check>) => triples(r).filter(([rule]) => rule === "R4");
+    const title = (value: object): Op => ({ op: "replace", path: "/objectTypes/Book/properties/title", value });
+    const tc = ont.objectTypes.Book.properties.title.cite;
+    const probe = (reads: unknown[]): Op => ({
+      op: "add", path: "/actionTypes/RETURN/conditions/-",
+      value: { id: "opaque_probe", unspecified: "probe", reads, cites: cites("L6", "RETURN after the due_date, on the date of the Branch timezone, is RETURNED_LATE.") },
+    });
+
+    it("an opaque property with a cite that no condition reads passes and is not listed as unknown", () => {
+      const r = run([{ op: "replace", path: "/objectTypes/Book/properties/title/class", value: "opaque" }]);
+      expect(r.violations).toEqual([]);
+      expect(r.info).toContain("class: unknown (the source does not classify): none");
+    });
+
+    it("an opaque property without a cite is R1", () =>
+      expect(run([title({ class: "opaque" })]).violations).toEqual([
+        { rule: "R1", kind: "generic", key: "objectTypes.Book.properties.title", msg: "class other than unknown needs a cite" },
+      ]));
+
+    it("a condition that reads an opaque property is R4 precondition_reads_non_canonical", () =>
+      expect(triples(run([{ op: "replace", path: "/objectTypes/Branch/properties/timezone/class", value: "opaque" }]))).toEqual([
+        ["R4", "precondition_reads_non_canonical", "RETURN:Branch.timezone"],
+      ]));
+
+    it("canonical_values on an opaque property is R1", () =>
+      expect(run([title({ class: "opaque", cite: tc, canonical_values: { values: ["title"], cite: tc } })]).violations).toEqual([
+        { rule: "R1", kind: "generic", key: "objectTypes.Book.properties.title.canonical_values", msg: "not allowed on an opaque property: no condition may read it" },
+      ]));
+
+    it("a value read of an opaque property is R4 even when the R1 violation is waived", () => {
+      const gap = { id: "G-OPAQUE", rule: "R1", kind: "generic", keys: ["objectTypes.Book.properties.title.canonical_values"], doc_line: "test", conflict: "test", proposed: "test" };
+      const r = run([
+        title({ class: "opaque", cite: tc, canonical_values: { values: ["title"], cite: tc } }),
+        probe([{ prop: "Book.title", values: ["title"] }]),
+        { op: "add", path: "/knownSourceGaps/-", value: gap },
+      ]);
+      expect(r.waived.length).toBe(1);
+      expect(r4(r)).toContainEqual(["R4", "precondition_reads_non_canonical", "RETURN:Book.title"]);
+    });
+
+    it("a derived property with reads only that lists an opaque property fails R4 for a condition that reads it", () =>
+      expect(r4(run([{ op: "replace", path: "/objectTypes/Loan/properties/due_date/class", value: "opaque" }, probe(["loan_overdue"])]))).toEqual([
+        ["R4", "precondition_reads_non_canonical", "RETURN:Loan.due_date"],
+      ]));
+
+    it("an opaque cite is checked by R2", () =>
+      expect(triples(run([title({ class: "opaque", cite: { doc: "L1", quote: "The title is estimated." } })]))).toEqual([
+        ["R2", "generic", ".objectTypes.Book.properties.title.cite"],
+      ]));
+
+    it("an opaque property as the via of a link type is R1; a canonical via passes", () => {
+      const via: Op = { op: "replace", path: "/linkTypes/0/via", value: "due_date" };
+      const keys = (r: ReturnType<typeof check>) => r.violations.filter((x) => x.rule === "R1").map((x) => x.key);
+      expect(keys(run([via, { op: "replace", path: "/objectTypes/Loan/properties/due_date/class", value: "opaque" }]))).toEqual(["linkTypes.loan_book.via"]);
+      expect(keys(run([via]))).toEqual([]);
+    });
+  });
+
   describe("R4: a hand-written read of a derived property with an expression", () => {
     const r4 = (r: ReturnType<typeof check>) => triples(r).filter(([rule]) => rule === "R4");
     const key = ["R4", "precondition_reads_non_canonical", "RETURN:Loan.return_condition"];
@@ -168,6 +227,9 @@ describe("stage 1 checks", () => {
 
     it("(a) classifies the properties the expression reads", () =>
       expect(r4(run([...derivedActive(), { op: "replace", path: "/objectTypes/Loan/properties/return_condition/class", value: "unknown" }]))).toContainEqual(key));
+
+    it("(a2) an opaque property the expression reads is reported", () =>
+      expect(r4(run([...derivedActive(), { op: "replace", path: "/objectTypes/Loan/properties/return_condition/class", value: "opaque" }]))).toContainEqual(key));
 
     it("(b) a canonical property the expression reads is not reported", () =>
       expect(r4(run(derivedActive()))).not.toContainEqual(key));

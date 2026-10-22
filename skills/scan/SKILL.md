@@ -57,7 +57,7 @@ Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permiss
 
 Write the ontology in the shape of `examples/library/library.ontology.yaml` of the Avouch repository. Read `SPEC.md` sections 2 and 9 of the Avouch repository for the keys and expressions. Model only what a document states:
 
-- objects, properties (with `class`), state machines;
+- objects, properties (with `class`: write `opaque`, with the deciding text as the cite, only when a document explicitly says that the value is not a fact and that no condition reads it, for example an estimate or a score that no rule uses to decide; a score or estimate that a rule does use to decide is not `opaque`; when the documents say nothing, write `unknown`), state machines;
 - links (`*_id` fields);
 - actions: parameters, permission, conditions, a decision table only when the document gives an order, edits, creates, deletes, emits, link effects. When the document's API takes an alternate key for an object (for example `source` and `external_ref`), declare a ref parameter with `projectedFrom: [source, external_ref]` and cite the text that names those fields. Declare each of those fields as a parameter of the same action too, with its `type` and a cite whose quote names it: the projection reads them from the request. When the document says that a referenced object that does not exist, or is in another tenant, gives a domain result (not an input error), declare `unresolved: domain` on that required ref parameter and add a condition that tests `isNotNull` of it, used by the row that gives that result. Use `deletes` only when the document says the rows are removed ("removes", "deletes"); a status or `deleted_at` marker is an `edits`;
 - dispositions.

@@ -302,9 +302,10 @@
             "canonical",
             "derived",
             "policy",
+            "opaque",
             "unknown"
           ],
-          "description": "State class. canonical = a fact written directly by actions; derived = computed from other facts; policy = configuration; unknown = the source does not classify it. Extension (R1, R4); no Palantir analog. R1: must be one of the four values; any class except unknown needs a `cite`. R4: a condition may read only canonical and policy properties, also through expressions and derived properties; derived and unknown fail R4 (`precondition_reads_non_canonical`), except value reads (and expression comparisons with a literal) covered by `canonical_values`."
+          "description": "State class. canonical = a fact written directly by actions; derived = computed from other facts; policy = configuration; opaque = the source decides that the value is not a fact: it is not computed from the facts of the ontology, the ontology does not model how it is made (for example an estimate, a score, a cache or a value that a process outside the actions writes), and no condition may read it; unknown = the source does not classify it. Extension (R1, R4); no Palantir analog. R1: must be one of the five values; any class except unknown needs a `cite`; an opaque property has no `canonical_values` and is not the `via` of a link type. R4: a condition may read only canonical and policy properties, also through expressions and derived properties; derived, opaque and unknown fail R4 (`precondition_reads_non_canonical`), except value reads (and expression comparisons with a literal) covered by `canonical_values`, which never apply to an opaque property."
         },
         "cite": {
           "$ref": "#/$defs/cite",
@@ -321,7 +322,7 @@
             "values",
             "cite"
           ],
-          "description": "Values of a NON-canonical property that the source explicitly marks as canonical. Extension (R1, R4); no Palantir analog. R1: needs values[] (non-empty) and cite; not allowed when class is canonical; on the state property of an object with `stateMachines` (`stateMachines.<Object>.property`, default the configured state property), each value must be a state of that object. R4: each value must occur as a whole identifier in this cite's quote (else R4 `canonical_value_unsupported`); a condition value read `{prop, values}` of this property passes R4 only if all its values are in this list.",
+          "description": "Values of a NON-canonical property that the source explicitly marks as canonical. Extension (R1, R4); no Palantir analog. R1: needs values[] (non-empty) and cite; not allowed when class is canonical or opaque; on the state property of an object with `stateMachines` (`stateMachines.<Object>.property`, default the configured state property), each value must be a state of that object. R4: each value must occur as a whole identifier in this cite's quote (else R4 `canonical_value_unsupported`); a condition value read `{prop, values}` of this property passes R4 only if all its values are in this list.",
           "properties": {
             "values": {
               "type": "array",
@@ -392,7 +393,7 @@
           "if": {
             "properties": {
               "class": {
-                "const": "canonical"
+                "enum": ["canonical", "opaque"]
               }
             }
           },
@@ -950,7 +951,7 @@
         },
         "reads": {
           "type": "array",
-          "description": "What the criterion reads. Items: `Object.prop` (a declared property), a derived id (a key of `derivedProperties`; its `reads` are checked instead), a value read `{prop, values}`, a parameter read `{param, values?}` (a key of this action's `parameters`) or an actor read `{actor: id | keys | kind}`. R1: each item must resolve. R4: every property read, directly or through a derived id, must be class canonical (derived, policy and unknown fail R4 `precondition_reads_non_canonical`, key `<ID>:<Object.prop>`). A value read passes if the property is canonical, or if every value is in that property's `canonical_values.values`. Parameter and actor reads are not properties; R4 does not classify them. Each value of a parameter read must appear in one of this condition's cite quotes (R4 `parameter_value_unsupported`, key `<ID>:<criterion id>:<value>`).",
+          "description": "What the criterion reads. Items: `Object.prop` (a declared property), a derived id (a key of `derivedProperties`; its `reads` are checked instead), a value read `{prop, values}`, a parameter read `{param, values?}` (a key of this action's `parameters`) or an actor read `{actor: id | keys | kind}`. R1: each item must resolve. R4: every property read, directly or through a derived id, must be class canonical or policy (derived, opaque and unknown fail R4 `precondition_reads_non_canonical`, key `<ID>:<Object.prop>`). A value read passes if the property is canonical or policy, or if every value is in that property's `canonical_values.values` (never for an opaque property). Parameter and actor reads are not properties; R4 does not classify them. Each value of a parameter read must appear in one of this condition's cite quotes (R4 `parameter_value_unsupported`, key `<ID>:<criterion id>:<value>`).",
           "items": {
             "oneOf": [
               {

@@ -6,7 +6,7 @@ import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } fr
 
 export { IDENT };
 
-const CLASSES = ["canonical", "derived", "policy", "unknown"];
+const CLASSES = ["canonical", "derived", "policy", "opaque", "unknown"];
 const CARDINALITY = /^(1|N):(1|N|M)$/;
 
 type Any = any; // the ontology is untyped YAML; every field access below is validated (R1)
@@ -113,6 +113,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
         const states = isObj(sm) ? new Set([sm.initial, ...arr(sm.terminal), ...arr(sm.transitions).flatMap((t: Any) => [t?.from, t?.to])]) : null;
         if (!isObj(cv) || !Array.isArray(cv.values) || cv.values.length === 0 || !isObj(cv.cite)) v("R1", `${p}.properties.${pn}.canonical_values`, "needs values[] and cite");
         else if ((pr as Any).class === "canonical") v("R1", `${p}.properties.${pn}.canonical_values`, "only meaningful on a non-canonical property");
+        else if ((pr as Any).class === "opaque") v("R1", `${p}.properties.${pn}.canonical_values`, "not allowed on an opaque property: no condition may read it");
         else if (pn === stateProp(name) && states) for (const x of cv.values) if (!states.has(x)) v("R1", `${p}.properties.${pn}.canonical_values`, `${x} is not a ${name} state`);
       }
       const rf = isObj(pr) ? (pr as Any).materializedFrom : undefined;
@@ -144,6 +145,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!objType(l.from) || !objType(l.to)) v("R1", `linkTypes.${l.id}`, `from/to must be declared object types`);
     if (!CARDINALITY.test(String(l.cardinality))) v("R1", `linkTypes.${l.id}`, "cardinality must be like N:1");
     if (!isStr(l.via) || !isStr(l.doc)) v("R1", `linkTypes.${l.id}`, "via and doc are required");
+    if (isStr(l.via) && propClass(`${l.from}.${l.via}`) === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
     if (l.table !== undefined && !isStr(l.table)) v("R1", `linkTypes.${l.id}`, "table must be a table name");
     if (l.create_rule !== undefined) {
       const r = l.create_rule;
@@ -487,7 +489,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           // value-level read: canonical property, or only values the doc marks canonical (canonical_values)
           const cls = propClass(r.prop);
           const [o, pn] = String(r.prop).split(".");
-          const cv: string[] = arr(objects[o]?.properties?.[pn]?.canonical_values?.values);
+          const cv: string[] = cls === "opaque" ? [] : arr(objects[o]?.properties?.[pn]?.canonical_values?.values); // an opaque property takes no canonical_values exemption
           const off = arr(r.values).filter((x: string) => !cv.includes(x));
           if (cls !== null && cls !== "canonical" && cls !== "policy" && off.length) bad.set(r.prop, `precondition ${pc.id} reads ${r.prop} values [${off}], class ${cls}; canonical values are [${cv}]`);
           continue;
