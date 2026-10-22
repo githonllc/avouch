@@ -49,7 +49,7 @@ export type DispositionClass = (typeof DISPOSITION_CLASSES)[number];
 export const INVOCATION_RESULTS = ["REPLAYED", "IDEMPOTENCY_CONFLICT", "INVALID_BINDING", "SCOPE_DENIED", "PERMISSION_DENIED"] as const;
 // principals: the actor kinds the form admits; its cite is ignored by evaluation.
 export type Principals = { kinds: string[]; cite?: unknown };
-export type Alt = { keys: string[]; conditional_keys?: string[]; principals?: Principals };
+export type Alt = { keys: string[]; conditional_keys?: string[]; conditional_when?: Expr; principals?: Principals };
 export type Permission = "unknown" | { none: string; principals?: Principals } | Alt | { any_of: Alt[] };
 export type DecisionRow = { when: { passes: string } | { fails: string }; result: string; next?: unknown };
 export type Decision = { hitPolicy: "first"; rows: DecisionRow[]; otherwise?: { result: string; next?: unknown } };
@@ -447,6 +447,33 @@ export function checkPredicate(ont: Stage1Ontology, expr: unknown, ctx: ExprCont
     for (const name of Object.keys(ont.actionTypes[ctx.action]?.parameters ?? {}))
       if (RESERVED.has(name)) throw new ExprError("$", `parameter ${name} uses a reserved name`);
   checkPredicateIn(ont, expr, ctx, "$", []);
+}
+
+// A permission conditional_when: a predicate over request inputs only. The permission step runs after shape and before
+// binding and reads no snapshot, so only these nodes are allowed, a ref is actor.<x> or a parameter name without a dot,
+// and a projected parameter (not a request field) is not readable. Then the ordinary type check.
+const WHEN_NODES = new Set(["eq", "neq", "lt", "lte", "gt", "gte", "and", "or", "not", "in", "subsetOf", "isNull", "isNotNull", "ref", "lit"]);
+export function checkPermissionWhen(ont: Stage1Ontology, expr: unknown, action: string, collect?: ExprReads): void {
+  const walk = (e: unknown, at: string): void => {
+    const k = nodeKey(e, at);
+    const p = `${at}.${k}`;
+    if (!WHEN_NODES.has(k)) throw new ExprError(p, `${k} is not allowed in conditional_when; it reads only parameters, actor and literals`);
+    if (k === "lit") return;
+    const v = (e as Record<string, unknown>)[k];
+    if (k === "ref") {
+      if (typeof v !== "string") return; // the type check reports it
+      const [head, prop] = v.split(".");
+      if (head === "actor") return; // the type check checks the property
+      if (head === "now") throw new ExprError(p, "now is not allowed in conditional_when");
+      if (prop !== undefined) throw new ExprError(p, `${v}: conditional_when reads no property; it reads a parameter as given`);
+      const param = own(ont.actionTypes[action]?.parameters, head);
+      if (param !== undefined && projectedFields(param) !== null) throw new ExprError(p, `${head} is a projected parameter; conditional_when reads only request inputs`);
+      return;
+    }
+    if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${p}[${i}]`));
+  };
+  walk(expr, "$");
+  checkPredicate(ont, expr, { action, locals: {}, collect });
 }
 
 // Type-checks a derived property on its own and returns its declared type; throws ExprError when it is not well typed.

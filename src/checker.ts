@@ -1,7 +1,7 @@
 // Format-level ontology checker (rules R1–R12). Pure functions: no I/O. Project facts arrive through SourceFacts (contract.ts).
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
-import { derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
+import { checkPermissionWhen, derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
 import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -187,6 +187,15 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           const cks = Array.isArray(ck) && ck.length > 0 && ck.every(isStr) && new Set(ck).size === ck.length;
           if (!(Array.isArray(pm.keys) && cks && isObj(pm.conditional_cite)))
             return "permission.conditional_keys needs keys, [distinct keys] and conditional_cite";
+        }
+        // Optional conditional_when: only with conditional_keys; request inputs only (checkPermissionWhen).
+        if (pm.conditional_when !== undefined) {
+          if (pm.conditional_keys === undefined) return "permission.conditional_when needs conditional_keys";
+          try {
+            checkPermissionWhen(ont as unknown as Stage1Ontology, pm.conditional_when, cid);
+          } catch (e) {
+            return `permission.conditional_when: ${e instanceof Error ? e.message : String(e)}`;
+          }
         }
         // Optional principals: the actor kinds the form admits, with their own cite.
         const pr = pm.principals, kinds = isObj(pr) ? pr.kinds : undefined;
@@ -500,6 +509,21 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           if (cls !== null && cls !== "canonical" && cls !== "policy") bad.set(ref, `precondition ${pc.id} reads ${ref}${how}, class ${cls}`);
         }
       }
+    }
+    // a permission conditional_when: each literal appears in the alternative's conditional_cite quote
+    const pm = c.permission;
+    const whens: [string, Any][] = !isObj(pm) ? [] : Array.isArray(pm.any_of) ? pm.any_of.map((a: Any, i: number) => [`any_of[${i}].conditional_when`, a]) : [["conditional_when", pm]];
+    for (const [where, a] of whens) {
+      if (!isObj(a) || a.conditional_when === undefined) continue;
+      const lits = newReads();
+      try {
+        checkPermissionWhen(ont as unknown as Stage1Ontology, a.conditional_when, cid, lits);
+      } catch {
+        continue; // R1 reports it
+      }
+      const q = isStr(a.conditional_cite?.quote) ? a.conditional_cite.quote : "";
+      for (const x of new Set(lits.literals.map(String)))
+        if (!IDENT(x).test(q)) v("R4", `${cid}:${where}:${x}`, `${where} of ${cid} uses the literal ${x}, which does not appear in its conditional_cite quote`, "literal_unsupported");
     }
     for (const [ref, msg] of bad) v("R4", `${cid}:${ref}`, msg, "precondition_reads_non_canonical");
   }

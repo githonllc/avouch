@@ -614,6 +614,93 @@ describe("permission", () => {
     expect(run("hold_user", { e: "A" }, who([], "user"), "b1", kindOnly)).toEqual({ layer: "domain", result: "HELD", class: "pending", row: 0 }));
   it("{none} with principals: shape is checked before permission", () =>
     expect(run("hold_user", { e: 7 }, who([], "service"), "b1", kindOnly)).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "e", reason: "type" }));
+
+  // conditional_when: when the conditional keys are needed, evaluated in the permission step on request inputs only.
+  const DENIED = { layer: "invocation", result: "PERMISSION_DENIED" };
+  const UNDECIDED = { layer: "indeterminate", reason: "permission_condition" };
+  const whenOnt = (when: unknown, extra: Record<string, unknown> = {}): Stage1Ontology => ({
+    ...base,
+    actionTypes: {
+      ...base.actionTypes,
+      waive_if: {
+        ...base.actionTypes.waive,
+        parameters: { member: { type: { ref: "Member" } }, large: { type: "integer", optional: true }, ...extra },
+        permission: { keys: ["fee.waive"], conditional_keys: ["fee.waive.large"], conditional_when: when as Expr },
+      },
+      transfer_if: {
+        parameters: { large: { type: "integer", optional: true } },
+        permission: {
+          any_of: [{ keys: ["transfer.in"], conditional_keys: ["transfer.big"], conditional_when: when as Expr }, { keys: ["transfer.out"] }],
+        },
+        conditions: [],
+        decision: otherwiseNoted,
+      },
+    },
+  });
+  const given = whenOnt({ isNotNull: [ref("large")] });
+  const over = whenOnt({ gt: [ref("large"), lit(1000)] });
+  const waiveIf = (b: Bindings, ont: Stage1Ontology = given, actor: Actor = who(["fee.waive"]), snap: Snapshot = snapshot) => run("waive_if", b, actor, "b1", ont, snap);
+  it("conditional_when F: the conditional keys are not needed, the alternative passes", () => expect(waiveIf({ member: "m1" })).toEqual(passed));
+  it("conditional_when T: the conditional keys are needed, PERMISSION_DENIED", () => expect(waiveIf({ member: "m1", large: 5000 })).toEqual(DENIED));
+  it("conditional_when T with all conditional keys held passes", () =>
+    expect(waiveIf({ member: "m1", large: 5000 }, given, who(["fee.waive", "fee.waive.large"]))).toEqual(passed));
+  it("conditional_when runs before binding: T denies before not_found, F goes on to binding", () => {
+    expect(waiveIf({ member: "nope", large: 5000 })).toEqual(DENIED);
+    expect(waiveIf({ member: "nope" })).toEqual({ layer: "invocation", result: "INVALID_BINDING", param: "member", reason: "not_found" });
+  });
+  it("conditional_when does not save a missing unconditional key", () => expect(waiveIf({ member: "m1" }, given, who(["loan.create"]))).toEqual(DENIED));
+  it("conditional_when U (a comparison with an absent optional parameter) is undecided", () => {
+    expect(waiveIf({ member: "m1" }, over)).toEqual(UNDECIDED);
+    expect(waiveIf({ member: "m1", large: 5000 }, over)).toEqual(DENIED);
+    expect(waiveIf({ member: "m1", large: 10 }, over)).toEqual(passed);
+  });
+  it("conditional_when and(isNotNull, gt): an absent optional parameter gives F", () => {
+    const guarded = whenOnt(and({ isNotNull: [ref("large")] }, { gt: [ref("large"), lit(1000)] }));
+    expect(waiveIf({ member: "m1" }, guarded)).toEqual(passed);
+    expect(waiveIf({ member: "m1", large: 5000 }, guarded)).toEqual(DENIED);
+    expect(waiveIf({ member: "m1", large: 10 }, guarded)).toEqual(passed);
+  });
+  it("conditional_when reads no snapshot: a ref parameter is the given id", () =>
+    expect(waiveIf({ member: "nope" }, whenOnt({ isNotNull: [ref("member")] }), who(["fee.waive"]), { objects: {} })).toEqual(DENIED));
+  it("conditional_when: an unresolved: domain parameter is the given id, also when it will bind to null", () => {
+    const ont = whenOnt({ isNotNull: [ref("target")] }, { target: { type: { ref: "Member" }, unresolved: "domain" } });
+    expect(waiveIf({ member: "m1", target: "nope" }, ont)).toEqual(DENIED);
+  });
+  it("conditional_when in any_of", () => {
+    expect(run("transfer_if", {}, who(["transfer.in"]), "b1", given)).toEqual(passed);
+    expect(run("transfer_if", { large: 5000 }, who(["transfer.in"]), "b1", given)).toEqual(DENIED);
+    expect(run("transfer_if", { large: 5000 }, who(["transfer.in", "transfer.out"]), "b1", given)).toEqual(passed);
+  });
+  it("conditional_when in any_of: one undecided and one denied alternative is undecided", () =>
+    expect(run("transfer_if", {}, who(["transfer.in"]), "b1", over)).toEqual(UNDECIDED));
+  it("conditional_when: principals deny first", () => {
+    const ont = structuredClone(given);
+    (ont.actionTypes.waive_if.permission as { principals?: unknown }).principals = { kinds: ["user"] };
+    expect(waiveIf({ member: "m1" }, ont, who(["fee.waive"], "service"))).toEqual(DENIED);
+    expect(waiveIf({ member: "m1" }, ont, who(["fee.waive"], "user"))).toEqual(passed);
+  });
+  it("decide throws on a conditional_when that R1 rejects", () => {
+    expect(() => waiveIf({ member: "m1" }, whenOnt({ isNotNull: [ref("member.person_id")] }))).toThrow(/conditional_when reads no property/);
+    expect(() => waiveIf({ member: "m1" }, whenOnt({ isNotNull: [ref("now")] }))).toThrow(/now is not allowed in conditional_when/);
+    expect(() => waiveIf({ member: "m1" }, whenOnt({ eq: [ref("large"), lit("x")] }))).toThrow();
+    expect(() => waiveIf({ member: "m1" }, whenOnt({ exists: { as: "l", in: nav("member", "loan_member", "reverse") } }))).toThrow(/exists is not allowed in conditional_when/);
+  });
+  it("decide throws on a conditional_when without conditional_keys or on the {none} form", () => {
+    const noKeys = structuredClone(given);
+    delete (noKeys.actionTypes.waive_if.permission as { conditional_keys?: unknown }).conditional_keys;
+    expect(() => waiveIf({ member: "m1" }, noKeys)).toThrow(/conditional_when needs conditional_keys/);
+    const emptyKeys = structuredClone(given);
+    (emptyKeys.actionTypes.waive_if.permission as { conditional_keys?: unknown }).conditional_keys = [];
+    expect(() => waiveIf({ member: "m1" }, emptyKeys)).toThrow(/conditional_when needs conditional_keys/);
+    const noneForm = structuredClone(given);
+    noneForm.actionTypes.waive_if.permission = { none: "anyone", conditional_when: { isNotNull: [ref("large")] } } as never;
+    expect(() => waiveIf({ member: "m1" }, noneForm)).toThrow(/conditional_when needs conditional_keys/);
+  });
+  it("decide throws on an actor that is not {id: string, keys: string[], kind: string}", () => {
+    expect(() => waiveIf({ member: "m1" }, given, { id: "u9", keys: ["fee.waive"], kind: 7 } as unknown as Actor)).toThrow(/actor/);
+    expect(() => waiveIf({ member: "m1" }, given, { id: "u9", keys: "fee.waive", kind: "user" } as unknown as Actor)).toThrow(/actor/);
+    expect(() => waiveIf({ member: "m1" }, given, { id: 9, keys: [], kind: "user" } as unknown as Actor)).toThrow(/actor/);
+  });
 });
 
 describe("decision table", () => {

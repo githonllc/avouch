@@ -222,6 +222,23 @@ describe("ontology JSON Schema", () => {
     expect(rejects((p) => (p.projectedFrom = ["source"]))).toBe(false);
   });
 
+  it("(k) conditional_when with conditional_keys validates; without conditional_keys / conditional_cite or on the none form it is rejected", () => {
+    const o = structuredClone(ontology);
+    const cite = { doc: "L10", quote: "x" };
+    const when = { isNotNull: [{ ref: "member_id" }] };
+    o.actionTypes.BORROW.permission = { keys: ["a:b"], cite, conditional_keys: ["c:d"], conditional_cite: cite, conditional_when: when };
+    expect(validate(o)).toBe(true);
+    o.actionTypes.BORROW.permission = { keys: ["a:b"], cite, conditional_when: when };
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/actionTypes/BORROW/permission");
+    o.actionTypes.BORROW.permission = { keys: ["a:b"], cite, conditional_keys: ["c:d"], conditional_when: when };
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/actionTypes/BORROW/permission");
+    o.actionTypes.BORROW.permission = { none: "x", cite, conditional_when: when };
+    expect(validate(o)).toBe(false);
+    expect(paths()).toContain("/actionTypes/BORROW/permission");
+  });
+
   it("an object type, a property or a link type named __proto__ is rejected", () => {
     // An own key __proto__, as YAML and JSON parsing give it; an assignment would set the prototype instead.
     const ownProto = (o: object, value: unknown) => Object.defineProperty({ ...o }, "__proto__", { value, enumerable: true, writable: true, configurable: true });

@@ -312,6 +312,11 @@ ofv:conditional_cite a rdf:Property ;
   rdfs:comment "Citation for the conditional keys. YAML: actionTypes.<ID>.permission.conditional_cite" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
+ofv:conditional_when a rdf:Property ;
+  rdfs:label "conditional_when" ;
+  rdfs:comment "When the conditional keys are needed: a predicate over request inputs (parameters, actor, literals). YAML: actionTypes.<ID>.permission.conditional_when" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
 ofv:any_of a rdf:Property ;
   rdfs:label "any_of" ;
   rdfs:comment "At least 2 alternatives, each a keys form; the actor may run the action when its keys satisfy any one of them (OR). YAML: actionTypes.<ID>.permission.any_of" ;

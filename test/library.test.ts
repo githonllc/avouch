@@ -166,6 +166,40 @@ describe("toy library project", () => {
       for (const p of [{ any_of: [alt([create])] }, { any_of: [alt([create]), { none: "x", cite: q(create) }] }, { any_of: [alt([create]), alt([close])], keys: [create] }])
         expect(run(p).violations.map((x) => x.rule)).toContain("R1");
     });
+
+    describe("conditional_when", () => {
+      const W = (expr: unknown) => ({ conditional_when: expr });
+      const given = W({ isNotNull: [{ ref: "member_id" }] });
+      it("on a form with conditional_keys, over a parameter, passes", () => expect(run({ ...alt([create], cond(close)), ...given }).violations).toEqual([]));
+      it("needs conditional_keys (R1), also on the {none} form", () => {
+        expect(r1(run({ ...alt([create, close]), ...given }))).toEqual(["permission.conditional_when needs conditional_keys"]);
+        expect(r1(run({ none: "anyone", cite: q(create), ...given }))).toEqual(["permission.conditional_when needs conditional_keys"]);
+      });
+      it("reads no property (R1)", () =>
+        expect(r1(run({ ...alt([create], cond(close)), ...W({ isNotNull: [{ ref: "member_id.person_id" }] }) }))).toEqual([
+          "permission.conditional_when: $.isNotNull[0].ref: member_id.person_id: conditional_when reads no property; it reads a parameter as given",
+        ]));
+      it("allows no quantifier (R1)", () => {
+        const e = { exists: { as: "l", in: { nav: { from: { ref: "member_id" }, link: "loan_member", dir: "reverse" } } } };
+        expect(r1(run({ ...alt([create], cond(close)), ...W(e) })).join("\n")).toContain("exists is not allowed in conditional_when");
+      });
+      it("reads no now (R1), inside any_of", () =>
+        expect(r1(run({ any_of: [{ ...alt([create], cond(close)), ...W({ isNotNull: [{ ref: "now" }] }) }, alt([close])] }))).toEqual([
+          "permission.any_of[0]: permission.conditional_when: $.isNotNull[0].ref: now is not allowed in conditional_when",
+        ]));
+      it("reads no projected parameter (R1)", () => {
+        const holder = { type: { ref: "Member" }, projectedFrom: ["member_id"], cite: { doc: "L6", quote: "BORROW takes member_id" } };
+        const o = applyPatch(withPerm({ ...alt([create], cond(close)), ...W({ isNotNull: [{ ref: "holder" }] }) }), [{ op: "add", path: "/actionTypes/BORROW/parameters/holder", value: holder }]);
+        expect(r1(check(o, f())).join("\n")).toContain("holder is a projected parameter");
+      });
+      it("each literal appears in the conditional_cite quote (R4 literal_unsupported)", () => {
+        const lit = W({ eq: [{ ref: "member_id" }, { lit: "M-9" }] });
+        expect(run({ ...alt([create], cond(close)), ...lit }).violations).toContainEqual(expect.objectContaining({ rule: "R4", kind: "literal_unsupported", key: "BORROW:conditional_when:M-9" }));
+        expect(run({ any_of: [{ ...alt([create], cond(close)), ...lit }, alt([close])] }).violations).toContainEqual(
+          expect.objectContaining({ rule: "R4", kind: "literal_unsupported", key: "BORROW:any_of[0].conditional_when:M-9" }),
+        );
+      });
+    });
   });
 
   describe("invocation evidence", () => {
