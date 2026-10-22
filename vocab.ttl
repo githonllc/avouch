@@ -184,7 +184,7 @@ ofv:bind a rdf:Property ;
 
 ofv:class a rdf:Property ;
   rdfs:label "class" ;
-  rdfs:comment "State class of a property: canonical, derived, policy or unknown. YAML: objectTypes.<name>.properties.<p>.class" ;
+  rdfs:comment "State class of a property: canonical, derived, policy, opaque or unknown. YAML: objectTypes.<name>.properties.<p>.class" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:canonical_values a rdf:Property ;
