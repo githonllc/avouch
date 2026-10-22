@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPermissionWhen, checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
@@ -129,13 +129,15 @@ class Session {
 }
 
 // A frame: the visible names. `action` is undefined inside a derived expression (parameters are not visible there).
-type Frame = { action: string | undefined; vars: Record<string, ObjVar> };
+// `input`: a permission conditional_when, before binding: a parameter reads as given, never as an object binding.
+type Frame = { action: string | undefined; vars: Record<string, ObjVar>; input?: true };
 
 const paramType = (ont: Stage1Ontology, action: string | undefined, name: string): Type | undefined =>
   action === undefined ? undefined : own(ont.actionTypes[action]?.parameters, name)?.type;
 
 function objVar(s: Session, f: Frame, name: string): ObjVar | undefined {
   if (Object.hasOwn(f.vars, name)) return f.vars[name];
+  if (f.input === true) return undefined; // before binding: no lookup, readRef gives the given value
   const t = paramType(s.ont, f.action, name);
   if (t === undefined || typeof t === "string" || !("ref" in t)) return undefined;
   const v = own(s.env.bindings, name);
@@ -341,14 +343,17 @@ export function evalPredicate(ont: Stage1Ontology, expr: Expr, env: Env): TV {
 
 type AltState = "pass" | "deny" | "undecided";
 const kindAdmitted = (pr: Principals | undefined, actor: Actor): boolean => pr === undefined || pr.kinds.includes(actor.kind);
-function altState(a: Alt, actor: Actor): AltState {
+// Only conditional keys missing: conditional_when says whether they are needed (F: not needed, T: needed, U or absent: undecided).
+function altState(a: Alt, actor: Actor, when: (e: Expr) => TV): AltState {
   if (!kindAdmitted(a.principals, actor)) return "deny";
   if (!a.keys.every((k) => actor.keys.includes(k))) return "deny";
-  return (a.conditional_keys ?? []).every((k) => actor.keys.includes(k)) ? "pass" : "undecided";
+  if ((a.conditional_keys ?? []).every((k) => actor.keys.includes(k))) return "pass";
+  const w = a.conditional_when === undefined ? "U" : when(a.conditional_when);
+  return w === "F" ? "pass" : w === "T" ? "deny" : "undecided";
 }
 
 // Shape (no snapshot reads) and permission. Returns a result to stop with, or undefined to go on.
-function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor: Actor): DecideResult | undefined {
+function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor: Actor, when: (e: Expr) => TV): DecideResult | undefined {
   const action = ont.actionTypes[actionId];
   const params = action.parameters ?? {};
   const unknown = Object.keys(bindings)
@@ -369,7 +374,7 @@ function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor:
   const perm = action.permission;
   if (perm === "unknown") return { layer: "indeterminate", reason: "permission_unknown" };
   if ("none" in perm) return kindAdmitted(perm.principals, actor) ? undefined : { layer: "invocation", result: "PERMISSION_DENIED" };
-  const states = ("any_of" in perm ? perm.any_of : [perm]).map((a) => altState(a, actor));
+  const states = ("any_of" in perm ? perm.any_of : [perm]).map((a) => altState(a, actor, when));
   if (states.includes("pass")) return undefined;
   if (states.every((x) => x === "deny")) return { layer: "invocation", result: "PERMISSION_DENIED" };
   return { layer: "indeterminate", reason: "permission_condition" };
@@ -442,6 +447,8 @@ export function decide(ont: Stage1Ontology, actionId: string, snapshot: Snapshot
   const action = own(ont.actionTypes, actionId);
   if (action === undefined) throw new Error(`unknown action ${actionId}`);
   if (!Number.isSafeInteger(now)) throw new Error(`now must be a safe integer, found ${now}`);
+  if (!(typeof actor?.id === "string" && Array.isArray(actor.keys) && actor.keys.every((k) => typeof k === "string") && typeof actor.kind === "string"))
+    throw new Error("actor must be {id: string, keys: string[], kind: string}");
   inRange(now, "now");
   if (ont.scope !== undefined && scope === null) throw new Error("the ontology declares scope, so the scope argument must not be null");
   if (ont.scope === undefined && scope !== null) throw new Error("the ontology declares no scope, so the scope argument must be null");
@@ -460,9 +467,20 @@ export function decide(ont: Stage1Ontology, actionId: string, snapshot: Snapshot
   const o = action.decision?.otherwise;
   if (o !== undefined && noDisposition(o.result)) throw new Error(`result ${o.result} has no disposition`);
   for (const c of action.conditions) if (c.expr !== undefined) checkPredicate(ont, c.expr, { action: actionId, locals: {} });
-  const early = admit(ont, actionId, bindings, actor);
+  // A conditional_when only with conditional_keys (else the alternative would pass unread), and over request inputs only.
+  const perm = action.permission;
+  if (perm !== "unknown")
+    for (const a of ("any_of" in perm ? perm.any_of : [perm]) as { none?: unknown; conditional_keys?: unknown; conditional_when?: Expr }[])
+      if (a.conditional_when !== undefined) {
+        const ck = a.conditional_keys;
+        if (a.none !== undefined || !Array.isArray(ck) || ck.length === 0) throw new Error("permission conditional_when needs conditional_keys");
+        checkPermissionWhen(ont, a.conditional_when, actionId);
+      }
+  // One session for both steps: the permission step reads no snapshot (the frame flag input; checkPermissionWhen above).
+  const s = new Session(ont, { action: actionId, snapshot, scope, bindings, actor, now });
+  const early = admit(ont, actionId, bindings, actor, (e) => predicate(s, { action: actionId, vars: {}, input: true }, e));
   if (early !== undefined) return early;
-  return resolve(new Session(ont, { action: actionId, snapshot, scope, bindings, actor, now }), actionId);
+  return resolve(s, actionId);
 }
 
 export type ExternalResult = { result: string; param?: string; reason?: "missing" | "unknown_param" | "type" | "not_found" };

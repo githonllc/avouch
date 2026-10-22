@@ -95,7 +95,7 @@ describe("queryAction", () => {
     const a = queryAction(clean(), "BORROW")!;
     expect(a.permission).toEqual({
       form: "keys",
-      alternatives: [{ keys: ["loan:create"], conditionalKeys: [], cite: { doc: "L10", quote: "`loan:create`" }, conditionalCite: null, principals: null }],
+      alternatives: [{ keys: ["loan:create"], conditionalKeys: [], cite: { doc: "L10", quote: "`loan:create`" }, conditionalCite: null, conditionalWhen: null, principals: null }],
     });
     expect(a.transitions).toEqual([{ object: "Book", from: "AVAILABLE", to: "ON_LOAN" }]);
     expect(a.idempotencyKey).toBeNull();
@@ -151,9 +151,21 @@ describe("queryAction", () => {
     if (p.form !== "keys") return;
     expect(p.alternatives).toHaveLength(2);
     expect(p.alternatives[0].principals).toEqual({ kinds: ["MEMBER"], cite: cite("L6", "The caller of an action is a Person.") });
-    expect(p.alternatives[1]).toEqual({ keys: ["loan:admin"], conditionalKeys: ["loan:override"], cite: cite("L10", "x"), conditionalCite: cite("L10", "y"), principals: null });
+    expect(p.alternatives[1]).toEqual({ keys: ["loan:admin"], conditionalKeys: ["loan:override"], cite: cite("L10", "x"), conditionalCite: cite("L10", "y"), conditionalWhen: null, principals: null });
     const list = queryList(ont, "actions") as Extract<QueryList, { kind: "actions" }>;
     expect(list.items.find((i) => i.id === "BORROW")!.permissionKeys).toEqual(["loan:admin", "loan:create", "loan:override"]);
+  });
+
+  it("gives conditional_when as text", () => {
+    const ont = patched([
+      {
+        op: "replace",
+        path: "/actionTypes/BORROW/permission",
+        value: { keys: ["loan:create"], cite: cite("L10", "x"), conditional_keys: ["loan:override"], conditional_cite: cite("L10", "y"), conditional_when: { isNotNull: [{ ref: "member_id" }] } },
+      },
+    ]);
+    const p = queryAction(ont, "BORROW")!.permission;
+    expect(p.form === "keys" && p.alternatives[0].conditionalWhen).toBe("member_id is not null");
   });
 
   it("reads idempotencyKey, condition scenarios, edit_cites and the none form", () => {

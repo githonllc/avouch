@@ -68,6 +68,20 @@ describe("reconcile: three-way equality", () => {
     expect(one(c)).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "PERMISSION_DENIED" } });
   });
 
+  it("a permission conditional_when decides whether the conditional keys are needed", () => {
+    const ont = structuredClone(library);
+    const RETURN = ont.actionTypes.RETURN;
+    RETURN.parameters = { ...RETURN.parameters, inspector: { type: "id", optional: true } };
+    RETURN.permission = { keys: ["loan:close"], conditional_keys: ["loan:inspect"], conditional_when: { isNotNull: [{ ref: "inspector" }] } };
+    expect(one(baseCase({}, ont), ont)).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "RETURNED" }, row: "otherwise" });
+    const denied = baseCase({ reported: { result: "PERMISSION_DENIED" }, expected: { result: "PERMISSION_DENIED" } }, ont);
+    denied.inputs = { ...denied.inputs, bindings: { loan_id: "LN-1", inspector: "P-2" } };
+    expect(one(denied, ont)).toEqual({ id: "inv-1", action: "RETURN", status: "match", result: { result: "PERMISSION_DENIED" } });
+    const without = structuredClone(ont);
+    without.actionTypes.RETURN.permission = { keys: ["loan:close"], conditional_keys: ["loan:inspect"] };
+    expect(one(baseCase({}, without), without)).toEqual({ id: "inv-1", action: "RETURN", status: "cannot_reconcile", reason: "indeterminate", detail: "permission_condition" });
+  });
+
   it("an id outside the scope is compared after the outward projection: not_found, without param", () => {
     const stores = baseStores();
     stores.loans.push({ id: "LN-9", branch_id: "BR-2", state: "ACTIVE", due_date: "2026-01-15", return_condition: null });

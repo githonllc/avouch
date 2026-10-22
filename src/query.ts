@@ -19,7 +19,7 @@ export type QueryList =
   | { kind: "anchors"; items: { doc: string; claims: number }[] }
   | { kind: "gaps"; items: { id: S; rule: S; kind: S; keys: string[]; conflict: S; proposed: S }[] };
 export type QueryAlt = { keys: string[]; conditionalKeys: string[]; cite: QueryCite | null; conditionalCite: QueryCite | null;
-  principals: { kinds: string[]; cite: QueryCite | null } | null };
+  conditionalWhen: S /* showExpr text of conditional_when, or null */; principals: { kinds: string[]; cite: QueryCite | null } | null };
 export type QueryRow = { row: number | "otherwise"; when: { passes: string } | { fails: string } | null; result: S; class: S;
   cites: QueryCite[]; next: unknown /* the raw value, or null */; requires: { condition: string; must: "pass" | "fail"; specified: boolean }[];
   blockedBy: S /* the first condition with specified=false in an earlier row (static): decide stops at that row for an input where that condition is
@@ -318,6 +318,7 @@ function alt(x: Any): QueryAlt {
     conditionalKeys: strs(x.conditional_keys),
     cite: citeOf(x.cite),
     conditionalCite: citeOf(x.conditional_cite),
+    conditionalWhen: x.conditional_when !== undefined ? showExpr(x.conditional_when) : null,
     principals: principalsOf(x.principals),
   };
 }
