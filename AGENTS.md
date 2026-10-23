@@ -24,6 +24,15 @@ gh repo set-default githonllc/avouch
 4. Internal issues and the two repositories' numbers: both repositories number their issues from 1, so a bare `#n` is ambiguous. On `public`, `#n` means a public issue or pull request. Do not refer to internal issues from `public` at all; restate what a public reader needs instead. In an internal issue, link public work as `githonllc/avouch#<n>`.
 5. The private-content scan (`scripts/scan-private.mjs`) runs in CI and in the release workflow on `public`, after the push. Run it locally before you push: `node scripts/scan-private.mjs`. A maintainer who holds the private pattern list (kept in a private repository, the source of the secret `PRIVATE_PATTERNS`) sets it in the environment variable `PRIVATE_PATTERNS` for the same run.
 
+## Changes to SPEC.md
+
+A change to `SPEC.md` needs the approval of the project owner and two cross-family reviews. A cross-family review is one round with two reviewers from model families other than the author's.
+
+1. Before implementation: review the design, including the planned SPEC text.
+2. Before merge: review the final SPEC diff (`git diff public/main..HEAD -- SPEC.md`). Ask only this: compared with the previous version, is any rule text lost or broken, and does any text not agree with the implementation? If the branch is rebased after this review, do the review again.
+
+Resolve a merge conflict in `SPEC.md` line by line, not word by word. `test/spec.test.ts` checks the structure of the rule table. The test does not replace review 2, and review 2 does not replace the test. Record the reviewers and their findings in the internal issue, not on `public`.
+
 ## Release
 
 A release needs the explicit approval of the project owner. The steps are in "Publishing" in `README.md`: merge the version change on `public`, tag the merge commit `v<version>`, push the tag to `public`, and the owner approves the `npm` environment. `release.yml` has `if: github.repository == 'githonllc/avouch'`, so a tag in any other repository publishes nothing.
