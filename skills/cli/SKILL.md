@@ -9,12 +9,14 @@ description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and y
 
 ## Run it
 
-In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.14` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.15` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+
+Give the ontology with `-f <file>`. Without `-f`, the CLI uses `avouch/avouch.ontology.yaml` at the git top level. A positional ontology argument exits 2.
 
 | Sub-command | Use |
 |---|---|
-| `check <ontology.yaml> [--adapter <module\|config.json>]` | JSON Schema plus checker rules. Without `--adapter` it reads `avouch.json` next to the ontology (the built-in Markdown adapter). A `.json` path is a Markdown adapter configuration; another path is a module that exports `facts(ontologyPath)`. Exit 0 pass, 1 schema errors or violations, 2 usage, file or adapter error. |
-| `query <verb> <arg> <ontology.yaml> [--json] [--adapter <module\|config.json>]` | read-only questions about the specification (below). Without `--adapter` the check status is `not_run`, even when `avouch.json` exists. |
+| `check -f <ontology.yaml> [--adapter <module\|config.json>]` | JSON Schema plus checker rules. Without `--adapter` it reads `avouch.json` next to the ontology (the built-in Markdown adapter). A `.json` path is a Markdown adapter configuration; another path is a module that exports `facts(ontologyPath)`. Exit 0 pass, 1 schema errors or violations, 2 usage, file or adapter error. |
+| `query <verb> <arg> -f <ontology.yaml> [--json] [--adapter <module\|config.json>]` | read-only questions about the specification (below). Without `--adapter` the check status is `not_run`, even when `avouch.json` exists. |
 
 ## query
 

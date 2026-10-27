@@ -27,14 +27,14 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 ## Step 0: locate the CLI and the target
 
-In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.14` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.15` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
-avouch check 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
+avouch 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
 git ls-files '*.ontology.yaml' 'avouch.json' '**/avouch.json'
 ```
 
-- No ontology exists: the target is `avouch/<repo-name>.ontology.yaml` and the configuration is `avouch/avouch.json`.
+- No ontology exists: the target is `avouch/avouch.ontology.yaml` and the configuration is `avouch/avouch.json`.
 - An ontology exists **with** an `avouch.json` beside it: use update mode (Step 4).
 - An ontology exists **without** an `avouch.json` beside it, or the project's `AGENTS.md` / `CLAUDE.md` gives the ontology to an owner or another session: stop. Do not write to it. Report what you would change.
 - The project has code but no design document: stop. Report which documents are missing (objects with field lists, states, actions and their rules). Do not draft from code alone.
@@ -73,7 +73,7 @@ Before you write a quote, prove it is verbatim: `grep -F -- '<quote>' <doc>`.
 ## Step 3: check and repair until clean
 
 ```sh
-avouch check avouch/<name>.ontology.yaml; echo "exit=$?"
+avouch check -f <yaml>; echo "exit=$?"
 ```
 
 For each `FAIL` line, choose one action:
@@ -83,7 +83,7 @@ For each `FAIL` line, choose one action:
 
 A `knownSourceGaps` entry must match a printed violation; an entry that matches nothing fails as `stale_waiver`. A gap that the check does not print (an unstated rule, an unstated transition) goes only into the report.
 
-Repeat until the command exits 0. Also run `avouch query list actions <yaml>` and resolve each entry under `unanalyzed`.
+Repeat until the command exits 0. Also run `avouch query list actions -f <yaml>` and resolve each entry under `unanalyzed`.
 
 ## Step 3a: structure patch (when most objects have no field list)
 

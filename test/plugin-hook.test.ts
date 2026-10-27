@@ -138,8 +138,9 @@ describe("plugin hook: ontology read guard", () => {
 
   it("names the plugin version in the query forms", () => {
     const r = bash(`grep -n member ${file}`);
-    expect(r.stderr).toContain(`npx -y @githonllc/avouch@${version} query action <ACTION_ID>`);
+    expect(r.stderr).toContain(`npx -y @githonllc/avouch@${version} query action <ACTION_ID> -f <file>.ontology.yaml`);
     for (const verb of ["object", "writes", "reads", "cites", "list"]) expect(r.stderr).toContain(`query ${verb} `);
+    expect(r.stderr).toContain("check -f <file>.ontology.yaml");
     expect(r.stderr).toContain("grep -n -- '<entry id or anchor>' <file>.ontology.yaml | cut -d: -f1");
     expect(bash(`grep -n member ${file}`, outside, { CLAUDE_PLUGIN_ROOT: root }).stderr).toContain(`@githonllc/avouch@${version} `);
   });
