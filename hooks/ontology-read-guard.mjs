@@ -11,13 +11,21 @@
 //   Bash: a command segment that starts with a text reader (grep, rg, sed, awk, cat, head,
 //         tail, less, python, node, yq, ...) and names a *.ontology.yaml file or a directory
 //         named `ontology`. For grep, rg and the like, the search pattern does not count.
-//   Grep tool: `path` names an ontology file or a directory named `ontology`, or `glob`
-//         contains `ontology.yaml` / `ontology.yml`.
+//         A directory named `ontology` counts only when it exists (resolved against the hook
+//         cwd) and directly holds a *.ontology.yaml / *.ontology.yml file.
+//         A script runtime (node, deno, bun, python, ruby, perl) is blocked only for inline
+//         code: -e, -p, -c, --eval, --print, or no script argument (code from stdin or a heredoc).
+//   Grep tool: `path` names an ontology file or such a directory, or `glob` contains
+//         `ontology.yaml` / `ontology.yml`.
 // Not blocked:
 //   avouch itself (also `node <path>/avouch.js` and `node "$AVOUCH_CLI"`), git (diff, show and
 //   log are needed for review), the Read and Edit tools (Edit needs Read), searches that do not
-//   name the ontology, and the line-number-only locate form:
+//   name the ontology, a script file that takes the ontology path (`node scripts/build.mjs x`),
+//   a redirect target (a write: `cat > x.ontology.yaml`), and the line-number-only locate form
+//   (the grep must print line numbers, so that cut shows numbers only):
 //     grep -n -- <anchor> <file>.ontology.yaml | cut -d: -f1 [| head [-n] N]
+//   The hook is a reminder, not a guarantee: it matches command text, so a recursive search of a
+//   parent directory, a shell variable or `bash -c` is not seen.
 //   The whole rule is off when the project is the Avouch repository itself (the git top level
 //   of the working directory has package.json with "name": "@githonllc/avouch"): its fixtures
 //   need the raw text.
@@ -27,14 +35,24 @@
 // HOOK_MUTATE=1 disables the rule; it exists for mutation tests only.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeSync } from "node:fs";
-import { basename, join } from "node:path";
+import { readdirSync, readFileSync, writeSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 
 const ONTO_FILE = /\.ontology\.ya?ml\b/;
 // A directory named `ontology` in path form only: spec/ontology, spec/ontology/, ./ontology, ontology/.
-// A search word `ontology`, bare or quoted, is not a directory.
-const ONTO_DIR = /(\/ontology\/?|(^|[\s=])ontology\/)([\s'"]|$)/;
-const namesOntology = (text) => ONTO_FILE.test(text) || ONTO_DIR.test(text);
+// A search word `ontology`, bare or quoted, is not a directory. Group 1 is the path.
+const ONTO_DIR = /(?:^|[\s='"])((?:[^\s'"=]*\/ontology\/?|ontology\/))(?=[\s'"]|$)/g;
+
+// True when `dir` (resolved against cwd) directly holds an ontology file. Any error: no ontology.
+function holdsOntology(dir, cwd) {
+  try {
+    return readdirSync(resolve(cwd, dir)).some((f) => /\.ontology\.ya?ml$/.test(f));
+  } catch {
+    return false;
+  }
+}
+const namesOntology = (text, cwd) =>
+  ONTO_FILE.test(text) || [...text.matchAll(ONTO_DIR)].some((m) => holdsOntology(m[1], cwd));
 
 const READERS = new Set([
   "grep", "egrep", "fgrep", "rg", "ag", "ack", "sed", "awk", "gawk", "cat", "bat",
@@ -44,11 +62,57 @@ const READERS = new Set([
 const SEARCHERS = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
 const WRAPPERS = new Set(["sudo", "env", "command", "nice", "time", "xargs", "timeout"]);
 const RUNTIMES = new Set(["node", "deno", "bun"]);
+const SCRIPT_RUNTIMES = new Set(["node", "deno", "bun", "python", "ruby", "perl"]);
 // The Avouch CLI run through a JavaScript runtime: `node dist/cli/avouch.js`, `node "$AVOUCH_CLI"`.
 const AVOUCH_SCRIPT = /^['"]?(\$\{?AVOUCH_CLI\}?|(.*\/)?avouch(\.m?js)?)['"]?$/;
 
 // Locate before an edit: a grep that prints line numbers only, no content.
 const LOCATE = /^\s*(grep|rg)\s[^|;&\n]*\|\s*cut\s+-d\s*['"]?:['"]?\s*-f\s*1\s*(\|\s*head(\s+-n)?\s+-?\d+\s*)?$/;
+// A line-number option in the grep/rg part: -n, --line-number, or n in a short cluster (-rn, -nw).
+// Quoted words and everything after `--` are patterns or paths. A letter that takes a value ends
+// the cluster (-A5, -e pattern).
+function printsLineNumbers(part) {
+  const words = part.replace(/'[^']*'|"[^"]*"/g, "Q").trim().split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w === "--") return false;
+    if (w === "--line-number") return true;
+    if (w === "-e" || w === "-f") { i++; continue; }
+    if (/^-[^-]/.test(w)) {
+      for (const c of w.slice(1)) {
+        if (c === "n") return true;
+        if ("efmABCdDgtTjM".includes(c)) break;
+      }
+    }
+  }
+  return false;
+}
+
+// Inline code for a script runtime: -e, -p, -c (also in a short cluster, -ne), --eval, --print,
+// `-` (stdin), `deno eval`, or no script argument. A script file ends the scan: later words are its own.
+function inlineCode(first, args) {
+  // Drop input redirects with their targets: `<`, `<<`, `<<<` and the next word, or `<path`.
+  const rest = [];
+  for (let i = 0; i < args.length; i++) {
+    if (/^<+$/.test(args[i])) i++;
+    else if (!args[i].startsWith("<")) rest.push(args[i]);
+  }
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "-" || a === "--eval" || a === "--print") return true;
+    if (a === "--") return i + 1 >= rest.length;
+    if (/^-[A-Za-z]+$/.test(a)) {
+      if (/[epc]/.test(a)) return true;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    if (first === "deno" && a === "eval") return true;
+    if ((first === "deno" || first === "bun") && a === "run") continue;
+    return false;
+  }
+  return true;
+}
+
 // With context (-A/-B/-C), context lines are separated by `-`; cut prints a line without `:` whole.
 const CONTEXT = /\s-(-context|[ABC])/;
 
@@ -134,19 +198,27 @@ function verdict(input) {
   if (tool === "Grep") {
     const path = String(ti.path ?? "");
     const glob = String(ti.glob ?? "");
-    const hit = ONTO_FILE.test(path) || basename(path.replace(/\/+$/, "")) === "ontology"
+    const hit = ONTO_FILE.test(path)
+      || (basename(path.replace(/\/+$/, "")) === "ontology" && holdsOntology(path, cwd))
       || glob.includes("ontology.yaml") || glob.includes("ontology.yml");
     return hit && !inAvouchRepo(cwd) ? `Grep tool: ${path || glob}` : null;
   }
   if (tool !== "Bash") return null;
 
   let cmd = String(ti.command ?? "");
-  if (!namesOntology(cmd)) return null;
+  if (!namesOntology(cmd, cwd)) return null;
   cmd = stripHeredocs(cmd);
-  if (LOCATE.test(cmd) && !CONTEXT.test(cmd.split("|")[0])) return null;
+  const grepPart = cmd.split("|")[0];
+  if (LOCATE.test(cmd) && !CONTEXT.test(grepPart) && printsLineNumbers(grepPart)) return null;
 
   for (const seg of segments(cmd)) {
-    const words = seg.trim().split(/\s+/).filter(Boolean);
+    // A redirect target is a write, not a read: drop `> x`, `>> x`, `1> x`, `2> x` and `>x`.
+    const words = [];
+    const raw = seg.trim().split(/\s+/).filter(Boolean);
+    for (let i = 0; i < raw.length; i++) {
+      if (/^\d*>>?$/.test(raw[i])) i++;
+      else if (!/^\d*>>?./.test(raw[i])) words.push(raw[i]);
+    }
     let k = 0;
     while (k < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[k]) || WRAPPERS.has(words[k]))) k++;
     if (k >= words.length) continue;
@@ -155,13 +227,14 @@ function verdict(input) {
     if (!READERS.has(first)) continue;
     if (RUNTIMES.has(first) && k + 1 < words.length && AVOUCH_SCRIPT.test(words[k + 1])) continue;
     const args = words.slice(k + 1);
+    if (SCRIPT_RUNTIMES.has(first) && !inlineCode(first, args)) continue;
     // For the grep family the first non-option argument is the search pattern, not a path,
     // unless -e / -f / --regexp / --file give the pattern.
     if (SEARCHERS.has(first) && !args.some((a) => /^(-(e|f)|--(regexp|file)\b)/.test(a))) {
       const p = args.findIndex((a) => !a.startsWith("-"));
       if (p !== -1) args.splice(p, 1);
     }
-    if (namesOntology(args.join(" "))) {
+    if (namesOntology(args.join(" "), cwd)) {
       if (inAvouchRepo(cwd)) return null;
       return `${first}: ${seg.trim().slice(0, 160)}`;
     }

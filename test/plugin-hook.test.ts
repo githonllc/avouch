@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -12,6 +12,19 @@ const version: string = JSON.parse(readFileSync(join(root, ".claude-plugin", "pl
 // Not a git repository, so not the Avouch repository: the rule applies.
 const outside = mkdtempSync(join(tmpdir(), "avouch-hook-"));
 afterAll(() => rmSync(outside, { recursive: true, force: true }));
+// A working directory under `outside` that holds the given files (relative paths, empty content).
+const project = (files: string[]) => {
+  const dir = mkdtempSync(join(outside, "p-"));
+  for (const f of files) {
+    mkdirSync(dirname(join(dir, f)), { recursive: true });
+    writeFileSync(join(dir, f), "");
+  }
+  return dir;
+};
+// Directories named `ontology` that hold an ontology file.
+const withOntology = project(["spec/ontology/x.ontology.yaml", "ontology/x.ontology.yaml"]);
+// A directory named `ontology` that holds an OWL file only.
+const withOwl = project(["ontology/a.owl"]);
 
 const environment = (extra: Record<string, string> = {}) => {
   const env: Record<string, string | undefined> = { ...process.env };
@@ -36,40 +49,73 @@ const expectAllowed = (r: ReturnType<typeof hook>) => {
 };
 
 describe("plugin hook: ontology read guard", () => {
-  it.each([
+  it.each<[string, string, string?]>([
     ["grep", `grep -n member ${file}`],
     ["sed", `sed -n 10,40p ${file}`],
-    ["rg on a directory named ontology", "cd /x && rg foo spec/ontology/"],
+    ["rg on a directory named ontology", "cd /x && rg foo spec/ontology/", withOntology],
     ["python open()", `python3 -c 'print(open("${file}").read())'`],
-    ["python3.12 behind a variable and a wrapper", `LANG=C env python3.12 read.py ${file}`],
+    ["python3.12 -c behind a variable and a wrapper", `LANG=C env python3.12 -c 'print(open("${file}").read())'`],
     ["cat in a pipe", `cat ${file} | wc -l`],
     ["locate form with -A5 context", `grep -n -A5 -- 'ADD_BOOK' ${file} | cut -d: -f1`],
-    ["rg on spec/ontology/", "rg foo spec/ontology/"],
-    ["rg on a bare ontology/ path", "rg foo ontology/"],
+    ["rg on spec/ontology/", "rg foo spec/ontology/", withOntology],
+    ["rg on a bare ontology/ path", "rg foo ontology/", withOntology],
     ["grep with the pattern after -e", "grep -e driver_user spec/ontology/x.ontology.yaml"],
     ["grep with a pattern and an ontology file", "grep -n driver_user spec/ontology/x.ontology.yaml"],
     ["node -e readFileSync", `node -e 'require("fs").readFileSync("docs/x.ontology.yaml")'`],
-  ])("blocks %s", (_name, command) => expectBlocked(bash(command)));
+    ["locate form without -n", "grep member spec/x.ontology.yaml | cut -d: -f1"],
+    ["locate form with a quoted -n in the pattern", "grep 'a -n' spec/x.ontology.yaml | cut -d: -f1"],
+    ["node -e with a path", `node -e "console.log(require('fs').readFileSync('spec/x.ontology.yaml','utf8'))"`],
+    ["python3 -c with a path", `python3 -c 'print(open("spec/x.ontology.yaml").read())'`],
+    ["python3 - with a heredoc", "python3 - spec/x.ontology.yaml <<'EOF'\nimport sys\nprint(open(sys.argv[1]).read())\nEOF"],
+    ["node < with a path", "node < spec/x.ontology.yaml"],
+    ["python3 <path attached", "python3 <spec/x.ontology.yaml"],
+    ["perl -ne", "perl -ne 'print' spec/x.ontology.yaml"],
+    ["a directory named ontology that holds an ontology file", "grep -rn member spec/ontology/", withOntology],
+    ["a read that is also redirected out", "cat spec/x.ontology.yaml > copy.txt"],
+    ["an input redirect", "grep member < spec/x.ontology.yaml"],
+  ])("blocks %s", (_name, command, cwd) => expectBlocked(bash(command, cwd)));
 
   it("blocks the Grep tool on an ontology path or glob", () => {
     expectBlocked(grep({ path: file }));
-    expectBlocked(grep({ path: "spec/ontology/" }));
+    expectBlocked(grep({ path: "spec/ontology/" }, withOntology));
+    expectBlocked(grep({ path: "spec/ontology" }, withOntology));
     expectBlocked(grep({ glob: "*.ontology.yaml" }));
   });
 
-  it.each([
+  it("allows the Grep tool on a directory named ontology that holds no ontology file", () => {
+    expectAllowed(grep({ path: "ontology" }, withOwl));
+    expectAllowed(grep({ path: "ontology/" }, withOwl));
+    expectAllowed(grep({ path: "no/such/ontology" }, withOwl));
+  });
+
+  it.each<[string, string, string?]>([
     ["avouch query", `npx -y @githonllc/avouch@${version} query action ADD_BOOK ${file}`],
     ["a local avouch bin", `node_modules/.bin/avouch query action ADD_BOOK ${file}`],
     ["avouch through node", `node dist/cli/avouch.js query list actions ${file}`],
     ["avouch through node and AVOUCH_CLI", `node "$AVOUCH_CLI" check ${file}`],
     ["git diff", `git diff main -- ${file}`],
     ["the line-number-only locate form", `grep -n -- 'ADD_BOOK' ${file} | cut -d: -f1 | head -n 3`],
+    ["the locate form with -n", "grep -n -- BORROW spec/x.ontology.yaml | cut -d: -f1"],
+    ["the locate form with -nw", "grep -nw BORROW spec/x.ontology.yaml | cut -d: -f1"],
+    ["the locate form with -rn", "grep -rn -- BORROW spec/x.ontology.yaml | cut -d: -f1"],
+    ["the locate form with --line-number", "rg --line-number BORROW spec/x.ontology.yaml | cut -d: -f1"],
+    ["a node script that takes the path", "node scripts/build.mjs spec/x.ontology.yaml"],
+    ["a python script that takes the path", "python3 tools/export.py spec/x.ontology.yaml"],
+    ["a bun run script that takes the path", "bun run scripts/gen.ts spec/x.ontology.yaml"],
+    ["a deno run script that takes the path", "deno run --allow-read scripts/gen.ts spec/x.ontology.yaml"],
+    ["a node script with an input redirect", "node scripts/a.mjs < spec/x.ontology.yaml"],
+    ["a script with -e after the script name", "node scripts/build.mjs -e spec/x.ontology.yaml"],
+    ["a write with cat >", "cat > spec/x.ontology.yaml <<'EOF'\nformatVersion: 1\nEOF"],
+    ["a write with cat >>", "cat >> spec/x.ontology.yaml"],
+    ["a write with 2> and an attached path", "cat src/a.ts 2>spec/x.ontology.yaml"],
+    ["a directory named ontology that holds no ontology file", "grep -rn Person ontology/", withOwl],
+    ["a missing directory named ontology", "grep -rn Person ontology/", outside],
     ["a heredoc commit message", `git commit -F - <<'EOF'\nfix: grep ${file} comment\nEOF`],
     ["a repo-wide grep", "grep -rn member src"],
     ["a quoted search word ontology", 'grep -n "ontology" AGENTS.md'],
     ["a bare search word ontology", "grep -rn ontology src"],
     ["a search pattern that looks like an ontology path", 'grep -c "spec/ontology" src/a.mjs README.md'],
-  ])("allows %s", (_name, command) => expectAllowed(bash(command)));
+  ])("allows %s", (_name, command, cwd) => expectAllowed(bash(command, cwd)));
 
   it("allows the Grep tool on src/", () => expectAllowed(grep({ path: "src/" })));
 
