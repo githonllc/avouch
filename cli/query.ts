@@ -16,9 +16,10 @@ import {
   type QueryStamp,
   type QueryVerb,
 } from "../src/query.js";
-import { runCheck } from "./check.js";
+import { ontologyFile, runCheck } from "./check.js";
+import { expectPositionals, parseOptions } from "./reconcile.js";
 
-export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> <ontology.yaml> [--json] [--adapter <module|config.json>]";
+export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> [-f <ontology.yaml>] [--json] [--adapter <module|config.json>]";
 const VERBS: readonly QueryVerb[] = ["list", "action", "object", "result", "writes", "reads", "cites"];
 
 // Read-only git commands, run from the directory of the ontology file. null when any of them fails.
@@ -109,24 +110,15 @@ function text(env: QueryEnvelope): string {
 // ---------------------------------------------------------------------------------------------------------- main
 
 function parseArgs(args: string[]): { verb: QueryVerb; arg: string; file: string; json: boolean; adapter: string | null } {
-  const pos: string[] = [];
-  let json = false;
-  let adapter: string | null = null;
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === "--json") json = true;
-    else if (a === "--adapter") {
-      if (i + 1 >= args.length) throw new Error("--adapter needs a module");
-      adapter = args[++i];
-    } else if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
-    else pos.push(a);
-  }
-  if (pos.length !== 3) throw new Error(`expected 3 arguments, found ${pos.length}`);
-  const [verb, arg, file] = pos;
+  const { pos, opts } = parseOptions(args, ["-f", "--adapter"], ["--json"]);
+  expectPositionals(pos, 2);
+  const json = opts.get("--json") === true;
+  const adapter = (opts.get("--adapter") as string | undefined) ?? null;
+  const [verb, arg] = pos;
   if (!(VERBS as readonly string[]).includes(verb)) throw new Error(`unknown verb ${verb}`);
   if (verb === "list" && !(QUERY_LIST_KINDS as readonly string[]).includes(arg)) throw new Error(`unknown list kind ${arg}`);
   if ((verb === "writes" || verb === "reads") && arg.split(".").length !== 2) throw new Error(`${verb} takes <Object>.<property>`);
-  return { verb: verb as QueryVerb, arg, file, json, adapter };
+  return { verb: verb as QueryVerb, arg, file: ontologyFile(opts.get("-f") as string | undefined), json, adapter };
 }
 
 async function query(args: string[]): Promise<number> {

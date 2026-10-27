@@ -1,4 +1,5 @@
-import { readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -9,6 +10,16 @@ import { markdownFacts, parseMarkdownConfig, type MarkdownDoc } from "../src/mar
 
 /** The configuration of the built-in Markdown adapter that `avouch check` reads next to the ontology when no adapter is given. */
 export const CONFIG_FILE = "avouch.json";
+
+/** The ontology file of a command: the value of -f, else avouch/avouch.ontology.yaml at the git top level of the working directory. */
+export function ontologyFile(f: string | undefined): string {
+  if (f !== undefined) return f;
+  const r = spawnSync("git", ["--no-optional-locks", "rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8" });
+  if (r.error !== undefined || r.status !== 0) throw new Error("no -f, and the working directory is not in a git repository");
+  const file = join(r.stdout.trim(), "avouch", "avouch.ontology.yaml");
+  if (!existsSync(file)) throw new Error(`no -f, and ${file} does not exist`);
+  return file;
+}
 
 // Built-in Markdown adapter: reads the configuration and its documents (paths relative to the configuration file).
 function markdownAdapter(configFile: string): SourceFacts {
