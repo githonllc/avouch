@@ -19,7 +19,7 @@ export function parseOptions(args: string[], values: readonly string[], flags: r
     if (opts.has(a)) throw new Error(`repeated option ${a}`);
     if (flags.includes(a)) opts.set(a, true);
     else if (values.includes(a)) {
-      if (i + 1 >= args.length) throw new Error(`${a} needs a file`);
+      if (i + 1 >= args.length || args[i + 1] === "") throw new Error(`${a} needs a file`);
       opts.set(a, args[++i]);
     } else if (a.startsWith("-")) throw new Error(`unknown option ${a}`);
     else pos.push(a);
@@ -30,7 +30,7 @@ export function parseOptions(args: string[], values: readonly string[], flags: r
 // Exactly n positional arguments. A word of the old form (an ontology file as an argument) gets a pointer to -f.
 export function expectPositionals(pos: string[], n: number): void {
   if (pos.length === n) return;
-  const old = pos.slice(n).find((a) => /\.ya?ml$/.test(a));
+  const old = pos.find((a) => /\.ya?ml$/.test(a));
   throw new Error(old !== undefined ? `unexpected argument ${old}: give the ontology with -f` : `expected ${n} argument(s), found ${pos.length}`);
 }
 

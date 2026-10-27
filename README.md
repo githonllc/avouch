@@ -93,7 +93,7 @@ An `--adapter` path that ends in `.json` is not loaded as a module: it is the co
 avouch query <verb> <arg> [-f <ontology.yaml>] [--json] [--adapter <module|config.json>]
 ```
 
-The command takes exactly three positional arguments. The options can be in any position.
+The command takes exactly two positional arguments. The options can be in any position.
 
 | Verb | Argument | Answer |
 |---|---|---|

@@ -15,7 +15,7 @@ export const CONFIG_FILE = "avouch.json";
 export function ontologyFile(f: string | undefined): string {
   if (f !== undefined) return f;
   const r = spawnSync("git", ["--no-optional-locks", "rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8" });
-  if (r.error !== undefined || r.status !== 0) throw new Error("no -f, and the working directory is not in a git repository");
+  if (r.error !== undefined || r.status !== 0) throw new Error("no -f, and the working directory is not in a git repository (or git is not available)");
   const file = join(r.stdout.trim(), "avouch", "avouch.ontology.yaml");
   if (!existsSync(file)) throw new Error(`no -f, and ${file} does not exist`);
   return file;

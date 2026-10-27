@@ -175,16 +175,25 @@ describe("command line", () => {
       });
 
       it.skipIf(!gitAvailable)("the three stamp lines of query text output are stable, with -f and with the default", () => {
-        const sub = join(repository(), "src/deep");
-        const withF = runIn(root, "query", "list", "actions", "-f", ontology);
-        const byDefault = runIn(sub, "query", "list", "actions");
-        for (const r of [withF, byDefault]) {
+        const top = repository();
+        expect(git(top, "add", "avouch").status).toBe(0);
+        const c = git(top, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "x");
+        expect(c.status, c.stderr).toBe(0);
+        const sub = join(top, "src/deep");
+        const stamp = (r: ReturnType<typeof runIn>) => {
           expect(r.status, r.stderr).toBe(0);
-          const lines = r.stdout.split("\n");
+          return r.stdout.split("\n").slice(0, 3);
+        };
+        const withF = stamp(runIn(sub, "query", "list", "actions", "-f", join(top, "avouch/avouch.ontology.yaml")));
+        const byDefault = stamp(runIn(sub, "query", "list", "actions"));
+        expect(byDefault).toEqual(withF);
+        // the format, also for the checkout of this repository
+        for (const lines of [byDefault, stamp(runIn(root, "query", "list", "actions", "-f", ontology))]) {
           expect(lines[0]).toMatch(/^ontology: /);
           expect(lines[1]).toMatch(/^commit: ([0-9a-f]{40}( \(dirty\))?|none \(not in git\))$/);
           expect(lines[2]).toMatch(/^check: /);
         }
+        expect(byDefault[1]).toMatch(/^commit: [0-9a-f]{40}$/);
       });
 
       it.skipIf(!gitAvailable)("the default file missing: exit 2 and the path", () => {
@@ -221,20 +230,30 @@ describe("command line", () => {
   });
 
   it("the old positional form gives exit 2 and points to -f", () => {
-    for (const args of [["check", "x.ontology.yaml"], ["check", "x.yml", "--adapter", adapter], ["query", "action", "BORROW", "x.ontology.yaml"], ["reconcile", "x.ontology.yaml", "--cases", "c.jsonl"], ["gate", "verify", "x.ontology.yaml", "--rows", "r.jsonl"]]) {
+    for (const args of [["check", "x.ontology.yaml"], ["check", "x.yml", "--adapter", adapter], ["query", "action", "BORROW", "x.ontology.yaml"], ["query", "x.ontology.yaml", "action", "BORROW"], ["reconcile", "x.ontology.yaml", "--cases", "c.jsonl"], ["gate", "verify", "x.ontology.yaml", "--rows", "r.jsonl"]]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
-      expect(r.stderr, args.join(" ")).toContain("unexpected argument x.");
+      expect(r.stderr, args.join(" ")).toContain("unexpected argument x");
       expect(r.stderr, args.join(" ")).toContain("give the ontology with -f");
       expect(r.stdout, args.join(" ")).toBe("");
     }
   });
 
-  it("-f without a value, -f twice and an unknown -z give exit 2", () => {
-    for (const args of [["check", "-f"], ["check", "-f", ontology, "-f", ontology], ["check", "-f", ontology, "-z"], ["check", "-z"]]) {
+  it("-f without a value, -f empty, -f twice and an unknown -z give exit 2 and their own message", () => {
+    // --adapter is given, so that the "no adapter" path cannot give the exit 2
+    const a = ["--adapter", adapter];
+    for (const [args, message] of [
+      [["check", ...a, "-f"], "-f needs a file"],
+      [["check", ...a, "-f", ""], "-f needs a file"],
+      [["check", ...a, "-f", ontology, "-f", ontology], "repeated option -f"],
+      [["check", ...a, "-f", ontology, "-z"], "unknown option -z"],
+      [["query", "list", "actions", "-f", ontology, "-z"], "unknown option -z"],
+      [["reconcile", "-f", ontology, "--cases", "c.jsonl", "-z"], "unknown option -z"],
+      [["gate", "verify", "-f", ontology, "--rows", "r.jsonl", "-z"], "unknown option -z"],
+    ] as const) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
-      expect(r.stderr, args.join(" ")).toContain("usage: avouch check");
+      expect(r.stderr.split("\n")[0], args.join(" ")).toContain(message);
     }
   });
 });
