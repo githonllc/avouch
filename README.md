@@ -197,9 +197,11 @@ claude plugin install avouch@avouch
 
 Inside a Claude Code session, the same two steps are `/plugin marketplace add githonllc/avouch` and `/plugin install avouch@avouch`.
 
-The plugin has two skills:
+The plugin has two skills and one hook. The skills:
 - `cli` (`/avouch:cli`): checks an ontology and runs `avouch query`.
 - `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document. When most objects have no documented field list, it also writes `avouch/doc-patch.md`: field lists, foreign keys and store names derived from the code, for a human to review and merge into the documents. It never drafts states, permissions or rules from code.
+
+The plugin also has a hook (`hooks/hooks.json`, script `hooks/ontology-read-guard.mjs`, Node 22 or later). Before a Bash or Grep call, it blocks a text read of an ontology (`*.ontology.yaml`, `*.ontology.yml`, or a directory named `ontology`) with tools such as `grep`, `rg`, `sed`, `cat`, `head`, `python` or `yq`, and tells Claude to use `avouch query`. The reason: text output mixes YAML comments and neighbouring entries with the ontology content, and a comment looks like ontology semantics, but the checker never reads comments. `avouch query` gives the structured permission, conditions, decision rows, effects and citations, with the commit and the check status. The hook allows `avouch` itself, `git`, the Read and Edit tools, searches that do not name the ontology, and the line-number-only form `grep -n -- <anchor> <file>.ontology.yaml | cut -d: -f1` that finds the lines to edit. It does nothing in a clone of this repository, where the test fixtures need the raw text. The hook is part of the plugin: to turn it off, disable or uninstall the plugin.
 
 Before 0.1.3 the two skills were named `avouch-cli` and `aquery-scan`.
 
