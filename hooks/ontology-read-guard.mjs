@@ -257,12 +257,12 @@ function reason(what) {
   const avouch = `npx -y @githonllc/avouch@${pluginVersion()}`;
   return `Blocked: do not read an Avouch ontology with text tools (${what}). Use avouch query:
 
-  ${avouch} query action <ACTION_ID> <file>.ontology.yaml
-  ${avouch} query object <Type> <file>.ontology.yaml
-  ${avouch} query writes <Object>.<prop> <file>.ontology.yaml
-  ${avouch} query reads <Object>.<prop> <file>.ontology.yaml
-  ${avouch} query cites <anchor> <file>.ontology.yaml
-  ${avouch} query list actions <file>.ontology.yaml
+  ${avouch} query action <ACTION_ID> -f <file>.ontology.yaml
+  ${avouch} query object <Type> -f <file>.ontology.yaml
+  ${avouch} query writes <Object>.<prop> -f <file>.ontology.yaml
+  ${avouch} query reads <Object>.<prop> -f <file>.ontology.yaml
+  ${avouch} query cites <anchor> -f <file>.ontology.yaml
+  ${avouch} query list actions -f <file>.ontology.yaml
 
 A project-local node_modules/.bin/avouch works too. Never run the unscoped \`npx avouch\`:
 an unrelated npm package with that name exists.
@@ -280,7 +280,7 @@ To edit the ontology (query output has no line numbers):
   2. Get line numbers only (the one allowed grep form; it prints no content):
        grep -n -- '<entry id or anchor>' <file>.ontology.yaml | cut -d: -f1
   3. Read that range with the Read tool (offset/limit), then change it with Edit.
-  4. Run \`${avouch} check <file>.ontology.yaml\`.
+  4. Run \`${avouch} check -f <file>.ontology.yaml\`.
 `;
 }
 
