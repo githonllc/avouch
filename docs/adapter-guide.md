@@ -78,7 +78,7 @@ A project whose specification is plain Markdown can run `avouch check` without w
 
 ### Configuration
 
-The configuration is a JSON file. `avouch check <ontology.yaml>` without `--adapter` reads `avouch.json` in the directory of the ontology file. `--adapter <file>.json` names another configuration; any other `--adapter` value is still loaded as a module. The configuration for the toy library (in the directory of `library.md`) is:
+The configuration is a JSON file. `avouch check -f <ontology.yaml>` without `--adapter` reads `avouch.json` in the directory of the ontology file. `--adapter <file>.json` names another configuration; any other `--adapter` value is still loaded as a module. The configuration for the toy library (in the directory of `library.md`) is:
 
 ```json
 {

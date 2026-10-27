@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { isObj, type Stage1Ontology } from "../src/expr.js";
 import { reconcile, type RuntimeCase } from "../src/reconcile.js";
+import { ontologyFile } from "./check.js";
 import { jsonLines } from "./jsonl.js";
 
-export const RECONCILE_USAGE = "usage: avouch reconcile <ontology.yaml> --cases <cases.jsonl>";
+export const RECONCILE_USAGE = "usage: avouch reconcile [-f <ontology.yaml>] --cases <cases.jsonl>";
 
 const REASONS = ["missing", "unknown_param", "type", "not_found"];
 
@@ -18,12 +19,19 @@ export function parseOptions(args: string[], values: readonly string[], flags: r
     if (opts.has(a)) throw new Error(`repeated option ${a}`);
     if (flags.includes(a)) opts.set(a, true);
     else if (values.includes(a)) {
-      if (i + 1 >= args.length) throw new Error(`${a} needs a file`);
+      if (i + 1 >= args.length || args[i + 1] === "") throw new Error(`${a} needs a file`);
       opts.set(a, args[++i]);
-    } else if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
+    } else if (a.startsWith("-")) throw new Error(`unknown option ${a}`);
     else pos.push(a);
   }
   return { pos, opts };
+}
+
+// Exactly n positional arguments. A word of the old form (an ontology file as an argument) gets a pointer to -f.
+export function expectPositionals(pos: string[], n: number): void {
+  if (pos.length === n) return;
+  const old = pos.find((a) => /\.ya?ml$/.test(a));
+  throw new Error(old !== undefined ? `unexpected argument ${old}: give the ontology with -f` : `expected ${n} argument(s), found ${pos.length}`);
 }
 
 export function readOntology(file: string): Record<string, unknown> {
@@ -61,11 +69,11 @@ function checkCase(x: unknown): string | null {
 }
 
 async function main(args: string[]): Promise<number> {
-  const { pos, opts } = parseOptions(args, ["--cases"], []);
-  if (pos.length !== 1) throw new Error(`expected 1 argument, found ${pos.length}`);
+  const { pos, opts } = parseOptions(args, ["-f", "--cases"], []);
+  expectPositionals(pos, 0);
   const cases = opts.get("--cases");
   if (typeof cases !== "string") throw new Error("--cases is required");
-  const ont = readOntology(pos[0]);
+  const ont = readOntology(ontologyFile(opts.get("-f") as string | undefined));
   const lines = jsonLines(cases);
   for (const { line, value } of lines) {
     const problem = checkCase(value);

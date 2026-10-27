@@ -59,7 +59,7 @@ const lines = (stdout: string) => stdout.split("\n").filter((l) => l !== "").map
 describe("avouch reconcile", () => {
   it("prints one reconcile row per case, in input order", () => {
     const cases = returnCases();
-    const r = run(ontology, "--cases", temporaryFile("cases.jsonl", jsonl(cases)));
+    const r = run("-f", ontology, "--cases", temporaryFile("cases.jsonl", jsonl(cases)));
     expect(r.status, r.stderr).toBe(0);
     expect(r.stderr).toBe("");
     expect(lines(r.stdout)).toHaveLength(3);
@@ -69,14 +69,14 @@ describe("avouch reconcile", () => {
 
   it("skips empty lines and accepts CRLF line ends", () => {
     const [a, b, c] = returnCases().map((x) => JSON.stringify(x));
-    const r = run("--cases", temporaryFile("cases.jsonl", `${a}\r\n\r\n${b}\r\n${c}\r\n`), ontology);
+    const r = run("--cases", temporaryFile("cases.jsonl", `${a}\r\n\r\n${b}\r\n${c}\r\n`), "-f", ontology);
     expect(r.status, r.stderr).toBe(0);
     expect(lines(r.stdout)).toHaveLength(3);
   });
 
   it("a line that is not JSON gives exit 2 and its line number", () => {
     const [a] = returnCases();
-    const r = run(ontology, "--cases", temporaryFile("cases.jsonl", `${JSON.stringify(a)}\n{nope\n`));
+    const r = run("-f", ontology, "--cases", temporaryFile("cases.jsonl", `${JSON.stringify(a)}\n{nope\n`));
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("cases.jsonl:2: invalid JSON");
     expect(r.stderr).toContain("usage: avouch reconcile");
@@ -85,21 +85,29 @@ describe("avouch reconcile", () => {
 
   it("a line that is not a RuntimeCase gives exit 2, its line number and the field", () => {
     const { expected: _expected, ...noExpected } = returnCases()[0];
-    const r = run(ontology, "--cases", temporaryFile("cases.jsonl", jsonl([noExpected])));
+    const r = run("-f", ontology, "--cases", temporaryFile("cases.jsonl", jsonl([noExpected])));
     expect(r.status).toBe(2);
     expect(r.stderr).toContain(":1: expected");
     expect(r.stdout).toBe("");
   });
 
   it("does not judge the rows: a mismatch gives exit 0", () => {
-    const r = run(ontology, "--cases", temporaryFile("cases.jsonl", jsonl([baseCase({ reported: { result: "RETURNED_LATE" } })])));
+    const r = run("-f", ontology, "--cases", temporaryFile("cases.jsonl", jsonl([baseCase({ reported: { result: "RETURNED_LATE" } })])));
     expect(r.status, r.stderr).toBe(0);
     expect(lines(r.stdout)[0]).toMatchObject({ status: "mismatch" });
   });
 
   it("invalid arguments give exit 2", () => {
     const cases = temporaryFile("cases.jsonl", jsonl(returnCases()));
-    for (const args of [[ontology], [ontology, ontology, "--cases", cases], [ontology, "--cases", cases, "--x"], [ontology, "--cases"]]) {
+    for (const args of [
+      ["-f", ontology],
+      ["-f", ontology, ontology, "--cases", cases],
+      ["-f", ontology, "--cases", cases, "--x"],
+      ["-f", ontology, "--cases", cases, "-z"],
+      ["-f", ontology, "--cases"],
+      ["-f", "--cases", cases],
+      ["-f", ontology, "-f", ontology, "--cases", cases],
+    ]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(r.stderr).toContain("usage: avouch reconcile");
@@ -108,7 +116,7 @@ describe("avouch reconcile", () => {
   });
 
   it("an ontology whose root is not a mapping gives exit 2", () => {
-    const r = run(temporaryFile("ontology.yaml", "- a\n- b\n"), "--cases", temporaryFile("cases.jsonl", jsonl(returnCases())));
+    const r = run("-f", temporaryFile("ontology.yaml", "- a\n- b\n"), "--cases", temporaryFile("cases.jsonl", jsonl(returnCases())));
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("the root is not a mapping");
   });

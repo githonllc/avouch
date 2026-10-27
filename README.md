@@ -73,8 +73,10 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 Build with `npm run build`, then run:
 
 ```sh
-avouch check <ontology.yaml> [--adapter <module|config.json>]
+avouch check [-f <ontology.yaml>] [--adapter <module|config.json>]
 ```
+
+All four commands (`check`, `query`, `reconcile`, `gate verify`) take the ontology file with `-f <file>`. Without `-f`, a command uses `avouch/avouch.ontology.yaml` at the git top level of the working directory, so it also works from a subdirectory. Two errors, each with exit code 2: `no -f, and the working directory is not in a git repository`, and `no -f, and <path> does not exist`.
 
 In a source checkout, use `node dist/cli/avouch.js` in place of `avouch`.
 The command runs both the JSON Schema validator and the checker. Exit code 0 means both pass; 1 means there are schema errors or unwaived violations; 2 means invalid arguments or a file, parsing or adapter error.
@@ -88,10 +90,10 @@ An `--adapter` path that ends in `.json` is not loaded as a module: it is the co
 `avouch query` answers questions about the specification in an ontology file. It reads the file and changes nothing. It does not read runtime data.
 
 ```sh
-avouch query <verb> <arg> <ontology.yaml> [--json] [--adapter <module|config.json>]
+avouch query <verb> <arg> [-f <ontology.yaml>] [--json] [--adapter <module|config.json>]
 ```
 
-The command takes exactly three positional arguments. The options can be in any position.
+The command takes exactly two positional arguments. The options can be in any position.
 
 | Verb | Argument | Answer |
 |---|---|---|
@@ -128,13 +130,13 @@ Exit code 0 means there is a result. 1 means there is no result: the id is not d
 `avouch reconcile` compares the result that the runtime reported with the result of the evaluator and with the scenario expectation (SPEC section 9, Runtime consistency). `avouch gate verify` checks that the reconciled cases cover each decision row. Both commands read files and write no file. They do not run project code: the project's test harness writes the cases.
 
 ```sh
-avouch reconcile <ontology.yaml> --cases <cases.jsonl>
-avouch gate verify <ontology.yaml> --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--adapter <module|config.json>]
+avouch reconcile [-f <ontology.yaml>] --cases <cases.jsonl>
+avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--adapter <module|config.json>]
 ```
 
 ### reconcile
 
-The cases file has one `RuntimeCase` (SPEC section 9) per line, as JSON. Empty lines are skipped. A case can have more keys than `RuntimeCase`; they are ignored. The command prints one `ReconcileRow` per case, as one JSON line, in input order. For example, `avouch reconcile library.ontology.yaml --cases cases.jsonl > rows.jsonl` writes the input of `gate verify`.
+The cases file has one `RuntimeCase` (SPEC section 9) per line, as JSON. Empty lines are skipped. A case can have more keys than `RuntimeCase`; they are ignored. The command prints one `ReconcileRow` per case, as one JSON line, in input order. For example, `avouch reconcile -f library.ontology.yaml --cases cases.jsonl > rows.jsonl` writes the input of `gate verify`.
 
 Exit code 0 means that each case gave a row, also a `mismatch` or a `cannot_reconcile` row: the command does not judge the rows. 2 means invalid arguments, a file or parse error, or a line that is not a `RuntimeCase`; the message gives the file and the line number. The command does not use exit code 1.
 

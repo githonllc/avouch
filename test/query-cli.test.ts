@@ -60,14 +60,14 @@ describe("avouch query", () => {
       ["object", "Loan", "    deletes: true"],
       ["writes", "Loan.state", "deleters: DELETE_LOAN"],
     ]) {
-      const r = run(verb, arg, path);
+      const r = run(verb, arg, "-f", path);
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.split("\n")).toContain(line);
     }
   });
 
   it("prints a versioned envelope with check not_run", () => {
-    const r = json("action", "BORROW", ontology);
+    const r = json("action", "BORROW", "-f", ontology);
     expect(r.status, r.stderr).toBe(0);
     expect(r.envelope.avouchQuery).toBe(1);
     expect(r.envelope.stamp.check).toEqual({ status: "not_run" });
@@ -78,10 +78,10 @@ describe("avouch query", () => {
 
   it("stamps no git outside a repository", () => {
     const { path } = copyOntology();
-    const r = json("action", "BORROW", path);
+    const r = json("action", "BORROW", "-f", path);
     expect(r.status, r.stderr).toBe(0);
     expect(r.envelope.stamp.git).toBeNull();
-    const text = run("action", "BORROW", path);
+    const text = run("action", "BORROW", "-f", path);
     expect(text.stdout.split("\n")[1]).toBe("commit: none (not in git)");
   });
 
@@ -91,20 +91,20 @@ describe("avouch query", () => {
     expect(git(directory, "add", "library.ontology.yaml").status).toBe(0);
     const c = git(directory, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "x");
     expect(c.status, c.stderr).toBe(0);
-    const clean = json("object", "Loan", path);
+    const clean = json("object", "Loan", "-f", path);
     expect(clean.status, clean.stderr).toBe(0);
     expect(clean.envelope.stamp.git.commit).toMatch(/^[0-9a-f]{40}$/);
     expect(clean.envelope.stamp.git.dirty).toBe(false);
     expect(clean.envelope.stamp.git.path).toBe("library.ontology.yaml");
     const t = Date.now() / 1000 + 60; utimesSync(path, t, t); // stat change: an index-refreshing `git status` would rewrite .git/index
     const before = snapshot(directory);
-    run("reads", "Loan.state", path);
-    run("cites", "L6", path, "--json");
+    run("reads", "Loan.state", "-f", path);
+    run("cites", "L6", "-f", path, "--json");
     expect(snapshot(directory)).toEqual(before);
     appendFileSync(path, "# changed\n");
-    const dirty = json("object", "Loan", path);
+    const dirty = json("object", "Loan", "-f", path);
     expect(dirty.envelope.stamp.git.dirty).toBe(true);
-    expect(run("object", "Loan", path).stdout.split("\n")[1]).toMatch(/^commit: [0-9a-f]{40} \(dirty\)$/);
+    expect(run("object", "Loan", "-f", path).stdout.split("\n")[1]).toMatch(/^commit: [0-9a-f]{40} \(dirty\)$/);
   });
 
   it.skipIf(!gitAvailable)("stamps a git-ignored file as dirty", () => {
@@ -114,7 +114,7 @@ describe("avouch query", () => {
     expect(git(directory, "add", ".gitignore").status).toBe(0);
     const c = git(directory, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "x");
     expect(c.status, c.stderr).toBe(0);
-    const r = json("object", "Loan", path);
+    const r = json("object", "Loan", "-f", path);
     expect(r.status, r.stderr).toBe(0);
     expect(r.envelope.stamp.git.dirty).toBe(true);
     expect(r.envelope.stamp.git.path).toBe("library.ontology.yaml");
@@ -122,20 +122,20 @@ describe("avouch query", () => {
 
   it("answers an out-of-scope object", () => {
     const path = patchedOntology([{ op: "add", path: "/outOfScopeObjectTypes", value: { Shelf: "not modelled" } }]);
-    const r = json("object", "Shelf", path);
+    const r = json("object", "Shelf", "-f", path);
     expect(r.status, r.stderr).toBe(0);
     expect(r.envelope.result.outOfScope).toBe("not modelled");
-    expect(run("object", "Shelf", path).stdout.split("\n")).toContain("outOfScope: not modelled");
+    expect(run("object", "Shelf", "-f", path).stdout.split("\n")).toContain("outOfScope: not modelled");
   });
 
   it("escapes line breaks in text output", () => {
     const path = patchedOntology([{ op: "replace", path: "/actionTypes/BORROW/decision/rows/0/cites/0/cite/quote", value: "first line\nsecond line\r" }]);
-    const r = run("action", "BORROW", path);
+    const r = run("action", "BORROW", "-f", path);
     expect(r.status, r.stderr).toBe(0);
     const lines = r.stdout.split("\n");
     expect(lines).toContain("        - [L6] first line\\nsecond line\\r");
     expect(lines.some((l) => l.startsWith("second line"))).toBe(false);
-    expect(json("action", "BORROW", path).envelope.result.decision.rows[0].cites[0].quote).toBe("first line\nsecond line\r");
+    expect(json("action", "BORROW", "-f", path).envelope.result.decision.rows[0].cites[0].quote).toBe("first line\nsecond line\r");
   });
 
   it("prints the principals block of a {none} permission, and `principals: -` without one", () => {
@@ -144,59 +144,62 @@ describe("avouch query", () => {
       { op: "replace", path: "/actionTypes/BORROW/permission", value: { none: "anyone", cite, principals: { kinds: ["user"], cite } } },
       { op: "replace", path: "/actionTypes/RETURN/permission", value: { none: "anyone", cite } },
     ]);
-    const withPrincipals = run("action", "BORROW", path);
+    const withPrincipals = run("action", "BORROW", "-f", path);
     expect(withPrincipals.status, withPrincipals.stderr).toBe(0);
     const lines = withPrincipals.stdout.split("\n");
     const at = lines.indexOf("  principals:");
     expect(at).toBeGreaterThan(0);
     expect(lines.slice(at, at + 3)).toEqual(["  principals:", "    kinds: user", "    cite: [L10] `loan:create`"]);
-    const without = run("action", "RETURN", path);
+    const without = run("action", "RETURN", "-f", path);
     expect(without.status, without.stderr).toBe(0);
     expect(without.stdout.split("\n")).toContain("  principals: -");
   });
 
   it("runs the check with the built-in Markdown adapter configuration", () => {
     const markdown = "test/fixtures/library-markdown.json";
-    const r = json("action", "BORROW", ontology, "--adapter", markdown);
+    const r = json("action", "BORROW", "-f", ontology, "--adapter", markdown);
     expect(r.status, r.stderr).toBe(0);
     expect(r.envelope.stamp.check).toEqual({ status: "fail", adapter: markdown, schemaErrors: 0, violations: 3, waived: 0 });
   });
 
   it("runs the check with an adapter", () => {
-    const pass = json("action", "BORROW", ontology, "--adapter", adapter);
+    const pass = json("action", "BORROW", "-f", ontology, "--adapter", adapter);
     expect(pass.status, pass.stderr).toBe(0);
     expect(pass.envelope.stamp.check).toEqual({ status: "pass", adapter, schemaErrors: 0, violations: 0, waived: 0 });
     const mutation = parse(readFileSync(join(root, "examples/library/mutations/lib-r8-unknown-event.yaml"), "utf8"));
     const directory = temporaryDirectory();
     const path = join(directory, "ontology.yaml");
     writeFileSync(path, stringify(applyPatch(parse(readFileSync(join(root, ontology), "utf8")), mutation.patch)));
-    const fail = json("--adapter", adapter, "action", "BORROW", path);
+    const fail = json("--adapter", adapter, "action", "BORROW", "-f", path);
     expect(fail.status, fail.stderr).toBe(0);
     expect(fail.envelope.stamp.check.status).toBe("fail");
     expect(fail.envelope.stamp.check.violations).toBeGreaterThanOrEqual(1);
-    const text = run("action", "BORROW", ontology, "--adapter", adapter);
+    const text = run("action", "BORROW", "-f", ontology, "--adapter", adapter);
     expect(text.stdout.split("\n")[2]).toBe("check: pass (0 schema error(s), 0 violation(s), 0 waived)");
   });
 
   it("exits 1 on an empty result and still prints the envelope", () => {
-    const r = json("action", "NOPE", ontology);
+    const r = json("action", "NOPE", "-f", ontology);
     expect(r.status).toBe(1);
     expect(r.envelope.result).toBeNull();
-    expect(run("cites", "L99", ontology).status).toBe(1);
-    expect(run("writes", "Book.nope", ontology).status).toBe(1);
+    expect(run("cites", "L99", "-f", ontology).status).toBe(1);
+    expect(run("writes", "Book.nope", "-f", ontology).status).toBe(1);
   });
 
   it("exits 2 on usage errors and a missing file", () => {
     for (const args of [
-      ["action", "BORROW"],
-      ["action", "BORROW", ontology, "extra"],
-      ["bogus", "x", ontology],
-      ["list", "bogus", ontology],
-      ["writes", "Book", ontology],
-      ["reads", "a.b.c", ontology],
-      ["action", "BORROW", ontology, "--bogus"],
-      ["action", "BORROW", ontology, "--adapter"],
-      ["action", "BORROW", "examples/library/missing.yaml"],
+      ["action"],
+      ["action", "BORROW", "extra", "-f", ontology],
+      ["bogus", "x", "-f", ontology],
+      ["list", "bogus", "-f", ontology],
+      ["writes", "Book", "-f", ontology],
+      ["reads", "a.b.c", "-f", ontology],
+      ["action", "BORROW", "-f", ontology, "--bogus"],
+      ["action", "BORROW", "-f", ontology, "-z"],
+      ["action", "BORROW", "-f", ontology, "--adapter"],
+      ["action", "BORROW", "-f"],
+      ["action", "BORROW", "-f", ontology, "-f", ontology],
+      ["action", "BORROW", "-f", "examples/library/missing.yaml"],
     ]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
@@ -207,11 +210,11 @@ describe("avouch query", () => {
     const directory = temporaryDirectory();
     const list = join(directory, "list.yaml");
     writeFileSync(list, "- a\n- b\n");
-    expect(run("action", "BORROW", list).status).toBe(2);
+    expect(run("action", "BORROW", "-f", list).status).toBe(2);
   });
 
   it("prints the stamp lines and a text rendering", () => {
-    const r = run("action", "BORROW", ontology);
+    const r = run("action", "BORROW", "-f", ontology);
     expect(r.status, r.stderr).toBe(0);
     const lines = r.stdout.split("\n");
     expect(lines[0]).toMatch(/^ontology: /);

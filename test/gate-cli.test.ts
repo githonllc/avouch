@@ -60,7 +60,7 @@ const jsonl = (xs: unknown[]) => xs.map((x) => JSON.stringify(x)).join("\n") + "
 
 // The rows file of the three RETURN cases, written by avouch reconcile.
 const rowsFile = (cases: RuntimeCase[] = returnCases()) => {
-  const r = avouch("reconcile", ontology, "--cases", temporaryFile("cases.jsonl", jsonl(cases)));
+  const r = avouch("reconcile", "-f", ontology, "--cases", temporaryFile("cases.jsonl", jsonl(cases)));
   expect(r.status, r.stderr).toBe(0);
   return temporaryFile("rows.jsonl", r.stdout);
 };
@@ -73,14 +73,14 @@ const baselineFile = (uncovered: unknown[], exempt: unknown[] = []) => temporary
 
 describe("avouch gate verify", () => {
   it("passes on the pipeline from cases to the gate with a baseline of the BORROW units", () => {
-    const r = avouch("gate", "verify", ontology, "--rows", rowsFile(), "--baseline", baselineFile(borrowDebts()));
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rowsFile(), "--baseline", baselineFile(borrowDebts()));
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(lastLine(r.stdout).startsWith("PASS: 8 unit(s), 3 verified, 5 baselined, 0 blocked, 0 uncovered;")).toBe(true);
     expect(r.stdout).toContain("INFO check not_run");
   });
 
   it("without a baseline, each uncovered unit fails", () => {
-    const r = avouch("gate", "verify", "--rows", rowsFile(), ontology);
+    const r = avouch("gate", "verify", "--rows", rowsFile(), "-f", ontology);
     expect(r.status, r.stderr).toBe(1);
     expect(r.stdout).toContain("FAIL uncovered BORROW:rows.0\n");
     expect(r.stdout).toContain("FAIL uncovered BORROW:otherwise\n");
@@ -88,7 +88,7 @@ describe("avouch gate verify", () => {
   });
 
   it("a baseline entry for a verified unit is stale", () => {
-    const r = avouch("gate", "verify", ontology, "--rows", rowsFile(), "--baseline", baselineFile([...borrowDebts(), debt("RETURN", "otherwise")]));
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rowsFile(), "--baseline", baselineFile([...borrowDebts(), debt("RETURN", "otherwise")]));
     expect(r.status, r.stderr).toBe(1);
     expect(r.stdout).toContain("FAIL stale uncovered RETURN:otherwise verified\n");
   });
@@ -96,7 +96,7 @@ describe("avouch gate verify", () => {
   it("--json prints the envelope with the result of verifyCoverage", () => {
     const rows = rowsFile();
     const uncovered = borrowDebts();
-    const r = avouch("gate", "verify", ontology, "--rows", rows, "--baseline", baselineFile(uncovered), "--json");
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rows, "--baseline", baselineFile(uncovered), "--json");
     expect(r.status, r.stderr).toBe(0);
     const envelope = JSON.parse(r.stdout);
     expect(envelope.avouchGate).toBe(1);
@@ -108,12 +108,12 @@ describe("avouch gate verify", () => {
 
   it("with --adapter, runs the check, and a failed check fails the gate", () => {
     const rows = rowsFile();
-    const pass = avouch("gate", "verify", ontology, "--rows", rows, "--baseline", baselineFile(borrowDebts()), "--adapter", adapter);
+    const pass = avouch("gate", "verify", "-f", ontology, "--rows", rows, "--baseline", baselineFile(borrowDebts()), "--adapter", adapter);
     expect(pass.status, pass.stdout + pass.stderr).toBe(0);
     expect(pass.stdout).toContain("INFO check pass\n");
     const mutation = parse(readFileSync(join(root, "examples/library/mutations/lib-r8-unknown-event.yaml"), "utf8"));
     const bad = temporaryFile("ontology.yaml", stringify(applyPatch(parse(ontologyText), mutation.patch)));
-    const fail = avouch("gate", "verify", bad, "--rows", rows, "--baseline", baselineFile(borrowDebts()), "--adapter", adapter);
+    const fail = avouch("gate", "verify", "-f", bad, "--rows", rows, "--baseline", baselineFile(borrowDebts()), "--adapter", adapter);
     expect(fail.status, fail.stderr).toBe(1);
     expect(fail.stdout).toContain("FAIL check: ");
     expect(fail.stdout).toContain("INFO check fail\n");
@@ -124,31 +124,33 @@ describe("avouch gate verify", () => {
     const badBaseline = temporaryFile("baseline.json", JSON.stringify({ avouchCoverage: 2, uncovered: [], exempt: [] }));
     const badRows = temporaryFile("rows.jsonl", "{nope\n");
     for (const args of [
-      ["gate", "verify", ontology, "--rows", rows, "--baseline", badBaseline],
-      ["gate", "verify", ontology, "--rows", badRows],
-      ["gate", "verify", ontology],
+      ["gate", "verify", "-f", ontology, "--rows", rows, "--baseline", badBaseline],
+      ["gate", "verify", "-f", ontology, "--rows", badRows],
+      ["gate", "verify", "-f", ontology],
+      ["gate", "verify", "-f", ontology, "--rows", rows, "-z"],
+      ["gate", "verify", "-f", "--rows", rows],
       ["gate"],
-      ["gate", "plan", ontology],
+      ["gate", "plan", "-f", ontology],
     ]) {
       const r = avouch(...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(r.stderr).toContain("usage: avouch gate verify");
       expect(r.stdout).toBe("");
     }
-    expect(avouch("gate", "verify", ontology, "--rows", rows, "--baseline", badBaseline).stderr).toContain("baseline.json: baseline: avouchCoverage");
-    expect(avouch("gate", "verify", ontology, "--rows", badRows).stderr).toContain("rows.jsonl:1: invalid JSON");
+    expect(avouch("gate", "verify", "-f", ontology, "--rows", rows, "--baseline", badBaseline).stderr).toContain("baseline.json: baseline: avouchCoverage");
+    expect(avouch("gate", "verify", "-f", ontology, "--rows", badRows).stderr).toContain("rows.jsonl:1: invalid JSON");
   });
 
   it("an ontology without actionTypes gives exit 2 and the ontology file", () => {
     const path = temporaryFile("ontology.yaml", "foo: 1\n");
-    const r = avouch("gate", "verify", path, "--rows", rowsFile());
+    const r = avouch("gate", "verify", "-f", path, "--rows", rowsFile());
     expect(r.status).toBe(2);
     expect(r.stderr).toContain(`${path}: ontology: actionTypes is not an object`);
     expect(r.stdout).toBe("");
   });
 
   it("a repeated option gives exit 2", () => {
-    const r = avouch("gate", "verify", ontology, "--rows", "a.jsonl", "--rows", "b.jsonl");
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", "a.jsonl", "--rows", "b.jsonl");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("repeated option --rows");
     expect(r.stderr).toContain("usage: avouch gate verify");
@@ -158,7 +160,7 @@ describe("avouch gate verify", () => {
     const ont = structuredClone(library);
     ont.actionTypes.RETURN!.conditions = ont.actionTypes.RETURN!.conditions.map((c) => (c.id === "loan_active" ? { id: "loan_active", unspecified: "x" } : c));
     const path = temporaryFile("ontology.yaml", stringify(ont));
-    const r = avouch("gate", "verify", path, "--rows", temporaryFile("rows.jsonl", ""), "--baseline", baselineFile(borrowDebts(), [{ action: "RETURN", condition: "loan_active", kind: "unspecified" }]));
+    const r = avouch("gate", "verify", "-f", path, "--rows", temporaryFile("rows.jsonl", ""), "--baseline", baselineFile(borrowDebts(), [{ action: "RETURN", condition: "loan_active", kind: "unspecified" }]));
     expect(r.status, r.stderr).toBe(1);
     expect(r.stdout).toContain("FAIL unreasoned RETURN:loan_active\n");
     expect(r.stdout).toContain("INFO blocked RETURN:rows.0 by loan_active\n");
@@ -166,7 +168,7 @@ describe("avouch gate verify", () => {
 
   it("cases without an expectation are unasserted: printed as INFO and counted in the summary", () => {
     const cases = [baseCase({ id: "u-1", expected: null }), ...returnCases(), baseCase({ id: "u-2", expected: null })];
-    const r = avouch("gate", "verify", ontology, "--rows", rowsFile(cases), "--baseline", baselineFile(borrowDebts()));
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rowsFile(cases), "--baseline", baselineFile(borrowDebts()));
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain("INFO unasserted u-1 RETURN\n");
     expect(r.stdout).toContain("INFO unasserted u-2 RETURN\n");
@@ -175,7 +177,7 @@ describe("avouch gate verify", () => {
 
   it("a case without an expectation whose runtime result the action cannot give fails as runtime_unmapped", () => {
     const cases = [baseCase({ id: "u-1", expected: null, reported: { result: "BORROWED" } }), ...returnCases()];
-    const r = avouch("gate", "verify", ontology, "--rows", rowsFile(cases), "--baseline", baselineFile(borrowDebts()));
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rowsFile(cases), "--baseline", baselineFile(borrowDebts()));
     expect(r.status, r.stderr).toBe(1);
     expect(r.stdout).toContain("FAIL case u-1 RETURN runtime_unmapped\n");
     expect(lastLine(r.stdout)).toContain("0 unasserted");

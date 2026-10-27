@@ -1,29 +1,30 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { CONFIG_FILE, runCheck } from "./check.js";
+import { CONFIG_FILE, ontologyFile, runCheck } from "./check.js";
 import { GATE_USAGE, runGate } from "./gate.js";
 import { QUERY_USAGE, runQuery } from "./query.js";
-import { RECONCILE_USAGE, runReconcile } from "./reconcile.js";
+import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile } from "./reconcile.js";
 
-const CHECK_USAGE = "usage: avouch check <ontology.yaml> [--adapter <module|config.json>]";
+const CHECK_USAGE = "usage: avouch check [-f <ontology.yaml>] [--adapter <module|config.json>]";
 
 async function check(args: string[]): Promise<number> {
+  let file: string;
   let adapter: string | null;
-  if (args.length === 3 && args[1] === "--adapter") adapter = args[2];
-  else if (args.length === 1) {
+  try {
+    const { pos, opts } = parseOptions(args, ["-f", "--adapter"], []);
+    expectPositionals(pos, 0);
+    file = ontologyFile(opts.get("-f") as string | undefined);
+    adapter = (opts.get("--adapter") as string | undefined) ?? null;
     // no --adapter: the built-in Markdown adapter with the avouch.json next to the ontology
-    if (!existsSync(join(dirname(resolve(args[0])), CONFIG_FILE))) {
-      console.error(`no adapter: no ${CONFIG_FILE} next to ${args[0]}; pass --adapter <module|config.json>`);
-      console.error(CHECK_USAGE);
-      return 2;
-    }
-    adapter = null;
-  } else {
+    if (adapter === null && !existsSync(join(dirname(resolve(file)), CONFIG_FILE)))
+      throw new Error(`no adapter: no ${CONFIG_FILE} next to ${file}; pass --adapter <module|config.json>`);
+  } catch (error) {
+    console.error((error instanceof Error ? error.message : String(error)).replace(/[\r\n]+/g, " "));
     console.error(CHECK_USAGE);
     return 2;
   }
-  const { schemaErrors: errors, report } = await runCheck(args[0], adapter);
+  const { schemaErrors: errors, report } = await runCheck(file, adapter);
   for (const error of errors) console.log(`SCHEMA ${error.instancePath || "/"}: ${error.message}`);
   for (const x of report.violations) console.log(`FAIL ${x.rule} ${x.kind} ${x.key}: ${x.msg}`);
   for (const line of report.info) console.log(`INFO ${line}`);
