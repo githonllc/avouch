@@ -34,7 +34,7 @@ ofv:index a rdf:Property ;
 
 ofv:key a rdf:Property ;
   rdfs:label "key" ;
-  rdfs:comment "Name of an entry in a YAML mapping. YAML: non_link_fields.<key>, edit_cites.<key>, link_effects.<key>, transitions[].bind.<key>" ;
+  rdfs:comment "By YAML location: the name of an entry in a YAML mapping (non_link_fields.<key>, edit_cites.<key>, link_effects.<key>, transitions[].bind.<key>); the top-level key of the JSON object that a property is projected from (objectTypes.<name>.properties.<p>.from.key)" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:name a rdf:Property ;
@@ -159,7 +159,12 @@ ofv:transitions a rdf:Property ;
 
 ofv:from a rdf:Property ;
   rdfs:label "from" ;
-  rdfs:comment "Source state of a transition. YAML: stateMachines.<name>.transitions[].from" ;
+  rdfs:comment "By YAML location: the source state of a transition (stateMachines.<name>.transitions[].from); the JSON column and key that a property is projected from (objectTypes.<name>.properties.<p>.from)" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:field a rdf:Property ;
+  rdfs:label "field" ;
+  rdfs:comment "The property (a JSON column of the same object) that a projected property reads. YAML: objectTypes.<name>.properties.<p>.from.field" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:to a rdf:Property ;

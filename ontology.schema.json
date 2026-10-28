@@ -372,6 +372,27 @@
               }
             }
           }
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field",
+            "key"
+          ],
+          "description": "The property is the value of the top-level key `key` of the JSON object in the column `field` of the same row; it is not a column itself. Extension (R1, R2, R11); no Palantir analog. R1: needs a non-empty `field` and `key`, and `type`; `field` names a declared property of the same object that has neither `from` nor `type`; the property is not `id`, not the `scope.by` field, and not the state property of an object with `stateMachines`; it is not the `via` of a link type (key `linkTypes.<L>.via`), and no action names it in `edits` (edit `field` instead). R2: the property is not a field line of its object's field list (`projected_property_is_field`, key `<Object>.<prop>`), and, when the cite has a quote, `key` occurs as a whole identifier in that quote (`projection_key_not_in_quote`, key `<Object>.<prop>`). R11: an edit of `field` counts as an edit of this property (column level). The value may be null: null when the column is null, or when the key is absent or null (section 9, projectSnapshot).",
+          "properties": {
+            "field": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The property (a JSON column of the same object) that holds the JSON object."
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The top-level key of the JSON object; no path, no array index."
+            }
+          }
         }
       },
       "allOf": [

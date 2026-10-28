@@ -119,8 +119,35 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const rf = isObj(pr) ? (pr as Any).materializedFrom : undefined;
       if (rf !== undefined && (!isObj(rf) || !Array.isArray(rf.reads) || rf.reads.length === 0 || !Array.isArray(rf.cites) || rf.cites.length === 0 || !rf.cites.every((c: Any) => isObj(c) && isObj(c.cite))))
         v("R1", `${p}.properties.${pn}.materializedFrom`, "needs reads[] and cites[{cite}]");
+      const fr = isObj(pr) ? (pr as Any).from : undefined;
+      if (fr !== undefined) {
+        const k = `${p}.properties.${pn}.from`, props: Record<string, Any> = o.properties, f = isObj(fr) ? fr.field : undefined;
+        if (!isObj(fr) || !isStr(fr.field) || !isStr(fr.key)) v("R1", k, "needs field and key");
+        else if (!own(props, f) || !isObj(props[f]) || props[f].from !== undefined || props[f].type !== undefined)
+          v("R1", k, `${f}: field must name a declared property of ${name} that has neither from nor type`);
+        if ((pr as Any).type === undefined) v("R1", k, "needs type");
+        // decide reads id for identity and the scope field for visibility; a projected state property would make every writer of the field a state edit (R3)
+        if (pn === "id") v("R1", k, "id cannot be projected: decide reads it for identity");
+        else if (isObj(ont.scope) && pn === ont.scope.by) v("R1", k, `${pn} cannot be projected: it is the scope field`);
+        else if (own(stateMachines, name) && pn === stateProp(name)) v("R1", k, `${pn} cannot be projected: it is the state property of ${name}`);
+      }
     }
   }
+  // the projection of a property `<O>.<p>` (its `from` value), or undefined; edits name the field instead (R1), and an edit of the field writes it (R11)
+  const fromOf = (ref: unknown): Any => {
+    const [o, pn, ...rest] = String(ref).split(".");
+    return rest.length || !objType(o) || !isObj(objects[o].properties) || !own(objects[o].properties, pn) || !isObj(objects[o].properties[pn]) ? undefined : objects[o].properties[pn].from;
+  };
+  const fieldOf = (ref: unknown): string | undefined => {
+    const fr = fromOf(ref);
+    return isObj(fr) && isStr(fr.field) ? `${String(ref).split(".")[0]}.${fr.field}` : undefined;
+  };
+  // the edits of an action at column level: an edit of `<O>.<f>` also writes each property projected from it
+  const editedProps = (c: Any): string[] =>
+    arr(c.edits).flatMap((e) => {
+      const o = String(e).split(".")[0], props = objType(o) && isObj(objects[o].properties) ? Object.keys(objects[o].properties) : [];
+      return [e, ...props.map((pn) => `${o}.${pn}`).filter((r) => fieldOf(r) === e)];
+    });
   const propClass = (ref: string): string | null => {
     const [o, p, ...rest] = ref.split(".");
     if (rest.length || !objType(o) || !isObj(objects[o].properties) || !own(objects[o].properties, p) || !isObj(objects[o].properties[p])) return null;
@@ -146,6 +173,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!CARDINALITY.test(String(l.cardinality))) v("R1", `linkTypes.${l.id}`, "cardinality must be like N:1");
     if (!isStr(l.via) || !isStr(l.doc)) v("R1", `linkTypes.${l.id}`, "via and doc are required");
     if (isStr(l.via) && propClass(`${l.from}.${l.via}`) === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
+    const vp = objType(l.from) && isObj(objects[l.from].properties) && own(objects[l.from].properties, l.via) ? objects[l.from].properties[l.via] : undefined; // own keys, not a split ref: a name may hold a dot
+    if (isStr(l.via) && isObj(vp) && vp.from !== undefined) v("R1", `linkTypes.${l.id}.via`, `${l.via} is a projected property: a navigation over the link reads it`);
     if (l.table !== undefined && !isStr(l.table)) v("R1", `linkTypes.${l.id}`, "table must be a table name");
     if (l.create_rule !== undefined) {
       const r = l.create_rule;
@@ -284,6 +313,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     for (const e of arr(c.edits)) {
       const [o] = String(e).split(".");
       if (!(outOfScope.has(o) || propClass(e) !== null)) v("R1", p, `edit ${e} does not resolve to a declared property`);
+      else if (fromOf(e) !== undefined) v("R1", p, `${e} is projected from ${fieldOf(e) ?? "a JSON column"}; edit ${fieldOf(e) ?? "that column"}`);
     }
     for (const o of arr(c.creates)) if (!objType(o) && !outOfScope.has(o)) v("R1", p, `creates ${o}: unknown object`);
     for (const o of arr(c.deletes)) if (!objType(o) && !outOfScope.has(o)) v("R1", p, `deletes ${o}: unknown object`);
@@ -327,14 +357,20 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   walkCites({ objectTypes: objects, stateMachines, linkTypes: links, actionTypes: commands, permission_rows_not_commands: nonCmdRows, derivedProperties: derived, scope: ont.scope, dispositions: ont.dispositions }, "");
   for (const [name, o] of Object.entries(objects)) {
     if (!isObj(o)) continue;
-    const s = section(o.doc, "R2", `objectTypes.${name}`);
-    if (!s) continue;
-    if (!IDENT(name).test(s.text)) v("R2", `objectTypes.${name}`, `object name not in ${o.doc}`);
-    const fl = facts.fieldList(o.doc, name)?.value ?? null;
-    if (!fl) v("R2", `objectTypes.${name}:fields`, `${o.doc} has no single field list headed ${name}`, "field_list_missing");
-    else
-      for (const pn of Object.keys(isObj(o.properties) ? o.properties : {}))
-        if (!fl.has(pn)) v("R2", `${name}.${pn}`, `property ${pn} is not a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "property_not_field");
+    const s = section(o.doc, "R2", `objectTypes.${name}`); // without a section there is no field list, but the key check of a projected property still runs
+    if (s && !IDENT(name).test(s.text)) v("R2", `objectTypes.${name}`, `object name not in ${o.doc}`);
+    const fl = s ? (facts.fieldList(o.doc, name)?.value ?? null) : null;
+    if (s && !fl) v("R2", `objectTypes.${name}:fields`, `${o.doc} has no single field list headed ${name}`, "field_list_missing");
+    for (const [pn, pr] of Object.entries(isObj(o.properties) ? o.properties : {})) {
+      const fr = isObj(pr) ? (pr as Any).from : undefined; // a projected property is not a column; its field is checked as a property of its own
+      if (fr === undefined) {
+        if (fl && !fl.has(pn)) v("R2", `${name}.${pn}`, `property ${pn} is not a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "property_not_field");
+        continue;
+      }
+      if (fl?.has(pn)) v("R2", `${name}.${pn}`, `projected property ${pn} is a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "projected_property_is_field");
+      const q = (pr as Any).cite?.quote;
+      if (isObj(fr) && isStr(fr.key) && isStr(q) && !IDENT(fr.key).test(q)) v("R2", `${name}.${pn}`, `key ${fr.key} of the projected property ${pn} does not appear in its cite quote`, "projection_key_not_in_quote");
+    }
   }
   const tableRefs: [string, unknown][] = [
     ...Object.entries(objects).map(([n, o]): [string, unknown] => [`objectTypes.${n}.datasource`, o?.datasource]),
@@ -820,10 +856,11 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       for (const [cid, c] of Object.entries(commands)) {
         if (!isObj(c)) continue;
         // deleting an input object writes it, unless the target's own object is deleted too (the target row is gone)
-        const hit = reads.filter((r) => arr(c.edits).includes(r) || arr(c.creates).includes(r.split(".")[0])
+        const edits = editedProps(c);
+        const hit = reads.filter((r) => edits.includes(r) || arr(c.creates).includes(r.split(".")[0])
           || (arr(c.deletes).includes(r.split(".")[0]) && !arr(c.deletes).includes(name)));
-        if (hit.length && !arr(c.edits).includes(target))
-          v("R11", `${cid}:${target}`, `${cid} writes ${hit.join(", ")} (inputs of ${target}) but does not list ${target} in edits`, "materialization_missing");
+        if (hit.length && !edits.includes(target))
+          v("R11", `${cid}:${target}`, `${cid} writes ${hit.join(", ")} (inputs of ${target}) but does not list ${fieldOf(target) ?? target} in edits`, "materialization_missing");
       }
     }
 

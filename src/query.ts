@@ -36,7 +36,7 @@ export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
   transitions: { object: string; from: S; to: S }[] /* state machine transitions whose by names this action */ };
 export type QueryObject = { id: string; context: S; datasource: S; doc: S; outOfScope: S; scope: "tenant" | "global" | "root" | null;
   properties: { name: string; class: S; type: Type | null; cite: QueryCite | null; canonicalValues: { values: string[]; cite: QueryCite | null } | null;
-    materializedFrom: { reads: string[]; cites: QueryCite[] } | null }[];
+    materializedFrom: { reads: string[]; cites: QueryCite[] } | null; from: { field: S; key: S } | null }[];
   derived: { id: string; type: Type | null; docTerm: S; exprText: S; cite: QueryCite | null }[];
   stateMachine: { doc: S; property: S; initial: S; terminal: string[]; transitions: { from: S; to: S; by: string[]; outOfScope: S }[] } | null;
   links: { id: string; end: "from" | "to"; other: S; cardinality: S; via: S }[];
@@ -465,6 +465,7 @@ export function queryObject(ont: unknown, id: string): QueryObject | null {
         cite: citeOf(pr.cite),
         canonicalValues: isObj(cv) ? { values: strs(cv.values), cite: citeOf(cv.cite) } : null,
         materializedFrom: isObj(mf) ? { reads: strs(mf.reads), cites: citesOf(mf.cites) } : null,
+        from: isObj(pr.from) ? { field: str(pr.from.field), key: str(pr.from.key) } : null,
       };
     }),
     derived: Object.entries(deriveds(ont))
@@ -502,6 +503,15 @@ function target(ont: unknown, t: string): { obj: string; name: string; kind: "pr
   return null;
 }
 
+// "O.f" of a projected property "O.p" (its from.field), or null.
+const fieldOf = (ont: unknown, obj: string, name: string): S => {
+  const fr = map(ownObj(map(ownObj(objects(ont), obj)?.properties), name)).from;
+  return isObj(fr) && typeof fr.field === "string" ? `${obj}.${fr.field}` : null;
+};
+// The properties projected from the column "O.f".
+const projectedFrom = (ont: unknown, obj: string, field: string): string[] =>
+  Object.keys(map(ownObj(objects(ont), obj)?.properties)).filter((p) => fieldOf(ont, obj, p) === `${obj}.${field}`).map((p) => `${obj}.${p}`);
+
 const derivedNode = (ont: unknown, id: string) => `${str(ownObj(deriveds(ont), id)?.of) ?? "?"}.${id}`;
 
 function derivedErrors(an: Analysis, ids: Iterable<string>): QueryWrites["unanalyzed"] {
@@ -517,8 +527,14 @@ export function queryWrites(ont: unknown, t: string): QueryWrites | null {
   const tg = target(ont, t);
   if (tg === null) return null;
   const acts = sortedActions(ont);
-  const writersOf = (prop: string, path: string[]) =>
+  // A projected property is written by an edit of its field (column level): those writers get the field as the last path step.
+  const editors = (prop: string, path: string[]) =>
     acts.filter(([, a]) => strs(a.edits).includes(prop)).map(([aid, a]) => ({ action: aid, cite: citeOf(map(own(map(a.edit_cites), prop)).cite), path }));
+  const writersOf = (prop: string, path: string[]) => {
+    const [obj, name] = prop.split(".");
+    const f = fieldOf(ont, obj, name ?? "");
+    return f === null ? editors(prop, path) : [...editors(prop, path), ...editors(f, [...path, f])];
+  };
   if (tg.kind === "property")
     return { target: t, kind: "property", unanalyzed: [], writers: writersOf(t, []), creators: acts.filter(([, a]) => strs(a.creates).includes(tg.obj)).map(([aid]) => aid),
       deleters: acts.filter(([, a]) => strs(a.deletes).includes(tg.obj)).map(([aid]) => aid) };
@@ -545,7 +561,13 @@ export function queryWrites(ont: unknown, t: string): QueryWrites | null {
     frontier = next;
   }
   writers.sort((a, b) => a.path.length - b.path.length || sortStr(a.path.join(), b.path.join()) || sortStr(a.action, b.action));
-  return { target: t, kind: "derived", unanalyzed: derivedErrors(an, seenDerived), writers, creators: [], deleters: [] };
+  // A column read through two projected properties is one input: keep each (action, written column) once, by its shortest path.
+  const seenWrites = new Set<string>();
+  const unique = writers.filter((w) => {
+    const k = `${w.action}\0${w.path.at(-1)}`;
+    return !seenWrites.has(k) && seenWrites.add(k) !== undefined;
+  });
+  return { target: t, kind: "derived", unanalyzed: derivedErrors(an, seenDerived), writers: unique, creators: [], deleters: [] };
 }
 
 export function queryReads(ont: unknown, t: string): QueryReads | null {
@@ -553,10 +575,12 @@ export function queryReads(ont: unknown, t: string): QueryReads | null {
   if (tg === null) return null;
   const an = new Analysis(ont);
   const isDerived = tg.kind === "derived";
+  // A read of a property projected from the target column reads the target (column level).
+  const ts = [t, ...(isDerived ? [] : projectedFrom(ont, tg.obj, tg.name))];
   // Whether a derived property reaches the target through its chain.
-  const reaches = (d: string) => (isDerived ? an.closure(d).derived.has(tg.name) : an.closure(d).props.has(t));
+  const reaches = (d: string) => (isDerived ? an.closure(d).derived.has(tg.name) : ts.some((x) => an.closure(d).props.has(x)));
   const hit = (inp: Inputs) => ({
-    direct: isDerived ? inp.derived.includes(tg.name) : inp.props.includes(t),
+    direct: isDerived ? inp.derived.includes(tg.name) : inp.props.some((x) => ts.includes(x)),
     via: inp.derived.filter((d) => d !== tg.name && reaches(d)),
   });
   const unanalyzed: QueryReads["unanalyzed"] = [];
@@ -583,7 +607,7 @@ export function queryReads(ont: unknown, t: string): QueryReads | null {
   const materialized: string[] = [];
   for (const [o, ob] of Object.entries(objects(ont)))
     for (const [p, pr] of Object.entries(map(map(ob).properties)))
-      if (strs(map(map(pr).materializedFrom).reads).some((r) => r === t || (isDerived && r === tg.name))) materialized.push(`${o}.${p}`);
+      if (strs(map(map(pr).materializedFrom).reads).some((r) => ts.includes(r) || (isDerived && r === tg.name))) materialized.push(`${o}.${p}`);
   return { target: t, kind: tg.kind, materialized: materialized.sort(sortStr), unanalyzed, conditions, derived };
 }
 
