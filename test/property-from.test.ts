@@ -95,6 +95,11 @@ describe("properties.<p>.from", () => {
       const link = { id: "book_meta", from: "Book", to: "Person", cardinality: "N:1", via: "pages", doc: "L1" };
       expect(r1(run([{ op: "add", path: "/linkTypes/-", value: link }]))).toContainEqual(["linkTypes.book_meta.via", "pages is a projected property: a navigation over the link reads it"]);
     });
+    it("the via of a link type, also when the property name has a dot", () => {
+      const pq: Op = { op: "add", path: "/objectTypes/Book/properties/p.q", value: { ...pagesProp, type: { ref: "Book" } } };
+      const link = { id: "L", from: "Book", to: "Book", cardinality: "N:1", via: "p.q", doc: "L1" };
+      expect(r1(run([pq, { op: "add", path: "/linkTypes/-", value: link }]))).toContainEqual(["linkTypes.L.via", "p.q is a projected property: a navigation over the link reads it"]);
+    });
     it("edits that name it", () =>
       expect(r1(run([{ op: "add", path: "/actionTypes/BORROW/edits/-", value: "Book.pages" }]))).toEqual([
         ["actionTypes.BORROW", "Book.pages is projected from Book.metadata_json; edit Book.metadata_json"],
@@ -116,6 +121,12 @@ describe("properties.<p>.from", () => {
         ["R2", "field_list_missing", "objectTypes.Book:fields"],
         ["R2", "projection_key_not_in_quote", "Book.pages"],
       ]);
+    });
+    it("a missing object section (waived) does not skip the key check: projection_key_not_in_quote", () => {
+      const waiver = { id: "G1", rule: "R2", kind: "generic", keys: ["objectTypes.Book"], doc_line: "-", conflict: "probe", proposed: "probe" };
+      const r = run([{ op: "replace", path: "/objectTypes/Book/doc", value: "L99" }, { op: "replace", path: "/knownSourceGaps", value: [waiver] }, pages({ ...pagesProp, from: { field: "metadata_json", key: "page" } })]);
+      expect(triples(r).filter((t) => t[0] === "R2")).toEqual([["R2", "projection_key_not_in_quote", "Book.pages"]]);
+      expect(r.waived.map((x) => x.key)).toEqual(["objectTypes.Book"]);
     });
     it("projection_key_not_in_quote applies only when the cite has a quote; SPEC and schema say so", () => {
       const r = run([pages({ ...pagesProp, from: { field: "metadata_json", key: "page" }, cite: { doc: "L1" } })]);
@@ -228,6 +239,7 @@ describe("properties.<p>.from", () => {
     it("a parse error, an array or a value that does not fit is a defect, and n is deleted", () => {
       expect(one({ meta: "{nope", n: 9 })).toStrictEqual({ row: { id: "t1", meta: "{nope" }, defects: defect("{nope") });
       expect(one({ meta: "[3]", n: 9 })).toStrictEqual({ row: { id: "t1", meta: "[3]" }, defects: defect("[3]") });
+      expect(one({ meta: "null", n: 9 })).toStrictEqual({ row: { id: "t1", meta: "null" }, defects: defect("null") });
       expect(one({ meta: 3 })).toStrictEqual({ row: { id: "t1", meta: 3 }, defects: defect(3) });
       expect(one({ meta: '{"n":"3"}', n: 9 })).toStrictEqual({ row: { id: "t1", meta: '{"n":"3"}' }, defects: defect("3") });
       expect(one({ meta: '{"n":1.5}' })).toStrictEqual({ row: { id: "t1", meta: '{"n":1.5}' }, defects: defect(1.5) });

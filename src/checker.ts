@@ -173,7 +173,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!CARDINALITY.test(String(l.cardinality))) v("R1", `linkTypes.${l.id}`, "cardinality must be like N:1");
     if (!isStr(l.via) || !isStr(l.doc)) v("R1", `linkTypes.${l.id}`, "via and doc are required");
     if (isStr(l.via) && propClass(`${l.from}.${l.via}`) === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
-    if (isStr(l.via) && fromOf(`${l.from}.${l.via}`) !== undefined) v("R1", `linkTypes.${l.id}.via`, `${l.via} is a projected property: a navigation over the link reads it`);
+    const vp = objType(l.from) && isObj(objects[l.from].properties) && own(objects[l.from].properties, l.via) ? objects[l.from].properties[l.via] : undefined; // own keys, not a split ref: a name may hold a dot
+    if (isStr(l.via) && isObj(vp) && vp.from !== undefined) v("R1", `linkTypes.${l.id}.via`, `${l.via} is a projected property: a navigation over the link reads it`);
     if (l.table !== undefined && !isStr(l.table)) v("R1", `linkTypes.${l.id}`, "table must be a table name");
     if (l.create_rule !== undefined) {
       const r = l.create_rule;
@@ -356,11 +357,10 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   walkCites({ objectTypes: objects, stateMachines, linkTypes: links, actionTypes: commands, permission_rows_not_commands: nonCmdRows, derivedProperties: derived, scope: ont.scope, dispositions: ont.dispositions }, "");
   for (const [name, o] of Object.entries(objects)) {
     if (!isObj(o)) continue;
-    const s = section(o.doc, "R2", `objectTypes.${name}`);
-    if (!s) continue;
-    if (!IDENT(name).test(s.text)) v("R2", `objectTypes.${name}`, `object name not in ${o.doc}`);
-    const fl = facts.fieldList(o.doc, name)?.value ?? null;
-    if (!fl) v("R2", `objectTypes.${name}:fields`, `${o.doc} has no single field list headed ${name}`, "field_list_missing");
+    const s = section(o.doc, "R2", `objectTypes.${name}`); // without a section there is no field list, but the key check of a projected property still runs
+    if (s && !IDENT(name).test(s.text)) v("R2", `objectTypes.${name}`, `object name not in ${o.doc}`);
+    const fl = s ? (facts.fieldList(o.doc, name)?.value ?? null) : null;
+    if (s && !fl) v("R2", `objectTypes.${name}:fields`, `${o.doc} has no single field list headed ${name}`, "field_list_missing");
     for (const [pn, pr] of Object.entries(isObj(o.properties) ? o.properties : {})) {
       const fr = isObj(pr) ? (pr as Any).from : undefined; // a projected property is not a column; its field is checked as a property of its own
       if (fr === undefined) {
