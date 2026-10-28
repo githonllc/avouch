@@ -539,7 +539,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           if (cls !== null && cls !== "canonical" && cls !== "policy" && off.length) bad.set(r.prop, `precondition ${pc.id} reads ${r.prop} values [${off}], class ${cls}; canonical values are [${cv}]`);
           continue;
         }
-        const via = suffix ? [[r, suffix]] : own(derived, r) ? arr(derived[r]?.reads).map((x: string) => [x, ` (via derived ${r})`]) : [[r, ""]];
+        const via = suffix ? [[r, suffix]] : pc.expr === undefined && own(derived, r) ? arr(derived[r]?.reads).map((x: string) => [x, ` (via derived ${r})`]) : [[r, ""]];
         for (const [ref, how] of via) {
           const cls = propClass(ref);
           if (cls !== null && cls !== "canonical" && cls !== "policy") bad.set(ref, `precondition ${pc.id} reads ${ref}${how}, class ${cls}`);
