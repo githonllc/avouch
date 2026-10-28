@@ -315,6 +315,25 @@ describe("stage 1 checks", () => {
     });
     it("(16) a via read is not redirected by a derived id of the same text (false positive)", () =>
       expect(r4(run([noDirect, addCond(navPerson), clash(["Member.open_loans"])]))).toEqual([]));
+    // an object of the given name with an unknown foreign key person_id, a link over it, and a BORROW condition that navigates the link
+    const otherMember = (name: string): Op[] => [
+      noDirect,
+      { op: "add", path: "/objectTypes/" + name, value: { properties: { person_id: { class: "unknown" } } } },
+      { op: "add", path: "/linkTypes/-", value: { id: "other_person", from: name, to: "Person", cardinality: "N:1", via: "person_id", doc: "L2" } },
+      { op: "add", path: "/actionTypes/BORROW/parameters/other_id", value: { type: { ref: name }, cite: { doc: "L6", quote: "BORROW takes member_id" } } },
+      addCond({ exists: { as: "p", in: { nav: { from: { ref: "other_id" }, link: "other_person", dir: "forward" } } } }),
+    ];
+    it("(17) a dot-free object name: the nav reads its via and R4 reports it", () =>
+      expect(r4(run(otherMember("MemberV2")))).toContainEqual(NONCANON("BORROW:MemberV2.person_id")));
+    it("(18) a dotted object name: no crash and no R4 violation for the read (the limit)", () => {
+      const r = run(otherMember("Member.v2"));
+      expect(r4(r)).toEqual([]);
+      expect(r.violations.filter((x) => x.rule === "R1" && x.msg.includes("Cannot convert"))).toEqual([]);
+    });
+    it("(19) a malformed ontology (objectTypes null) gives no TypeError R1 for a nav condition", () => {
+      const r = run([...otherMember("MemberV2"), { op: "replace", path: "/objectTypes", value: null }]);
+      expect(r.violations.filter((x) => x.rule === "R1" && x.key === "actionTypes.BORROW.conditions.has_person" && x.msg.includes("Cannot convert"))).toEqual([]);
+    });
   });
 
   describe("R12: row order", () => {

@@ -426,9 +426,9 @@ export function isPureLink(ont: Stage1Ontology, link: Stage1Ontology["linkTypes"
   return link.table !== undefined && !(isObj(ont.objectTypes) && Object.values(ont.objectTypes).some((o) => isObj(o) && o.datasource === link.table));
 }
 // A navigation over a foreign-key link reads link.via on rows of link.from (forward: the source row; reverse: each target
-// row). Recorded only when via is a declared property of link.from whose name has no dot (a read is `<Object>.<prop>`).
+// row). Recorded only when via is a declared property of link.from and neither name has a dot (a read is `<Object>.<prop>`).
 function collectVia(ont: Stage1Ontology, link: Stage1Ontology["linkTypes"][number], ctx: ExprContext): void {
-  if (ctx.collect === undefined || isPureLink(ont, link) || typeof link.via !== "string" || link.via.includes(".")) return;
+  if (ctx.collect === undefined || isPureLink(ont, link) || typeof link.via !== "string" || link.via.includes(".") || String(link.from).includes(".") || !isObj(ont.objectTypes)) return;
   const props = own(ont.objectTypes, link.from)?.properties;
   if (isObj(props) && own(props, link.via) !== undefined) ctx.collect.reads.push({ prop: `${link.from}.${link.via}` });
 }
