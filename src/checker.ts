@@ -89,6 +89,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
   const gaps: Any[] = arr(ont.knownSourceGaps);
   if (!Array.isArray(ont.knownSourceGaps)) v("R1", "knownSourceGaps", "missing (use [])");
 
+  // the declared type of a via or the scope field: navigation and the scope filter compare it with an id
+  const idType = (t: unknown) => t === "id" || (isObj(t) && Object.hasOwn(t, "ref"));
   for (const [name, o] of Object.entries(objects)) {
     const p = `objectTypes.${name}`;
     if (name === "__proto__") v("R1", p, "__proto__ is a reserved name"); // a snapshot key: an assignment would set the prototype
@@ -131,6 +133,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
         else if (isObj(ont.scope) && pn === ont.scope.by) v("R1", k, `${pn} cannot be projected: it is the scope field`);
         else if (own(stateMachines, name) && pn === stateProp(name)) v("R1", k, `${pn} cannot be projected: it is the state property of ${name}`);
       }
+      if (fr === undefined && scope !== null && scope.isTenant(name) && pn === scope.by && isObj(pr) && (pr as Any).type !== undefined && !idType((pr as Any).type))
+        v("R1", `${p}.properties.${pn}`, `${pn} is the scope field: its type must be id or {ref: T}`);
     }
   }
   // the projection of a property `<O>.<p>` (its `from` value), or undefined; edits name the field instead (R1), and an edit of the field writes it (R11)
@@ -175,6 +179,9 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     const vp = objType(l.from) && isObj(objects[l.from].properties) && own(objects[l.from].properties, l.via) ? objects[l.from].properties[l.via] : undefined; // own keys, not a split ref: a name may hold a dot
     if (isStr(l.via) && isObj(vp) && vp.class === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
     if (isStr(l.via) && isObj(vp) && vp.from !== undefined) v("R1", `linkTypes.${l.id}.via`, `${l.via} is a projected property: a navigation over the link reads it`);
+    const foreignKey = l.table === undefined || Object.values(objects).some((o) => isObj(o) && o.datasource === l.table);
+    if (isStr(l.via) && isObj(vp) && vp.class !== "opaque" && vp.from === undefined && foreignKey && vp.type !== undefined && !idType(vp.type))
+      v("R1", `linkTypes.${l.id}.via`, `${l.via} has type ${JSON.stringify(vp.type)}: the via of a foreign-key link has type id or {ref: T}`);
     if (l.table !== undefined && !isStr(l.table)) v("R1", `linkTypes.${l.id}`, "table must be a table name");
     if (l.create_rule !== undefined) {
       const r = l.create_rule;
