@@ -205,13 +205,41 @@ describe("stage 1 checks", () => {
       const via: Op = { op: "replace", path: "/linkTypes/0/via", value: "due_date" };
       const keys = (r: ReturnType<typeof check>) => r.violations.filter((x) => x.rule === "R1").map((x) => x.key);
       expect(keys(run([via, { op: "replace", path: "/objectTypes/Loan/properties/due_date/class", value: "opaque" }]))).toEqual(["linkTypes.loan_book.via"]);
-      expect(keys(run([via]))).toEqual([]);
+      const k: Op = { op: "add", path: "/objectTypes/Loan/properties/k", value: { class: "canonical", type: { ref: "Book" }, cite: ont.objectTypes.Loan.properties.due_date.cite } };
+      expect(keys(run([k, { op: "replace", path: "/linkTypes/0/via", value: "k" }]))).toEqual([]);
     });
 
     it("an opaque property as the via of a link type is R1, also when the property name has a dot", () => {
       const pq: Op = { op: "add", path: "/objectTypes/Loan/properties/p.q", value: { ...ont.objectTypes.Loan.properties.due_date, class: "opaque" } };
       const via: Op = { op: "replace", path: "/linkTypes/0/via", value: "p.q" };
       expect(run([pq, via]).violations.filter((x) => x.rule === "R1").map((x) => x.key)).toEqual(["linkTypes.loan_book.via"]);
+    });
+
+    const r1s = (r: ReturnType<typeof check>) => r.violations.filter((x) => x.rule === "R1").map((x) => [x.key, x.msg]);
+    const cite = ont.objectTypes.Loan.properties.due_date.cite;
+    const prop = (o: string, n: string, type: unknown): Op => ({ op: "add", path: `/objectTypes/${o}/properties/${n}`, value: { class: "canonical", type, cite } });
+    const via = (n: string): Op => ({ op: "replace", path: "/linkTypes/0/via", value: n }); // loan_book: table loans = Loan's datasource, a foreign-key link
+    it("the via of a foreign-key link with a declared type other than id or {ref} is R1", () => {
+      expect(r1s(run([via("due_date")]))).toEqual([["linkTypes.loan_book.via", 'due_date has type "date": the via of a foreign-key link has type id or {ref: T}']]);
+      expect(r1s(run([prop("Loan", "n", "integer"), via("n")]))).toEqual([["linkTypes.loan_book.via", 'n has type "integer": the via of a foreign-key link has type id or {ref: T}']]);
+    });
+    it("a via with type id or {ref: T} passes", () => {
+      expect(r1s(run([prop("Loan", "k", { ref: "Book" }), via("k")]))).toEqual([]);
+      expect(r1s(run([prop("Loan", "k", "id"), via("k")]))).toEqual([]);
+    });
+    it("the via of a pure link is not type-checked", () =>
+      expect(r1s(run([{ op: "add", path: "/linkTypes/-", value: { id: "loan_tag", from: "Loan", to: "Book", cardinality: "N:1", via: "due_date", doc: "L3", table: "loan_tags" } }]))).toEqual([]));
+    // Loan.branch_id is also the via of the foreign-key link loan_branch: both clauses apply
+    it("the scope field of a tenant type with a declared type other than id or {ref} is R1", () =>
+      expect(r1s(run([prop("Loan", "branch_id", "integer")]))).toEqual([
+        ["objectTypes.Loan.properties.branch_id", "branch_id is the scope field: its type must be id or {ref: T}"],
+        ["linkTypes.loan_branch.via", 'branch_id has type "integer": the via of a foreign-key link has type id or {ref: T}'],
+      ]));
+    it("the scope field with type id or {ref: T}, or on a global or root type, passes", () => {
+      expect(r1s(run([prop("Loan", "branch_id", { ref: "Branch" })]))).toEqual([]);
+      expect(r1s(run([prop("Loan", "branch_id", "id")]))).toEqual([]);
+      expect(r1s(run([prop("Person", "branch_id", "integer")]))).toEqual([]);
+      expect(r1s(run([prop("Branch", "branch_id", "integer")]))).toEqual([]);
     });
   });
 

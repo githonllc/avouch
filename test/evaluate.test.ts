@@ -940,6 +940,68 @@ describe("an incomplete snapshot throws", () => {
     expect(() => evalPredicate(base, q, other)).toThrow("snapshot book_author link row: to = 2 is not a string id");
     expect(evalPredicate(base, q, e({ from: "bk1", to: "p1", branch_id: "b1" }))).toBe("T");
   });
+  const loans = (rows: Row[]): Snapshot => ({ ...snapshot, objects: { ...snapshot.objects, Loan: rows } });
+  const [l1, l2] = snapshot.objects.Loan as Row[];
+  const viaEnv = (snap: Snapshot, bindings: Bindings) => ({ action: "probe", snapshot: snap, scope: "b1", bindings, actor: staff, now: NOW });
+  it("a foreign-key via that is not a string throws (forward)", () => {
+    const e = viaEnv(loans([{ ...l1!, member_id: 2 }]), { loan: "l1" });
+    expect(() => evalPredicate(base, exists("x", nav("loan", "loan_member", "forward")), e)).toThrow("snapshot Loan row l1: member_id = 2 is not a string id");
+  });
+  it("a foreign-key via that is not a string throws (reverse), also when another row matches", () => {
+    const q = exists("x", nav("m", "loan_member", "reverse"));
+    expect(() => evalPredicate(base, q, viaEnv(loans([l1!, { ...l2!, member_id: 2 }]), { m: "m2" }))).toThrow("snapshot Loan row l2: member_id = 2 is not a string id");
+    expect(() => evalPredicate(base, q, viaEnv(loans([l1!, { ...l2!, member_id: true }]), { m: "m2" }))).toThrow("snapshot Loan row l2: member_id = true is not a string id");
+  });
+  it("a via outside the scope is not read", () =>
+    expect(evalPredicate(base, exists("x", nav("m", "loan_member", "reverse")), viaEnv(loans([l1!, { ...l2!, branch_id: "b2", member_id: 2 }]), { m: "m2" }))).toBe("T"));
+  const members = (...extra: Row[]): Snapshot => ({ ...snapshot, objects: { ...snapshot.objects, Member: [...snapshot.objects.Member!, ...extra] } });
+  it("a tenant row whose scope field is not a string throws", () => {
+    const m2 = { ...snapshot, objects: { ...snapshot.objects, Member: snapshot.objects.Member!.map((r) => (r.id === "m2" ? { ...r, branch_id: 1 } : r)) } };
+    expect(() => decide(base, "checkout", m2, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("snapshot Member row m2: branch_id = 1 is not a string id");
+    // Also a row in another scope: the filter reads its scope field.
+    const m9 = members({ id: "m9", branch_id: 2, person_id: "p1", state: "GOOD" });
+    expect(() => decide(base, "checkout", m9, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("snapshot Member row m9: branch_id = 2 is not a string id");
+  });
+  const authors = (rows: Row[]) => viaEnv({ ...snapshot, links: { book_author: rows } }, { person: "p1" });
+  it("a pure link row whose scope field is not a string throws", () =>
+    expect(() => evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), authors([{ from: "bk1", to: "p1", branch_id: "b1" }, { from: "bk2", to: "p1", branch_id: 2 }]))).toThrow(
+      "snapshot book_author link row: branch_id = 2 is not a string id",
+    ));
+  it("a null scope field hides the row", () => {
+    expect(decide(base, "checkout", members({ id: "m9", branch_id: null, person_id: "p1", state: "GOOD" }), "b1", { member: "m9", book: "bk1" }, staff, NOW)).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "member" });
+    expect(evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), authors([{ from: "bk1", to: "p1", branch_id: null }]))).toBe("F");
+  });
+  it("a null scope field is not visible, also under scope null", () => {
+    const nullScope = (snap: Snapshot, bindings: Bindings) => ({ ...viaEnv(snap, bindings), scope: null });
+    const q = exists("x", nav("person", "member_person", "reverse"));
+    expect(evalPredicate(base, q, nullScope(members({ id: "m9", branch_id: null, person_id: "p1", state: "GOOD" }), { person: "p1" }))).toBe("F");
+    const a = exists("x", nav("person", "book_author", "reverse"));
+    expect(evalPredicate(base, a, nullScope({ ...snapshot, links: { book_author: [{ from: "bk1", to: "p1", branch_id: null }] } }, { person: "p1" }))).toBe("F");
+  });
+  const typed: Stage1Ontology = {
+    ...base,
+    objectTypes: {
+      ...base.objectTypes,
+      Member: { ...base.objectTypes.Member!, properties: { ...base.objectTypes.Member!.properties, branch_id: { type: { ref: "Branch" } } } },
+      Loan: { ...base.objectTypes.Loan!, properties: { ...base.objectTypes.Loan!.properties, member_id: { type: { ref: "Member" } } } },
+    },
+  };
+  it("a declared via that does not fit its type throws", () => {
+    const fwd = viaEnv(loans([{ ...l1!, member_id: "" }]), { loan: "l1" });
+    expect(() => evalPredicate(typed, exists("x", nav("loan", "loan_member", "forward")), fwd)).toThrow(/Loan row l1: member_id = "" does not fit its declared type/);
+    const rev = viaEnv(loans([l1!, { ...l2!, member_id: "" }]), { m: "m2" });
+    expect(() => evalPredicate(typed, exists("x", nav("m", "loan_member", "reverse")), rev)).toThrow(/Loan row l2: member_id = "" does not fit its declared type/);
+  });
+  it("a declared scope field that does not fit its type throws", () => {
+    const m9 = members({ id: "m9", branch_id: "", person_id: "p1", state: "GOOD" });
+    expect(() => decide(typed, "checkout", m9, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow(/Member row m9: branch_id = "" does not fit its declared type/);
+  });
+  it("an undeclared via with an empty string still navigates", () => {
+    const e = viaEnv(loans([{ ...l1!, member_id: "" }]), { loan: "l1" });
+    expect(evalPredicate(base, exists("x", nav("loan", "loan_member", "forward")), e)).toBe("F");
+  });
+  it("an object row without a string id throws", () =>
+    expect(() => decide(base, "checkout", members({ id: 9, branch_id: "b1", person_id: "p1", state: "GOOD" }), "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("a Member row has no string id"));
   it("a row field whose value is undefined is absent", () => {
     const m = { ...snapshot, objects: { ...snapshot.objects, Member: snapshot.objects.Member.map((r) => (r.id === "m2" ? { ...r, branch_id: undefined as unknown as null } : r)) } };
     expect(() => decide(base, "checkout", m, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("snapshot Member row m2 has no branch_id");

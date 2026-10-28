@@ -4,7 +4,7 @@
 import { checkPermissionWhen, checkPredicate, fitsType, isPureLink, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
-// Object rows must carry a string `id`. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
+// Object rows must carry a string `id`. A foreign-key via and the scope field are a string or null. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
 export type Row = Readonly<Record<string, Value>>;
 export interface Snapshot {
   objects: Record<string, readonly Row[]>;
@@ -49,6 +49,14 @@ function field(row: Row, key: string, what: string): Value {
   return row[key];
 }
 
+// A field that holds an id (a foreign-key via, the scope field): a string or null; another value is a corrupt snapshot.
+function idField(row: Row, key: string, what: string, t?: Type): string | null {
+  const v = field(row, key, what);
+  if (v !== null && typeof v !== "string") throw new Error(`snapshot ${what}: ${key} = ${JSON.stringify(v)} is not a string id`);
+  if (v !== null && t !== undefined && !fitsType(v, t)) throw new Error(`snapshot ${what}: ${key} = ${JSON.stringify(v)} does not fit its declared type`);
+  return v;
+}
+
 type ObjVar = { type: string; row: Row | null };
 
 // One evaluation session: caches filtered rows per type and derived values per (id, row id).
@@ -67,9 +75,14 @@ class Session {
     return "tenant";
   }
 
+  // A null scope field matches no scope, also when the scope is null.
+  private inScope(v: string | null): boolean {
+    return v !== null && v === this.env.scope;
+  }
+
   private visible(type: string, row: Row): boolean {
     const m = this.mode(type);
-    if (m === "tenant") return field(row, this.ont.scope!.by, `${type} row ${String(row.id)}`) === this.env.scope;
+    if (m === "tenant") return this.inScope(idField(row, this.ont.scope!.by, `${type} row ${String(row.id)}`, own(this.ont.objectTypes[type]?.properties, this.ont.scope!.by)?.type));
     if (m === "root") return row.id === this.env.scope;
     return true;
   }
@@ -108,7 +121,7 @@ class Session {
         }
       const by = this.ont.scope?.by;
       const tenantEnd = this.mode(link.from) === "tenant" || this.mode(link.to) === "tenant";
-      rows = by !== undefined && tenantEnd ? all.filter((r) => field(r, by, `${link.id} link row`) === this.env.scope) : all;
+      rows = by !== undefined && tenantEnd ? all.filter((r) => this.inScope(idField(r, by, `${link.id} link row`))) : all;
       this.links.set(link.id, rows);
     }
     return rows;
@@ -252,11 +265,11 @@ function navigate(s: Session, f: Frame, n: Nav): ObjVar[] {
       : pick(rows.filter((r) => end(r, "to") === fromRow.id).map((r) => end(r, "from")));
   }
   if (dir === "forward") {
-    const v = field(fromRow, link.via, `${link.from} row ${String(fromRow.id)}`);
+    const v = idField(fromRow, link.via, `${link.from} row ${String(fromRow.id)}`, own(s.ont.objectTypes[link.from]?.properties, link.via)?.type);
     return v === null ? [] : pick([v]);
   }
   return [...targets.values()]
-    .filter((r) => field(r, link.via, `${link.from} row ${String(r.id)}`) === fromRow.id)
+    .filter((r) => idField(r, link.via, `${link.from} row ${String(r.id)}`, own(s.ont.objectTypes[link.from]?.properties, link.via)?.type) === fromRow.id)
     .map((row) => ({ type: target, row }));
 }
 
