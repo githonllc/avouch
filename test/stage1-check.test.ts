@@ -207,6 +207,12 @@ describe("stage 1 checks", () => {
       expect(keys(run([via, { op: "replace", path: "/objectTypes/Loan/properties/due_date/class", value: "opaque" }]))).toEqual(["linkTypes.loan_book.via"]);
       expect(keys(run([via]))).toEqual([]);
     });
+
+    it("an opaque property as the via of a link type is R1, also when the property name has a dot", () => {
+      const pq: Op = { op: "add", path: "/objectTypes/Loan/properties/p.q", value: { ...ont.objectTypes.Loan.properties.due_date, class: "opaque" } };
+      const via: Op = { op: "replace", path: "/linkTypes/0/via", value: "p.q" };
+      expect(run([pq, via]).violations.filter((x) => x.rule === "R1").map((x) => x.key)).toEqual(["linkTypes.loan_book.via"]);
+    });
   });
 
   describe("R4: a hand-written read of a derived property with an expression", () => {
