@@ -971,6 +971,35 @@ describe("an incomplete snapshot throws", () => {
     expect(decide(base, "checkout", members({ id: "m9", branch_id: null, person_id: "p1", state: "GOOD" }), "b1", { member: "m9", book: "bk1" }, staff, NOW)).toEqual({ layer: "invocation", result: "SCOPE_DENIED", param: "member" });
     expect(evalPredicate(base, exists("x", nav("person", "book_author", "reverse")), authors([{ from: "bk1", to: "p1", branch_id: null }]))).toBe("F");
   });
+  it("a null scope field is not visible, also under scope null", () => {
+    const nullScope = (snap: Snapshot, bindings: Bindings) => ({ ...viaEnv(snap, bindings), scope: null });
+    const q = exists("x", nav("person", "member_person", "reverse"));
+    expect(evalPredicate(base, q, nullScope(members({ id: "m9", branch_id: null, person_id: "p1", state: "GOOD" }), { person: "p1" }))).toBe("F");
+    const a = exists("x", nav("person", "book_author", "reverse"));
+    expect(evalPredicate(base, a, nullScope({ ...snapshot, links: { book_author: [{ from: "bk1", to: "p1", branch_id: null }] } }, { person: "p1" }))).toBe("F");
+  });
+  const typed: Stage1Ontology = {
+    ...base,
+    objectTypes: {
+      ...base.objectTypes,
+      Member: { ...base.objectTypes.Member!, properties: { ...base.objectTypes.Member!.properties, branch_id: { type: { ref: "Branch" } } } },
+      Loan: { ...base.objectTypes.Loan!, properties: { ...base.objectTypes.Loan!.properties, member_id: { type: { ref: "Member" } } } },
+    },
+  };
+  it("a declared via that does not fit its type throws", () => {
+    const fwd = viaEnv(loans([{ ...l1!, member_id: "" }]), { loan: "l1" });
+    expect(() => evalPredicate(typed, exists("x", nav("loan", "loan_member", "forward")), fwd)).toThrow(/Loan row l1: member_id = "" does not fit its declared type/);
+    const rev = viaEnv(loans([l1!, { ...l2!, member_id: "" }]), { m: "m2" });
+    expect(() => evalPredicate(typed, exists("x", nav("m", "loan_member", "reverse")), rev)).toThrow(/Loan row l2: member_id = "" does not fit its declared type/);
+  });
+  it("a declared scope field that does not fit its type throws", () => {
+    const m9 = members({ id: "m9", branch_id: "", person_id: "p1", state: "GOOD" });
+    expect(() => decide(typed, "checkout", m9, "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow(/Member row m9: branch_id = "" does not fit its declared type/);
+  });
+  it("an undeclared via with an empty string still navigates", () => {
+    const e = viaEnv(loans([{ ...l1!, member_id: "" }]), { loan: "l1" });
+    expect(evalPredicate(base, exists("x", nav("loan", "loan_member", "forward")), e)).toBe("F");
+  });
   it("an object row without a string id throws", () =>
     expect(() => decide(base, "checkout", members({ id: 9, branch_id: "b1", person_id: "p1", state: "GOOD" }), "b1", { member: "m2", book: "bk1" }, staff, NOW)).toThrow("a Member row has no string id"));
   it("a row field whose value is undefined is absent", () => {
