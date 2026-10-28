@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPermissionWhen, checkPredicate, fitsType, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPermissionWhen, checkPredicate, fitsType, isPureLink, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
@@ -56,11 +56,8 @@ class Session {
   private rows = new Map<string, Map<string, Row>>();
   private links = new Map<string, readonly Row[]>();
   private derivedCache = new Map<string, Value>();
-  private objTables: Set<string>;
 
-  constructor(readonly ont: Stage1Ontology, readonly env: Env) {
-    this.objTables = new Set(Object.values(ont.objectTypes).map((o) => o.datasource));
-  }
+  constructor(readonly ont: Stage1Ontology, readonly env: Env) {}
 
   mode(type: string): "none" | "tenant" | "global" | "root" {
     const s = this.ont.scope;
@@ -118,7 +115,7 @@ class Session {
   }
 
   isPureLink(link: Stage1Ontology["linkTypes"][number]): boolean {
-    return link.table !== undefined && !this.objTables.has(link.table);
+    return isPureLink(this.ont, link);
   }
 
   cachedDerived(id: string, row: Row, compute: () => Value): Value {

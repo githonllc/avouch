@@ -421,6 +421,18 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
   }
 }
 
+// A pure link: its table is no object's datasource (the evaluator reads snapshot.links[link.id]).
+export function isPureLink(ont: Stage1Ontology, link: Stage1Ontology["linkTypes"][number]): boolean {
+  return link.table !== undefined && !(isObj(ont.objectTypes) && Object.values(ont.objectTypes).some((o) => isObj(o) && o.datasource === link.table));
+}
+// A navigation over a foreign-key link reads link.via on rows of link.from (forward: the source row; reverse: each target
+// row). Recorded only when via is a declared property of link.from and neither name has a dot (a read is `<Object>.<prop>`).
+function collectVia(ont: Stage1Ontology, link: Stage1Ontology["linkTypes"][number], ctx: ExprContext): void {
+  if (ctx.collect === undefined || isPureLink(ont, link) || typeof link.via !== "string" || link.via.includes(".") || String(link.from).includes(".") || !isObj(ont.objectTypes)) return;
+  const props = own(ont.objectTypes, link.from)?.properties;
+  if (isObj(props) && own(props, link.via) !== undefined) ctx.collect.reads.push({ prop: `${link.from}.${link.via}` });
+}
+
 // Returns the element object type of a navigation.
 export function navType(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: string): string {
   if (nodeKey(n, at) !== "nav") throw new ExprError(at, "a quantifier ranges over a nav");
@@ -432,10 +444,12 @@ export function navType(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: s
   if (link === undefined) throw new ExprError(`${p}.link`, `link ${String(v.link)} is not declared`);
   if (v.dir === "forward") {
     if (from !== link.from) throw new ExprError(p, `forward ${link.id} starts at ${link.from}, not ${from}`);
+    collectVia(ont, link, ctx);
     return link.to;
   }
   if (v.dir === "reverse") {
     if (from !== link.to) throw new ExprError(p, `reverse ${link.id} starts at ${link.to}, not ${from}`);
+    collectVia(ont, link, ctx);
     return link.from;
   }
   throw new ExprError(`${p}.dir`, "dir is forward or reverse");

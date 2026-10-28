@@ -8,7 +8,7 @@ import { check } from "../src/checker";
 import { IDENT } from "../src/contract";
 import { applyPatch, type Op } from "../src/patch";
 import { decide, evalPredicate, type Row, type Snapshot } from "../src/evaluate";
-import type { Expr } from "../src/expr";
+import { isPureLink, type Expr, type Stage1Ontology } from "../src/expr";
 import { buildLibraryFacts } from "../examples/library/adapter";
 import { libraryEvidence } from "../examples/library/evidence";
 import { config } from "../examples/library/profile";
@@ -254,6 +254,85 @@ describe("stage 1 checks", () => {
     it("(e) malformed linkTypes with a nav in the derived expression does not throw", () => {
       const nav = { exists: { as: "x", in: { nav: { from: { ref: "self" }, link: "loan_member", dir: "forward" } }, where: { lit: true } } };
       expect(() => run([...derivedActive(nav), { op: "replace", path: "/linkTypes", value: null }])).not.toThrow();
+    });
+  });
+
+  describe("R4: a navigation over a foreign-key link reads its via", () => {
+    const personCite = { doc: "L2", quote: "person_id names the Person." };
+    // borrower_is_caller reads person_id directly; replace it with a read of a canonical property and no literal
+    const noDirect: Op = { op: "replace", path: "/actionTypes/BORROW/conditions/0/expr", value: { lte: [{ ref: "member_id.blocked_until" }, { ref: "now" }] } };
+    const personClass = (cls: string): Op => ({ op: "replace", path: "/objectTypes/Member/properties/person_id/class", value: cls });
+    const navPerson = { exists: { as: "p", in: { nav: { from: { ref: "member_id" }, link: "member_person", dir: "forward" } } } };
+    const addCond = (expr: unknown): Op => ({ op: "add", path: "/actionTypes/BORROW/conditions/-", value: { id: "has_person", expr, cites: [{ cite: personCite }] } });
+    // a derived property whose id is the text of a property read
+    const clash = (reads: string[]): Op => ({ op: "add", path: "/derivedProperties/Member.person_id", value: { of: "Book", doc: "L1", doc_term: "Book", reads } });
+    const r4 = (r: ReturnType<typeof check>) => triples(r).filter((t) => t[0] === "R4");
+    const NONCANON = (k: string) => ["R4", "precondition_reads_non_canonical", k];
+    const hasPerson: Op = { op: "add", path: "/derivedProperties/has_person", value: { of: "Member", doc: "L2", doc_term: "person_id names the Person", type: "boolean", cite: personCite, expr: { exists: { as: "p", in: { nav: { from: { ref: "self" }, link: "member_person", dir: "forward" } } } } } };
+
+    it("(1) control: no navigation, no direct read, no violation", () => expect(triples(run([noDirect, personClass("unknown")]))).toEqual([]));
+    it("(2) forward nav reads an unknown via", () =>
+      expect(triples(run([noDirect, personClass("unknown"), addCond(navPerson)]))).toEqual([NONCANON("BORROW:Member.person_id")]));
+    it("(3) forward nav reads a derived via", () =>
+      expect(triples(run([noDirect, personClass("derived"), addCond(navPerson)]))).toEqual([NONCANON("BORROW:Member.person_id")]));
+    it("(4) reverse nav reads the via on the link's from object", () =>
+      expect(triples(run([{ op: "add", path: "/objectTypes/Loan/properties/member_id", value: { class: "unknown" } }]))).toEqual([NONCANON("BORROW:Loan.member_id")]));
+    it("(5) a derived property that a condition reaches, and a hand-written read of it", () => {
+      const pre = [noDirect, personClass("unknown"), hasPerson];
+      expect(triples(run([...pre, addCond({ derived: { id: "has_person", of: { ref: "member_id" } } })]))).toEqual([NONCANON("BORROW:Member.person_id")]);
+      const hand: Op = { op: "add", path: "/actionTypes/BORROW/conditions/-", value: { id: "has_person", unspecified: "x", reads: ["has_person"], cites: [{ cite: personCite }] } };
+      expect(triples(run([...pre, hand]))).toContainEqual(NONCANON("BORROW:Member.person_id"));
+    });
+    it("(7) a nav over a pure link reads no property", () => {
+      const link: Op = { op: "add", path: "/linkTypes/-", value: { id: "member_people", from: "Member", to: "Person", cardinality: "N:M", via: "person_id", doc: "L2", table: "member_people" } };
+      const nav = { exists: { as: "p", in: { nav: { from: { ref: "member_id" }, link: "member_people", dir: "forward" } } } };
+      expect(r4(run([link, noDirect, personClass("unknown"), addCond(nav)]))).toEqual([]);
+    });
+    it("(8) a nullable via is not U (R12)", () => expect(triples(run([noDirect, addCond(navPerson)])).filter((t) => t[0] === "R12")).toEqual([]));
+    it("(9) a via read is not redirected by a derived id of the same text", () =>
+      expect(r4(run([noDirect, personClass("unknown"), addCond(navPerson), clash(["Book.state"])]))).toEqual([NONCANON("BORROW:Member.person_id")]));
+    it("(11) a direct read is not redirected by a derived id of the same text (miss)", () =>
+      expect(r4(run([personClass("unknown"), clash(["Book.state"])]))).toEqual([NONCANON("BORROW:Member.person_id")]));
+    it("(12) a direct read is not redirected by a derived id of the same text (false positive)", () =>
+      expect(r4(run([clash(["Member.open_loans"])]))).toEqual([]));
+    it("(13) hand-written reads still expand a derived property", () => {
+      const hw: Op = { op: "add", path: "/actionTypes/BORROW/conditions/-", value: { id: "hw", unspecified: "x", reads: ["Member.person_id"], cites: [{ cite: personCite }] } };
+      expect(r4(run([hw, clash(["Member.open_loans"])]))).toContainEqual(NONCANON("BORROW:Member.open_loans"));
+    });
+    it("(14b) a dotted via does not throw", () => {
+      const ops: Op[] = [
+        { op: "add", path: "/objectTypes/Member/properties/person.x", value: { class: "unknown" } },
+        { op: "add", path: "/objectTypes/Member/properties/meta", value: { class: "unknown" } },
+        { op: "add", path: "/objectTypes/Member/properties/person", value: { class: "unknown", type: "enum", from: { field: "meta", key: "k" } } },
+        { op: "replace", path: "/linkTypes/2/via", value: "person.x" },
+        addCond(navPerson),
+      ];
+      expect(() => run(ops)).not.toThrow();
+    });
+    it("(15) isPureLink does not throw on a malformed ontology", () => {
+      const bad = { objectTypes: null, linkTypes: [{ id: "l", from: "A", to: "B", via: "v", table: "t" }], actionTypes: {} } as unknown as Stage1Ontology;
+      expect(() => isPureLink(bad, bad.linkTypes[0])).not.toThrow();
+    });
+    it("(16) a via read is not redirected by a derived id of the same text (false positive)", () =>
+      expect(r4(run([noDirect, addCond(navPerson), clash(["Member.open_loans"])]))).toEqual([]));
+    // an object of the given name with an unknown foreign key person_id, a link over it, and a BORROW condition that navigates the link
+    const otherMember = (name: string): Op[] => [
+      noDirect,
+      { op: "add", path: "/objectTypes/" + name, value: { properties: { person_id: { class: "unknown" } } } },
+      { op: "add", path: "/linkTypes/-", value: { id: "other_person", from: name, to: "Person", cardinality: "N:1", via: "person_id", doc: "L2" } },
+      { op: "add", path: "/actionTypes/BORROW/parameters/other_id", value: { type: { ref: name }, cite: { doc: "L6", quote: "BORROW takes member_id" } } },
+      addCond({ exists: { as: "p", in: { nav: { from: { ref: "other_id" }, link: "other_person", dir: "forward" } } } }),
+    ];
+    it("(17) a dot-free object name: the nav reads its via and R4 reports it", () =>
+      expect(r4(run(otherMember("MemberV2")))).toContainEqual(NONCANON("BORROW:MemberV2.person_id")));
+    it("(18) a dotted object name: no crash and no R4 violation for the read (the limit)", () => {
+      const r = run(otherMember("Member.v2"));
+      expect(r4(r)).toEqual([]);
+      expect(r.violations.filter((x) => x.rule === "R1" && x.msg.includes("Cannot convert"))).toEqual([]);
+    });
+    it("(19) a malformed ontology (objectTypes null) gives no TypeError R1 for a nav condition", () => {
+      const r = run([...otherMember("MemberV2"), { op: "replace", path: "/objectTypes", value: null }]);
+      expect(r.violations.filter((x) => x.rule === "R1" && x.key === "actionTypes.BORROW.conditions.has_person" && x.msg.includes("Cannot convert"))).toEqual([]);
     });
   });
 

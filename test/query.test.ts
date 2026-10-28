@@ -350,6 +350,43 @@ describe("queryReads", () => {
     expect(d.conditions).toEqual([{ action: "BORROW", condition: "blocked_probe", source: "expr", direct: true, via: [], rows: [] }]);
     expect(queryObject(ont, "Member")!.derived[0]).toMatchObject({ id: "member_blocked", type: "boolean", exprText: "self.blocked_until is not null" });
   });
+
+  describe("a navigation over a foreign-key link reads its via", () => {
+    const personCite = { doc: "L2", quote: "person_id names the Person." };
+    // borrower_is_caller reads person_id directly; replace it with a read of a canonical property and no literal
+    const noDirect: Op = { op: "replace", path: "/actionTypes/BORROW/conditions/0/expr", value: { lte: [{ ref: "member_id.blocked_until" }, { ref: "now" }] } };
+    const navPerson = { exists: { as: "p", in: { nav: { from: { ref: "member_id" }, link: "member_person", dir: "forward" } } } };
+    const addCond = (expr: unknown): Op => ({ op: "add", path: "/actionTypes/BORROW/conditions/-", value: { id: "has_person", expr, cites: [{ cite: personCite }] } });
+    // a derived property whose id is the text of a property read
+    const clash = (reads: string[]): Op => ({ op: "add", path: "/derivedProperties/Member.person_id", value: { of: "Book", doc: "L1", doc_term: "Book", reads } });
+    const hasPerson: Op = { op: "add", path: "/derivedProperties/has_p", value: { of: "Member", doc: "L2", doc_term: "person_id names the Person", type: "boolean", cite: personCite, expr: { exists: { as: "p", in: { nav: { from: { ref: "self" }, link: "member_person", dir: "forward" } } } } } };
+    const entry = { action: "BORROW", condition: "has_person", source: "expr", direct: true, via: [], rows: [] };
+
+    it("(6) lists the navigating condition as a direct reader of the via", () => {
+      const o = patched([noDirect, addCond(navPerson)]);
+      expect(queryReads(o, "Member.person_id")!.conditions).toEqual([entry]);
+      expect(queryObject(o, "Member")!.readers).toContainEqual({ action: "BORROW", condition: "has_person", props: ["Member.person_id"] });
+    });
+    it("(10) a derived id of the same text does not redirect the reads", () => {
+      const o = patched([noDirect, addCond(navPerson), clash(["Member.open_loans"])]);
+      expect(queryReads(o, "Member.person_id")!.conditions).toEqual([entry]);
+      expect(queryReads(o, "Member.open_loans")!.conditions).toEqual([]);
+    });
+    it("(14) a dotted via adds no read and no false writer", () => {
+      const o = patched([
+        noDirect,
+        { op: "add", path: "/objectTypes/Member/properties/person.x", value: { class: "unknown" } },
+        { op: "add", path: "/objectTypes/Member/properties/meta", value: { class: "unknown" } },
+        { op: "add", path: "/objectTypes/Member/properties/person", value: { class: "unknown", type: "enum", from: { field: "meta", key: "k" } } },
+        { op: "replace", path: "/linkTypes/2/via", value: "person.x" },
+        { op: "add", path: "/actionTypes/BORROW/edits/-", value: "Member.meta" },
+        hasPerson,
+        addCond(navPerson),
+      ]);
+      expect(queryWrites(o, "Member.has_p")!.writers).toEqual([]);
+      expect(queryObject(o, "Member")!.readers.filter((r) => r.condition === "has_person")).toEqual([]);
+    });
+  });
 });
 
 describe("queryCites", () => {
