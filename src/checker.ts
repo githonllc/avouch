@@ -172,8 +172,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!objType(l.from) || !objType(l.to)) v("R1", `linkTypes.${l.id}`, `from/to must be declared object types`);
     if (!CARDINALITY.test(String(l.cardinality))) v("R1", `linkTypes.${l.id}`, "cardinality must be like N:1");
     if (!isStr(l.via) || !isStr(l.doc)) v("R1", `linkTypes.${l.id}`, "via and doc are required");
-    if (isStr(l.via) && propClass(`${l.from}.${l.via}`) === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
     const vp = objType(l.from) && isObj(objects[l.from].properties) && own(objects[l.from].properties, l.via) ? objects[l.from].properties[l.via] : undefined; // own keys, not a split ref: a name may hold a dot
+    if (isStr(l.via) && isObj(vp) && vp.class === "opaque") v("R1", `linkTypes.${l.id}.via`, `${l.via} is an opaque property: a navigation over the link reads it`);
     if (isStr(l.via) && isObj(vp) && vp.from !== undefined) v("R1", `linkTypes.${l.id}.via`, `${l.via} is a projected property: a navigation over the link reads it`);
     if (l.table !== undefined && !isStr(l.table)) v("R1", `linkTypes.${l.id}`, "table must be a table name");
     if (l.create_rule !== undefined) {
