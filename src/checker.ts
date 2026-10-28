@@ -361,17 +361,16 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!IDENT(name).test(s.text)) v("R2", `objectTypes.${name}`, `object name not in ${o.doc}`);
     const fl = facts.fieldList(o.doc, name)?.value ?? null;
     if (!fl) v("R2", `objectTypes.${name}:fields`, `${o.doc} has no single field list headed ${name}`, "field_list_missing");
-    else
-      for (const [pn, pr] of Object.entries(isObj(o.properties) ? o.properties : {})) {
-        const fr = isObj(pr) ? (pr as Any).from : undefined; // a projected property is not a column; its field is checked as a property of its own
-        if (fr === undefined) {
-          if (!fl.has(pn)) v("R2", `${name}.${pn}`, `property ${pn} is not a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "property_not_field");
-          continue;
-        }
-        if (fl.has(pn)) v("R2", `${name}.${pn}`, `projected property ${pn} is a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "projected_property_is_field");
-        const q = (pr as Any).cite?.quote;
-        if (isObj(fr) && isStr(fr.key) && isStr(q) && !IDENT(fr.key).test(q)) v("R2", `${name}.${pn}`, `key ${fr.key} of the projected property ${pn} does not appear in its cite quote`, "projection_key_not_in_quote");
+    for (const [pn, pr] of Object.entries(isObj(o.properties) ? o.properties : {})) {
+      const fr = isObj(pr) ? (pr as Any).from : undefined; // a projected property is not a column; its field is checked as a property of its own
+      if (fr === undefined) {
+        if (fl && !fl.has(pn)) v("R2", `${name}.${pn}`, `property ${pn} is not a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "property_not_field");
+        continue;
       }
+      if (fl?.has(pn)) v("R2", `${name}.${pn}`, `projected property ${pn} is a field line (- ${pn}) of the ${name} field list in ${o.doc}`, "projected_property_is_field");
+      const q = (pr as Any).cite?.quote;
+      if (isObj(fr) && isStr(fr.key) && isStr(q) && !IDENT(fr.key).test(q)) v("R2", `${name}.${pn}`, `key ${fr.key} of the projected property ${pn} does not appear in its cite quote`, "projection_key_not_in_quote");
+    }
   }
   const tableRefs: [string, unknown][] = [
     ...Object.entries(objects).map(([n, o]): [string, unknown] => [`objectTypes.${n}.datasource`, o?.datasource]),

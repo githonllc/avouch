@@ -108,6 +108,15 @@ describe("properties.<p>.from", () => {
       expect(triples(run([], docWith("- pages")))).toEqual([["R2", "projected_property_is_field", "Book.pages"]]));
     it("a key that is not in the quote is projection_key_not_in_quote", () =>
       expect(triples(run([pages({ ...pagesProp, from: { field: "metadata_json", key: "page" } })]))).toEqual([["R2", "projection_key_not_in_quote", "Book.pages"]]));
+    it("a missing field list does not skip the key check: field_list_missing and projection_key_not_in_quote", () => {
+      const facts = buildLibraryFacts(docWith(), libraryEvidence(), config);
+      const noList = { ...facts, fieldList: (a: string, ot: string) => (ot === "Book" ? null : facts.fieldList(a, ot)) };
+      const r = check(applyPatch(ont, [...base, pages({ ...pagesProp, from: { field: "metadata_json", key: "page" } })]), noList);
+      expect(triples(r).filter((t) => t[0] === "R2")).toEqual([
+        ["R2", "field_list_missing", "objectTypes.Book:fields"],
+        ["R2", "projection_key_not_in_quote", "Book.pages"],
+      ]);
+    });
     it("projection_key_not_in_quote applies only when the cite has a quote; SPEC and schema say so", () => {
       const r = run([pages({ ...pagesProp, from: { field: "metadata_json", key: "page" }, cite: { doc: "L1" } })]);
       expect(r.violations.filter((x) => x.kind === "projection_key_not_in_quote")).toEqual([]);
