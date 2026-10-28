@@ -63,6 +63,8 @@ Parameters and parameter and actor reads (`parameters`, `{param}`, `{actor}`) ne
 - `linkFieldPattern`: the pattern of a field that holds a link (R6).
 - `stateProperty`: the default name of the state property (R1, R3). An ontology machine names another property of its object with `stateMachines.<Object>.property`.
 
+A harness that builds its own snapshot, and not through `projectSnapshot` (for example the input of the `reconcile` CLI, which is taken as given), must set each projected property (`properties.<p>.from`) the same way: from the top-level key of the JSON object in its column, null when the column is null or the key is absent or null, never decoded, and not set when the column is absent (SPEC section 9, `projectSnapshot` step 2).
+
 ## 6. Run the example
 
 In the package directory, run:

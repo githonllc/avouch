@@ -76,7 +76,7 @@ export function resolvesInDomain(p: { type?: unknown; optional?: unknown; projec
 export interface Stage1Ontology {
   scope?: { by: string; global?: { type: string }[]; root?: { type: string } };
   dispositions?: Record<string, { class: DispositionClass }>;
-  objectTypes: Record<string, { datasource: string; properties: Record<string, { type?: Type }> }>;
+  objectTypes: Record<string, { datasource: string; properties: Record<string, { type?: Type; from?: { field: string; key: string } }> }>;
   linkTypes: { id: string; from: string; to: string; via: string; table?: string }[];
   derivedProperties?: Record<string, { of: string; type?: Type; expr?: Expr }>;
   actionTypes: Record<string, ActionType>;

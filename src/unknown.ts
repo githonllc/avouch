@@ -134,7 +134,8 @@ function nullability(ont: Stage1Ontology, facts: SourceFacts): (ctx: ExprContext
     if (param !== undefined && (param.optional === true || resolvesInDomain(param))) return true; // an optional parameter or a ref with unresolved: domain, and every property read through it
     if (prop === undefined) return false; // an object binding, or a required parameter
     const o = objectBinding(ont, head, ctx);
-    return o === undefined || fields(o)?.get(prop)?.nullable !== false; // non-null only when the field list says so
+    // non-null only when the field list says so; a projected property (from) may always be null (its key may be absent)
+    return o === undefined || own(own(ont.objectTypes, o)?.properties, prop)?.from !== undefined || fields(o)?.get(prop)?.nullable !== false;
   };
 }
 

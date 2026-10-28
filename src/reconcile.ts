@@ -1,6 +1,6 @@
 // Runtime consistency: the evaluator, the runtime and the scenario must state one result for one invocation.
 import { decide, externalResult, type Actor, type Bindings, type Snapshot, type Value } from "./evaluate.js";
-import { fitsType, INVOCATION_RESULTS, own, type Stage1Ontology, type Type } from "./expr.js";
+import { fitsType, INVOCATION_RESULTS, isObj, own, type Stage1Ontology, type Type } from "./expr.js";
 
 /** A result as the runtime or a scenario states it. `reason` only for INVALID_BINDING. No `param`: runtimes do not report it. */
 export type Reported = { result: string; reason?: "missing" | "unknown_param" | "type" | "not_found" };
@@ -28,9 +28,13 @@ export type TypeDefect = { object: string; prop: string; row: string; value: unk
 /** For each pure link id: the columns of its table that hold the `from` and `to` ids. */
 export type LinkColumns = Readonly<Record<string, { readonly from: string; readonly to: string }>>;
 
+// Only a plain object holds keys: a Buffer, Date, Map or typed array is a defect.
+const isPlain = (x: unknown): x is Record<string, unknown> => isObj(x) && [Object.prototype, null].includes(Object.getPrototypeOf(x));
+
 // Stored rows (physical values) -> a typed snapshot. Each property with a declared type is decoded and then checked with
 // fitsType; a value that cannot be decoded or does not fit is a defect and keeps its raw value. Null is never decoded.
 // An absent column is not projected (decide throws when it reads it: an incomplete snapshot). A pure link is projected only with a linkColumns entry; without one it fails closed.
+// A property with `from` is not a column: it is the top-level key of the JSON object (a string or a plain object) in its field, or null; never decoded.
 export function projectSnapshot(
   ont: Stage1Ontology,
   stores: Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>,
@@ -59,9 +63,31 @@ export function projectSnapshot(
       const row: Record<string, unknown> = { ...stored };
       for (const [prop, p] of Object.entries(o.properties)) {
         const raw = row[prop];
-        if (p.type === undefined || raw === undefined || raw === null) continue;
+        if (p.from !== undefined || p.type === undefined || raw === undefined || raw === null) continue;
         const v = decode(raw, p.type);
         if (v === undefined || !fitsType(v, p.type)) defects.push({ object, prop, row: String(row.id), value: raw });
+        else row[prop] = v;
+      }
+      for (const [prop, p] of Object.entries(o.properties)) {
+        if (p.from === undefined) continue;
+        const raw = Object.hasOwn(row, p.from.field) ? row[p.from.field] : undefined;
+        delete row[prop]; // a stored column with the name of a projected property is never used
+        if (raw === undefined) continue;
+        if (raw === null) {
+          row[prop] = null;
+          continue;
+        }
+        let json: unknown = raw;
+        if (typeof raw === "string")
+          try {
+            json = JSON.parse(raw);
+          } catch {
+            json = undefined;
+          }
+        // an own key whose value is undefined is an absent key
+        const v = isPlain(json) ? ((Object.hasOwn(json, p.from.key) ? json[p.from.key] : undefined) ?? null) : undefined;
+        if (v === undefined) defects.push({ object, prop, row: String(row.id), value: raw });
+        else if (v !== null && (p.type === undefined || !fitsType(v, p.type))) defects.push({ object, prop, row: String(row.id), value: v });
         else row[prop] = v;
       }
       return row as Record<string, Value>;
