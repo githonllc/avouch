@@ -1110,7 +1110,7 @@
         }
       },
       "valueType": {
-        "description": "A value type: a scalar type name, `{ref: <ObjectType>}` (an id of that object), or `{set: <element type>}`. `string` exists only as a set element type.",
+        "description": "A value type: a scalar type name, `{ref: <ObjectType>}` (an id of that object), or `{set: <element type>}`. A `string` value is read only by `isNull` / `isNotNull` (SPEC section 9).",
         "oneOf": [
           {
             "enum": [
@@ -1122,7 +1122,8 @@
               "id",
               "integer",
               "number",
-              "boolean"
+              "boolean",
+              "string"
             ]
           },
           {
