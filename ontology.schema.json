@@ -1121,6 +1121,7 @@
               "timezone",
               "id",
               "integer",
+              "number",
               "boolean"
             ]
           },
@@ -1155,6 +1156,7 @@
                       "timezone",
                       "id",
                       "integer",
+                      "number",
                       "boolean",
                       "string"
                     ]
@@ -1195,7 +1197,7 @@
                 "type": "string"
               },
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "array",
@@ -1203,12 +1205,12 @@
                 "items": {
                   "type": [
                     "string",
-                    "integer"
+                    "number"
                   ]
                 }
               }
             ],
-            "description": "A literal: string, integer, or a non-empty set literal. No Boolean literals."
+            "description": "A literal: string, number, or a non-empty set literal. No Boolean literals."
           },
           "plus": {
             "type": "array",

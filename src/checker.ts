@@ -2,7 +2,7 @@
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
 import { checkPermissionWhen, derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
-import { analyzeConditions, asReads, parseScope, quotesOf, stage1Violations } from "./stage1-check.js";
+import { analyzeConditions, asReads, parseScope, quoteHasLiteral, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
 
@@ -512,8 +512,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       // an expression condition reads what its type check recorded (stage1-check), in the shape of hand-written reads
       const ex = isStr(pc.id) && pc.expr !== undefined ? conditionExprs.get(cid)?.get(pc.id) : undefined;
       const exReads = ex !== undefined && "reads" in ex ? ex.reads : undefined;
-      for (const x of new Set(exReads?.literals.map(String)))
-        if (!quotes.some((q) => IDENT(x).test(q))) v("R4", `${cid}:${pc.id}:${x}`, `condition ${pc.id} uses the literal ${x}, which does not appear in its cite quote`, "literal_unsupported");
+      for (const x of new Set(exReads?.literals))
+        if (!quotes.some((q) => quoteHasLiteral(q, x))) v("R4", `${cid}:${pc.id}:${x}`, `condition ${pc.id} uses the literal ${x}, which does not appear in its cite quote`, "literal_unsupported");
       if (isStr(pc.reads_unspecified)) v("R4", `${cid}:${pc.id}`, `precondition ${pc.id}: the doc does not say which property it reads — ${pc.reads_unspecified}`, "precondition_reads_unspecified");
       // [read, suffix]: a hand-written read of a derived property with an expr stands for what that expression reads
       const reads: [Any, string][] = [];
@@ -565,8 +565,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
         continue; // R1 reports it
       }
       const q = isStr(a.conditional_cite?.quote) ? a.conditional_cite.quote : "";
-      for (const x of new Set(lits.literals.map(String)))
-        if (!IDENT(x).test(q)) v("R4", `${cid}:${where}:${x}`, `${where} of ${cid} uses the literal ${x}, which does not appear in its conditional_cite quote`, "literal_unsupported");
+      for (const x of new Set(lits.literals))
+        if (!quoteHasLiteral(q, x)) v("R4", `${cid}:${where}:${x}`, `${where} of ${cid} uses the literal ${x}, which does not appear in its conditional_cite quote`, "literal_unsupported");
     }
     for (const [ref, msg] of bad) v("R4", `${cid}:${ref}`, msg, "precondition_reads_non_canonical");
   }
