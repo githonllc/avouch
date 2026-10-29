@@ -18,7 +18,7 @@ export type CoverageStale =
 export type CoverageFailure = {
   id: string;
   action: string;
-  why: "mismatch" | "action_unknown" | "row_unknown" | "no_row_matched" | "runtime_missing" | "runtime_unmapped" | "expectation_unmapped" | "snapshot_missing" | "evaluator_error";
+  why: "mismatch" | "action_unknown" | "row_unknown" | "no_row_matched" | "no_decision_table" | "permission_condition" | "indeterminate" | "runtime_missing" | "runtime_unmapped" | "expectation_unmapped" | "snapshot_missing" | "evaluator_error";
 };
 export interface CoverageResult {
   ok: boolean; // true iff the five failure lists below are all empty
@@ -36,18 +36,24 @@ export interface CoverageResult {
 }
 
 // Which reasons of cannot_reconcile fail the gate. A replay is not a decision; a case without an expectation states
-// nothing to compare; INDETERMINATE does not fail (except no_row_matched: see below), and the units that it leaves
-// unverified stay uncovered or blocked, so the gate still sees them.
+// nothing to compare. An indeterminate case has an expectation that the action can give (reconcile steps 4 and 7 come
+// before step 8), and decide does not check it: it fails unless its detail is in DECLARED.
 const FAILS: Record<CannotReconcile, boolean> = {
   envelope: false,
   expectation_missing: false,
-  indeterminate: false,
+  indeterminate: true,
   runtime_missing: true,
   runtime_unmapped: true,
   expectation_unmapped: true,
   snapshot_missing: true,
   evaluator_error: true,
 };
+// INDETERMINATE details that do not fail: the details of a gap that an ontology can declare, a condition or a derived
+// property without an expression (a baseline gap, or R12 condition_unspecified), and permission: unknown (R10
+// permission_unknown). The detail of a row is not checked against the ontology.
+const DECLARED: readonly unknown[] = ["unspecified", "permission_unknown"];
+// INDETERMINATE details that fail under their own name; another detail, or none, fails as "indeterminate".
+const NAMED: readonly unknown[] = ["no_row_matched", "no_decision_table", "permission_condition"];
 
 const sortStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const show = (x: unknown) => JSON.stringify(x) ?? String(x);
@@ -148,8 +154,9 @@ export function verifyCoverage(ont: unknown, rows: readonly ReconcileRow[], base
     if (!Object.hasOwn(actionTypes, r.action)) failed.push({ ...head, why: "action_unknown" });
     else if (r.status === "mismatch") failed.push({ ...head, why: "mismatch" });
     else if (r.status === "cannot_reconcile") {
-      if (r.reason === "indeterminate" && r.detail === "no_row_matched") failed.push({ ...head, why: "no_row_matched" });
-      else if (FAILS[r.reason]) failed.push({ ...head, why: r.reason as CoverageFailure["why"] });
+      if (r.reason === "indeterminate") {
+        if (!DECLARED.includes(r.detail)) failed.push({ ...head, why: NAMED.includes(r.detail) ? (r.detail as CoverageFailure["why"]) : "indeterminate" });
+      } else if (FAILS[r.reason]) failed.push({ ...head, why: r.reason as CoverageFailure["why"] });
       else if (r.reason === "expectation_missing") unasserted.push(head);
     } else if (r.row !== undefined) {
       // a match on a row: the unit must exist and give the same result

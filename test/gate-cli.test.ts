@@ -182,6 +182,19 @@ describe("avouch gate verify", () => {
     expect(r.stdout).toContain("FAIL case u-1 RETURN runtime_unmapped\n");
     expect(lastLine(r.stdout)).toContain("0 unasserted");
   });
+
+  it("an indeterminate case fails unless the ontology declares its gap", () => {
+    const undecided = [
+      { id: "i-1", action: "RETURN", status: "cannot_reconcile", reason: "indeterminate", detail: "permission_condition" },
+      { id: "i-2", action: "RETURN", status: "cannot_reconcile", reason: "indeterminate", detail: "unspecified" },
+    ];
+    const rows = temporaryFile("rows.jsonl", readFileSync(rowsFile(), "utf8") + jsonl(undecided));
+    const r = avouch("gate", "verify", "-f", ontology, "--rows", rows, "--baseline", baselineFile(borrowDebts()));
+    expect(r.status, r.stderr).toBe(1);
+    expect(r.stdout).toContain("FAIL case i-1 RETURN permission_condition\n");
+    expect(r.stdout).not.toContain("i-2");
+    expect(lastLine(r.stdout)).toContain("1 failed case(s)");
+  });
 });
 
 describe("avouch without a known command", () => {

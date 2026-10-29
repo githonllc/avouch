@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
-import { applyPatch, queryAction, verifyCoverage, type CoverageBaseline, type ReconcileRow, type Stage1Ontology } from "../src/index";
+import { applyPatch, projectSnapshot, queryAction, reconcile, verifyCoverage, type CoverageBaseline, type ReconcileRow, type RuntimeCase, type Stage1Ontology, type Value } from "../src/index";
 import type { Op } from "../src/patch";
 
 const library = parse(ontologyText) as Stage1Ontology;
@@ -28,6 +28,16 @@ const borrowDebts = (ont: unknown = library) => BORROW.map((r) => debt("BORROW",
 const returnVerified = (): ReconcileRow[] => [match("r0", "RETURN", 0, "REJECTED"), match("r1", "RETURN", 1, "RETURNED_LATE"), match("r2", "RETURN", "otherwise", "RETURNED")];
 
 const patched = (ops: Op[]) => applyPatch(library, ops) as Stage1Ontology;
+// A RETURN case on one ACTIVE Loan that is not late; the runtime and the scenario both state `result`.
+const LOAN = { id: "LN-1", branch_id: "BR-1", state: "ACTIVE", due_date: "2026-01-15", return_condition: null };
+const returnCase = (ont: Stage1Ontology, id: string, keys: string[], result: string, bindings: Record<string, Value> = { loan_id: "LN-1" }): RuntimeCase => ({
+  id,
+  action: "RETURN",
+  snapshot: projectSnapshot(ont, { branches: [{ id: "BR-1", timezone: "UTC" }], loans: [{ ...LOAN }], people: [], members: [], books: [] }, (raw) => raw as Value).snapshot,
+  inputs: { bindings, actor: { id: "P-1", kind: "person", keys }, scope: "BR-1", now: Date.UTC(2026, 0, 10) },
+  reported: { result },
+  expected: { result },
+});
 // RETURN with loan_active declared without an expression: a gap in rows.0, so all RETURN units are blocked.
 const unspecified = (ids: Record<string, string[]>) => {
   const ont = structuredClone(library);
@@ -83,6 +93,36 @@ describe("verifyCoverage: units", () => {
       { id: "a", action: "RETURN", why: "no_row_matched" },
       { id: "c", action: "RETURN", why: "runtime_unmapped" },
     ]);
+  });
+
+  it("indeterminate fails unless its detail is unspecified or permission_unknown; another or no detail fails as indeterminate", () => {
+    const details = ["no_row_matched", "no_decision_table", "permission_condition", "unspecified", "permission_unknown", "other", undefined];
+    const r = verifyCoverage(library, details.map((d, i) => cannot(`i${i}`, "indeterminate", d)), null);
+    expect(r.failed).toEqual([
+      { id: "i0", action: "RETURN", why: "no_row_matched" },
+      { id: "i1", action: "RETURN", why: "no_decision_table" },
+      { id: "i2", action: "RETURN", why: "permission_condition" },
+      { id: "i5", action: "RETURN", why: "indeterminate" },
+      { id: "i6", action: "RETURN", why: "indeterminate" },
+    ]);
+    expect(r.unasserted).toEqual([]);
+  });
+
+  it("a case that decide leaves undecided at the permission step fails, also when another case verifies the unit", () => {
+    const ont = structuredClone(library);
+    ont.actionTypes.RETURN.permission = { keys: ["loan:close"], conditional_keys: ["loan:inspect"] };
+    const rows = reconcile(ont, [returnCase(ont, "c1", ["loan:close", "loan:inspect"], "RETURNED"), returnCase(ont, "c2", ["loan:close"], "PERMISSION_DENIED")]);
+    expect(rows[1]).toEqual({ id: "c2", action: "RETURN", status: "cannot_reconcile", reason: "indeterminate", detail: "permission_condition" });
+    const r = verifyCoverage(ont, rows, baseline([...borrowDebts(ont), debt("RETURN", 0, ont), debt("RETURN", 1, ont)]));
+    expect(r.verified).toEqual([unit("RETURN", "otherwise")]);
+    expect(r.failed).toEqual([{ id: "c2", action: "RETURN", why: "permission_condition" }]);
+    expect(r.ok).toBe(false);
+    // With a conditional_when that decides the case, decide gives PERMISSION_DENIED and the gate passes.
+    ont.actionTypes.RETURN.parameters = { ...ont.actionTypes.RETURN.parameters, inspector: { type: "id", optional: true } };
+    ont.actionTypes.RETURN.permission = { keys: ["loan:close"], conditional_keys: ["loan:inspect"], conditional_when: { isNotNull: [{ ref: "inspector" }] } };
+    const decided = reconcile(ont, [returnCase(ont, "c1", ["loan:close", "loan:inspect"], "RETURNED"), returnCase(ont, "c2", ["loan:close"], "PERMISSION_DENIED", { loan_id: "LN-1", inspector: "P-2" })]);
+    expect(decided[1]).toEqual({ id: "c2", action: "RETURN", status: "match", result: { result: "PERMISSION_DENIED" } });
+    expect(verifyCoverage(ont, decided, baseline([...borrowDebts(ont), debt("RETURN", 0, ont), debt("RETURN", 1, ont)])).ok).toBe(true);
   });
 
   it("an action without a decision table has no units and is reported in noTable", () => {
