@@ -68,7 +68,7 @@ Write a state transition only when the document names both its `from` and its `t
 
 Free-text fields that the check does not verify (`out_of_scope`, `unspecified`, a context label) copy the document's sentence verbatim. Do not paraphrase them.
 
-Before you write a quote, prove it is verbatim: `grep -F -- '<quote>' <doc>`.
+Before you write a quote, prove it is verbatim: `grep -F -- '<quote>' <doc>`. When a claim depends on the other items of a list, or on the list being complete, quote enough text to keep that context. R2 does not check this.
 
 ## Step 3: check and repair until clean
 
