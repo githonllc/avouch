@@ -48,9 +48,9 @@ const FAILS: Record<CannotReconcile, boolean> = {
   snapshot_missing: true,
   evaluator_error: true,
 };
-// INDETERMINATE details that do not fail, because the ontology declares the gap and the checker reports it: a condition
-// or a derived property without an expression (a baseline gap, or R12 condition_unspecified), and permission: unknown
-// (R10 permission_unknown).
+// INDETERMINATE details that do not fail: the details of a gap that an ontology can declare, a condition or a derived
+// property without an expression (a baseline gap, or R12 condition_unspecified), and permission: unknown (R10
+// permission_unknown). The detail of a row is not checked against the ontology.
 const DECLARED: readonly unknown[] = ["unspecified", "permission_unknown"];
 // INDETERMINATE details that fail under their own name; another detail, or none, fails as "indeterminate".
 const NAMED: readonly unknown[] = ["no_row_matched", "no_decision_table", "permission_condition"];
