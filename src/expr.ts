@@ -1,11 +1,11 @@
 // Decision expressions: the AST, the semantic types, the part of an ontology the evaluator reads, and the static type check.
 // No imports. The evaluator (./evaluate) assumes every expression it runs has passed checkPredicate / valueType.
 
-export type Scalar = "enum" | "timestamp" | "duration" | "date" | "timezone" | "id" | "integer" | "boolean" | { ref: string };
+export type Scalar = "enum" | "timestamp" | "duration" | "date" | "timezone" | "id" | "integer" | "number" | "boolean" | { ref: string };
 // "string" exists only as a set element type (the actor's keys are a set of strings).
 export type Type = Scalar | { set: Scalar | "string" };
 
-export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "timezone", "id", "integer", "boolean"] as const;
+export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "timezone", "id", "integer", "number", "boolean"] as const;
 export const EXPR_NODES = [
   "ref", "lit", "plus", "dateIn", "derived",
   "eq", "neq", "lt", "lte", "gt", "gte", "and", "or", "not", "in", "subsetOf", "isNull", "isNotNull",
@@ -107,7 +107,7 @@ export type ExprContext = { action?: string; self?: string; locals: Record<strin
 
 const VALUE_NODES = new Set(["ref", "lit", "plus", "dateIn", "derived"]);
 const COMPARE = new Set(["eq", "neq", "lt", "lte", "gt", "gte"]);
-const ORDERED = new Set(["timestamp", "date", "duration", "integer"]);
+const ORDERED = new Set(["timestamp", "date", "duration", "integer", "number"]);
 // Names an expression reads without a declaration; no parameter or quantifier variable may take them.
 export const RESERVED_NAMES = ["now", "actor", "self"] as const;
 const RESERVED: ReadonlySet<string> = new Set(RESERVED_NAMES);
@@ -183,6 +183,8 @@ export function fitsType(v: unknown, t: Type | "string"): boolean {
     case "duration":
     case "integer":
       return Number.isSafeInteger(v);
+    case "number":
+      return typeof v === "number" && Number.isFinite(v);
     case "boolean":
       return typeof v === "boolean";
   }
@@ -357,7 +359,7 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
       if (!typeEquals(ta, tb) && !idVsRef(ta, tb) && !idVsRef(tb, ta)) throw new ExprError(p, `${k} compares ${showType(ta)} with ${showType(tb)}`);
       if (isLit(l)) checkValues(ont, r, [l.lit], ctx, p);
     } else if (typeof ta !== "string" || !ORDERED.has(ta) || !typeEquals(ta, tb))
-      throw new ExprError(p, `${k} needs two operands of one type among timestamp, date, duration, integer; found ${showType(ta)} and ${showType(tb)}`);
+      throw new ExprError(p, `${k} needs two operands of one type among timestamp, date, duration, integer, number; found ${showType(ta)} and ${showType(tb)}`);
     return;
   }
   switch (k) {

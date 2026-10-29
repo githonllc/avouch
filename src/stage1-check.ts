@@ -4,6 +4,28 @@
 import { IDENT, type SourceFacts, type Violation } from "./contract.js";
 import { checkPredicate, derivedPropertyType, DISPOSITION_CLASSES, INVOCATION_RESULTS, isObj, newReads, type Expr, type ExprContext, type ExprReads, type Stage1Ontology } from "./expr.js";
 import { absorbingQuantifiers, mayNullIn, mayUnknown } from "./unknown.js";
+// R4 number literals (SPEC section 9, "Literals in quotes"). A span: ASCII letters, digits and `_`, joined by `.` when a
+// letter or a digit follows it, by `+` `-` U+2212 when a digit follows it, and by `,` between a digit and exactly three
+// digits; a span may start with `.` `+` `-` U+2212 directly before a digit. A span only bounds the text: it is one number,
+// or a range of two (`a-b`, or `a`, U+2212, `b`), or no number.
+const SPAN = /(?:[.+\-\u2212](?=\d))?[A-Za-z0-9_]+(?:(?:\.(?=[A-Za-z0-9])|[+\-\u2212](?=\d)|(?<=\d),(?=\d{3}(?!\d)))[A-Za-z0-9_]+)*/g;
+const NUMBER = /^[+\-\u2212]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+\-\u2212]?\d+)?$/;
+const RANGE = /^([+\-\u2212]?(?:0|[1-9]\d*)(?:\.\d+)?)[\-\u2212]((?:0|[1-9]\d*)(?:\.\d+)?)$/;
+const numberOf = (t: string): number => Number(t.replace(/\u2212/g, "-"));
+/** The numbers of a quote, left to right (SPEC section 9, "Literals in quotes"). */
+function quoteNumbers(q: string): number[] {
+  const out: number[] = [];
+  for (const [s] of q.matchAll(SPAN)) {
+    if (NUMBER.test(s)) out.push(numberOf(s));
+    else {
+      const r = RANGE.exec(s);
+      if (r) out.push(numberOf(r[1]), numberOf(r[2]));
+    }
+  }
+  return out;
+}
+/** R4: a string literal appears as a whole identifier (IDENT); a number literal appears as a number of the quote with the same value. */
+export const quoteHasLiteral = (q: string, x: string | number): boolean => (typeof x === "number" ? quoteNumbers(q).includes(x) : IDENT(x).test(q));
 
 type Any = any; // the ontology is untyped YAML; every field access below is guarded
 
@@ -91,8 +113,8 @@ function checkDerived({ ont, facts, v }: Ctx): void {
       v("R12", `${key}:${q}`, absorbsMsg(q, `derived property ${dn}`), "quantifier_absorbs_unknown");
     if (!isObj(dp.cite)) continue; // reported above (R1); its literals have nothing to be checked against
     const quotes = isStr(dp.cite.quote) ? [dp.cite.quote] : [];
-    for (const x of new Set(reads.literals.map(String)))
-      if (!quotes.some((q) => IDENT(x).test(q))) v("R4", `${key}:${x}`, `derived property ${dn} uses the literal ${x}, which does not appear in its cite quote`, "literal_unsupported");
+    for (const x of new Set(reads.literals))
+      if (!quotes.some((q) => quoteHasLiteral(q, x))) v("R4", `${key}:${x}`, `derived property ${dn} uses the literal ${x}, which does not appear in its cite quote`, "literal_unsupported");
   }
 }
 

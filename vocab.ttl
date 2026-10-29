@@ -480,7 +480,7 @@ ofv:root a rdf:Property ;
 
 ofv:type a rdf:Property ;
   rdfs:label "type" ;
-  rdfs:comment "A type. For a value type: a literal (enum, timestamp, duration, date, timezone, id, integer or boolean), the class whose ids the value holds, or a node with ofv:set. For a scope entry: the class of the entry. YAML: objectTypes.<name>.properties.<p>.type, actionTypes.<ID>.parameters.<n>.type, derivedProperties.<id>.type, scope.global[].type, scope.root.type" ;
+  rdfs:comment "A type. For a value type: a literal (enum, timestamp, duration, date, timezone, id, integer, number or boolean), the class whose ids the value holds, or a node with ofv:set. For a scope entry: the class of the entry. YAML: objectTypes.<name>.properties.<p>.type, actionTypes.<ID>.parameters.<n>.type, derivedProperties.<id>.type, scope.global[].type, scope.root.type" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:set a rdf:Property ;
