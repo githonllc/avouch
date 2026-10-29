@@ -1,11 +1,11 @@
 // Decision expressions: the AST, the semantic types, the part of an ontology the evaluator reads, and the static type check.
 // No imports. The evaluator (./evaluate) assumes every expression it runs has passed checkPredicate / valueType.
 
-export type Scalar = "enum" | "timestamp" | "duration" | "date" | "timezone" | "id" | "integer" | "number" | "boolean" | { ref: string };
-// "string" exists only as a set element type (the actor's keys are a set of strings).
-export type Type = Scalar | { set: Scalar | "string" };
+export type Scalar = "enum" | "timestamp" | "duration" | "date" | "timezone" | "id" | "integer" | "number" | "boolean" | "string" | { ref: string };
+// A value of type "string" is read only by isNull / isNotNull; as a set element (actor.keys) it has in and subsetOf.
+export type Type = Scalar | { set: Scalar };
 
-export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "timezone", "id", "integer", "number", "boolean"] as const;
+export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "timezone", "id", "integer", "number", "boolean", "string"] as const;
 export const EXPR_NODES = [
   "ref", "lit", "plus", "dateIn", "derived",
   "eq", "neq", "lt", "lte", "gt", "gte", "and", "or", "not", "in", "subsetOf", "isNull", "isNotNull",
@@ -294,6 +294,7 @@ function valueTypeIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, expected
     case "lit":
       if (expected === undefined) throw new ExprError(p, "a literal takes its type from its position, and this position gives none");
       if (expected === "boolean") throw new ExprError(p, "there are no boolean literals; write x or not(x)");
+      if (expected === "string") throw new ExprError(p, "there are no string literals; a string is read only by isNull and isNotNull");
       literal(node.lit, expected, ctx, p);
       return expected;
     case "plus":
@@ -350,6 +351,7 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
     const n0 = ctx.collect?.reads.length ?? 0;
     const [ta, tb] = pair(ont, a, b, ctx, p, stack);
     if (isSet(ta) || isSet(tb)) throw new ExprError(p, `${k} on a set; sets have only in and subsetOf`);
+    if (ta === "string" || tb === "string") throw new ExprError(p, `${k} on a string; a string is read only by isNull and isNotNull`);
     // a property read compared by eq / neq with a string literal: record the literal with the read
     const [l, r] = isLit(a) ? [a, b] : [b, a];
     if ((k === "eq" || k === "neq") && ctx.collect?.reads.length === n0 + 1 && isLit(l) && typeof l.lit === "string" && isObj(r) && "ref" in r)
@@ -381,6 +383,7 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
       }
       const ta = valueTypeIn(ont, a, ctx, undefined, `${p}[0]`, stack);
       if (isSet(ta)) throw new ExprError(`${p}[0]`, "in takes an element, found a set");
+      if (ta === "string") throw new ExprError(`${p}[0]`, "in on a string; a string is read only by isNull and isNotNull");
       const ts = valueTypeIn(ont, s, ctx, { set: ta }, `${p}[1]`, stack);
       if (!isSet(ts) || !typeEquals(ts.set, ta)) throw new ExprError(p, `in needs {set: ${showType(ta)}}, found ${showType(ts)}`);
       if (isLit(s) && Array.isArray(s.lit)) checkValues(ont, a, s.lit, ctx, p);
