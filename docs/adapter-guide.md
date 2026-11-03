@@ -80,7 +80,7 @@ A project whose specification is plain Markdown can run `avouch check` without w
 
 ### Configuration
 
-The configuration is the `adapter.markdown` object of the project configuration `avouch.config.json` (README, "Configuration"); `docs` is relative to that file. `avouch check` without `--adapter` uses it. `--adapter <file>.json` names a stand-alone file with the same content, and `docs` is then relative to that file; any other `--adapter` value is still loaded as a module. The configuration for the toy library (in the directory of `library.md`; as a stand-alone file, or as the value of `adapter.markdown`) is:
+The configuration is either the `adapter.markdown` object of the project configuration `avouch.config.json` (README, "Configuration"), and `docs` is then relative to that file, or a stand-alone `.json` file. A stand-alone file is named by `--adapter <file>.json`, or by the string `"adapter": "<file>.json"` in `avouch.config.json` (a path relative to that file); its `docs` are relative to the stand-alone file. `avouch check` without `--adapter` uses the `adapter` of `avouch.config.json`. Any other `--adapter` value, or any other string in `adapter`, is loaded as a module. The configuration for the toy library (in the directory of `library.md`; as a stand-alone file, or as the value of `adapter.markdown`) is:
 
 ```json
 {
