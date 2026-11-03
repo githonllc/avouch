@@ -1,1 +1,1 @@
-{"docs":["../../examples/library/library.md"],"facts":{"storeCatalog":"L8","eventCatalog":"L9","contextMembers":"L7","permissions":"L10"},"profile":{"crossContextMechanisms":["same_transaction"]}}
+{"docs":["../../examples/library/library.md"],"facts":{"storeCatalog":"L8","eventCatalog":"L9","contextMembers":"L7","permissions":"L10","scenarios":"L11"},"profile":{"crossContextMechanisms":["same_transaction"]}}

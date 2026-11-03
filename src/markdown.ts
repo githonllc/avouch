@@ -3,14 +3,14 @@
 import { IDENT, RULES, type Diagnostic, type Fact, type FormatConfig, type PermissionRow, type RuleId, type RuleSwitch, type SectionLookup, type SourceFacts } from "./contract.js";
 
 export interface MarkdownDoc { path: string; text: string }
-export type MarkdownFactName = "storeCatalog" | "eventCatalog" | "contextMembers" | "permissions";
+export type MarkdownFactName = "storeCatalog" | "eventCatalog" | "contextMembers" | "permissions" | "scenarios";
 export interface MarkdownConfig { docs: string[]; facts: Partial<Record<MarkdownFactName, string>>; profile: FormatConfig }
 
-const FACT_RULE: Record<MarkdownFactName, RuleId> = { storeCatalog: "R2", eventCatalog: "R8", contextMembers: "R5", permissions: "R10" };
+const FACT_RULE: Record<MarkdownFactName, RuleId> = { storeCatalog: "R2", eventCatalog: "R8", contextMembers: "R5", permissions: "R10", scenarios: "R9" };
 const DEFAULT_DISABLED: Partial<Record<RuleId, string>> = {
   R3: "the Markdown adapter does not parse state machines or transition triggers",
   R7: "the Markdown adapter reads no execution evidence",
-  R9: "the Markdown adapter does not parse scenarios",
+  R9: "facts.scenarios is not set: the Markdown adapter reads scenarios only from that section",
 };
 const PROFILE_KEYS = ["actionIdPattern", "linkFieldPattern", "stateProperty", "crossContextMechanisms", "scenarioCoverage", "idempotencyDeclarationRequired", "evidenceRequired", "rules"];
 
@@ -88,7 +88,9 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
     fail("profile.crossContextMechanisms", "must be an array of non-empty strings");
   if (Object.hasOwn(p, "scenarioCoverage") && p.scenarioCoverage !== "printed" && p.scenarioCoverage !== "enforced") fail("profile.scenarioCoverage", 'must be "printed" or "enforced"');
 
-  const rules = Object.fromEntries(RULES.map((r) => [r, DEFAULT_DISABLED[r] === undefined ? true : { disabled: DEFAULT_DISABLED[r] }])) as Record<RuleId, RuleSwitch>;
+  // a rule is off by default only while the adapter has no anchor for the facts of the rule
+  const supplied = (r: RuleId) => (Object.keys(facts) as MarkdownFactName[]).some((k) => FACT_RULE[k] === r);
+  const rules = Object.fromEntries(RULES.map((r) => [r, DEFAULT_DISABLED[r] === undefined || supplied(r) ? true : { disabled: DEFAULT_DISABLED[r] }])) as Record<RuleId, RuleSwitch>;
   if (Object.hasOwn(p, "rules")) {
     if (!isObj(p.rules)) fail("profile.rules", "must be an object");
     for (const [r, sw] of Object.entries(p.rules as Record<string, unknown>)) {
@@ -439,6 +441,35 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
         }
     }
     facts.permissions = { catalog: f(anchor, catalog("permissions", h?.text ?? null)), rows: f(anchor, rows), quoteNamesKey: (q, k) => q.includes("`" + k + "`") };
+  }
+  if (a.scenarios !== undefined) {
+    const anchor = a.scenarios;
+    const h = configured("scenarios", anchor);
+    const ids = new Set<string>();
+    const cites = new Map<string, Set<string>>();
+    if (h !== null) {
+      for (const line of unfenced(h.text)) {
+        const m = /^- (\S+?): (.*)$/.exec(line);
+        if (!m) continue;
+        const [, id, rest] = m;
+        if (ids.has(id)) {
+          parseError("scenarios", `facts.scenarios: scenario ${id} is listed more than once; the first is kept`);
+          continue;
+        }
+        ids.add(id);
+        const cited = new Set<string>();
+        cites.set(id, cited);
+        // the cited action ids are the items of the last bracket pair at the end of the line, one trailing full stop removed
+        const tail = rest.trimEnd().replace(/[.。]$/, "").trimEnd();
+        const b = /\(([^()（）]*)\)$/.exec(tail) ?? /（([^()（）]*)）$/.exec(tail);
+        if (b)
+          for (const x of b[1].split(/[,，]/).map((y) => y.trim()))
+            if (config.profile.actionIdPattern.test(x)) cited.add(x);
+            else parseError("scenarios", `facts.scenarios: scenario ${id} cites ${JSON.stringify(x)}, which does not match actionIdPattern`);
+      }
+      if (ids.size === 0) parseError("scenarios", "facts.scenarios: the section has no `- <id>: <text> (<action>, ...)` line");
+    }
+    facts.scenarios = { ids, cites };
   }
   return facts;
 }
