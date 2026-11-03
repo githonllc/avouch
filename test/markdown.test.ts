@@ -92,7 +92,7 @@ describe("configuration", () => {
 
   it("R9 is off by default without facts.scenarios, on with it, and an explicit switch overrides both", () => {
     const rules = (profile: unknown, facts: unknown) => parseMarkdownConfig(JSON.stringify({ docs: ["a.md"], facts, profile }), "c.json").profile.rules;
-    expect(rules({}, {}).R9).toEqual({ disabled: "the Markdown adapter does not parse scenarios" });
+    expect(rules({}, {}).R9).toEqual({ disabled: "facts.scenarios is not set: the Markdown adapter reads scenarios only from that section" });
     expect(rules({}, { scenarios: "L11" }).R9).toBe(true);
     expect(rules({ rules: { R9: { disabled: "x" } } }, { scenarios: "L11" }).R9).toEqual({ disabled: "x" });
     expect(rules({ rules: { R9: true } }, {}).R9).toBe(true);
@@ -328,6 +328,16 @@ describe("configured facts", () => {
     const f = scen("- S2: x （RETURN，BORROW）。");
     expect(f.diagnostics).toEqual([]);
     expect(f.scenarios!.cites.get("S2")).toEqual(new Set(["RETURN", "BORROW"]));
+  });
+
+  it("scenarios: white space before the full stop is allowed; brackets of two kinds are not a pair", () => {
+    expect(scen("- S1: x (BORROW) .").scenarios!.cites.get("S1")).toEqual(new Set(["BORROW"]));
+    expect(scen("- S1: x (BORROW）。").scenarios!.cites.get("S1")).toEqual(new Set());
+  });
+
+  it("scenarios: the id is one word; a line whose text before ': ' has white space is not a scenario", () => {
+    const f = scen("- S1: x (BORROW).\n- Happy path: y (RETURN).");
+    expect([...f.scenarios!.ids]).toEqual(["S1"]);
   });
 
   it("scenarios: a line with no closing bracket cites nothing", () => {

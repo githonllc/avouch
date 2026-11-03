@@ -10,7 +10,7 @@ const FACT_RULE: Record<MarkdownFactName, RuleId> = { storeCatalog: "R2", eventC
 const DEFAULT_DISABLED: Partial<Record<RuleId, string>> = {
   R3: "the Markdown adapter does not parse state machines or transition triggers",
   R7: "the Markdown adapter reads no execution evidence",
-  R9: "the Markdown adapter does not parse scenarios",
+  R9: "facts.scenarios is not set: the Markdown adapter reads scenarios only from that section",
 };
 const PROFILE_KEYS = ["actionIdPattern", "linkFieldPattern", "stateProperty", "crossContextMechanisms", "scenarioCoverage", "idempotencyDeclarationRequired", "evidenceRequired", "rules"];
 
@@ -460,7 +460,8 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
         const cited = new Set<string>();
         cites.set(id, cited);
         // the cited action ids are the items of the last bracket pair at the end of the line, one trailing full stop removed
-        const b = /[(（]([^()（）]*)[)）]$/.exec(rest.trimEnd().replace(/[.。]$/, ""));
+        const tail = rest.trimEnd().replace(/[.。]$/, "").trimEnd();
+        const b = /\(([^()（）]*)\)$/.exec(tail) ?? /（([^()（）]*)）$/.exec(tail);
         if (b)
           for (const x of b[1].split(/[,，]/).map((y) => y.trim()))
             if (config.profile.actionIdPattern.test(x)) cited.add(x);
