@@ -1,14 +1,15 @@
 // Built-in adapter for plain Markdown sources: document text in, SourceFacts out. It reads no file (the command line reads
 // the configuration and the documents). The parse conventions are fixed here; docs/adapter-guide.md section 7 states them.
-import { IDENT, RULES, type Diagnostic, type Fact, type FormatConfig, type PermissionRow, type RuleId, type RuleSwitch, type SectionLookup, type SourceFacts } from "./contract.js";
+import { IDENT, RULES, type Diagnostic, type Fact, type FormatConfig, type PermissionRow, type RuleId, type RuleSwitch, type SectionLookup, type SourceFacts, type StateMachineFact } from "./contract.js";
 
 export interface MarkdownDoc { path: string; text: string }
-export type MarkdownFactName = "storeCatalog" | "eventCatalog" | "contextMembers" | "permissions" | "scenarios";
-export interface MarkdownConfig { docs: string[]; facts: Partial<Record<MarkdownFactName, string>>; profile: FormatConfig }
+export type MarkdownFactName = "storeCatalog" | "eventCatalog" | "contextMembers" | "permissions" | "scenarios" | "transitionTriggers";
+/** `stateMachines`: object type -> anchor of the section that holds its state diagram (R3); `facts` holds the string-valued anchors only. */
+export interface MarkdownConfig { docs: string[]; facts: Partial<Record<MarkdownFactName, string>>; stateMachines?: Record<string, string>; profile: FormatConfig }
 
-const FACT_RULE: Record<MarkdownFactName, RuleId> = { storeCatalog: "R2", eventCatalog: "R8", contextMembers: "R5", permissions: "R10", scenarios: "R9" };
+const FACT_RULE: Record<MarkdownFactName, RuleId> = { storeCatalog: "R2", eventCatalog: "R8", contextMembers: "R5", permissions: "R10", scenarios: "R9", transitionTriggers: "R3" };
 const DEFAULT_DISABLED: Partial<Record<RuleId, string>> = {
-  R3: "the Markdown adapter does not parse state machines or transition triggers",
+  R3: "facts.stateMachines and facts.transitionTriggers are not set: the Markdown adapter reads state machines only from those sections",
   R7: "the Markdown adapter reads no execution evidence",
   R9: "facts.scenarios is not set: the Markdown adapter reads scenarios only from that section",
 };
@@ -52,9 +53,17 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
   });
 
   const facts: Partial<Record<MarkdownFactName, string>> = {};
+  let stateMachines: Record<string, string> | undefined;
   if (Object.hasOwn(raw, "facts")) {
     if (!isObj(raw.facts)) fail("facts", "must be an object");
     for (const [k, v] of Object.entries(raw.facts as Record<string, unknown>)) {
+      if (k === "stateMachines") {
+        if (!isObj(v) || Object.keys(v).length === 0) fail("facts.stateMachines", "must be a non-empty object of anchors");
+        const entries = Object.entries(v as Record<string, unknown>);
+        for (const [o, anchor] of entries) if (!isStr(anchor)) fail(`facts.stateMachines.${o}`, "must be a non-empty string");
+        stateMachines = Object.fromEntries(entries) as Record<string, string>;
+        continue;
+      }
       if (!Object.hasOwn(FACT_RULE, k)) fail(`facts.${k}`, "unknown key");
       if (!isStr(v)) fail(`facts.${k}`, "must be a non-empty string");
       facts[k as MarkdownFactName] = v as string;
@@ -88,6 +97,9 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
     fail("profile.crossContextMechanisms", "must be an array of non-empty strings");
   if (Object.hasOwn(p, "scenarioCoverage") && p.scenarioCoverage !== "printed" && p.scenarioCoverage !== "enforced") fail("profile.scenarioCoverage", 'must be "printed" or "enforced"');
 
+  if (stateMachines !== undefined && facts.transitionTriggers === undefined) fail("facts.stateMachines", "requires facts.transitionTriggers");
+  if (stateMachines === undefined && facts.transitionTriggers !== undefined) fail("facts.transitionTriggers", "requires facts.stateMachines");
+
   // a rule is off by default only while the adapter has no anchor for the facts of the rule
   const supplied = (r: RuleId) => (Object.keys(facts) as MarkdownFactName[]).some((k) => FACT_RULE[k] === r);
   const rules = Object.fromEntries(RULES.map((r) => [r, DEFAULT_DISABLED[r] === undefined || supplied(r) ? true : { disabled: DEFAULT_DISABLED[r] }])) as Record<RuleId, RuleSwitch>;
@@ -114,7 +126,7 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
   if (idem !== undefined) profile.idempotencyDeclarationRequired = idem;
   const ev = bool("evidenceRequired");
   if (ev !== undefined) profile.evidenceRequired = ev;
-  return { docs: docs as string[], facts, profile };
+  return { docs: docs as string[], facts, ...(stateMachines !== undefined ? { stateMachines } : {}), profile };
 }
 
 // ------------------------------------------------------------------------------------------ text structure
@@ -317,6 +329,56 @@ function tables(h: Heading): string[][][] {
   return out;
 }
 
+// ------------------------------------------------------------------------------------------ state diagrams
+
+const NAME = "[A-Za-z_][A-Za-z0-9_]*";
+const EDGE = new RegExp(`^(\\[\\*\\]|${NAME}) *--> *(\\[\\*\\]|${NAME})( *:.*)?$`); // `A --> B : x`, `A-->B`, mermaid `A --> B: x`
+const TRANSITION = new RegExp(`^(${NAME}(?: / ${NAME})*) (?:→|->) (${NAME}(?: / ${NAME})*)$`);
+
+/** The first line of a mermaid body that is not empty and not a `%%` comment, trimmed ("" when there is none). */
+const firstMermaidLine = (body: string[]): string => body.map((l) => l.trim()).find((l) => l !== "" && !l.startsWith("%%")) ?? "";
+
+/** The state machine of one diagram body (see docs/adapter-guide.md section 7), or null after one `err` call for each line outside the grammar. */
+function stateMachine(body: string[], err: (msg: string) => void): StateMachineFact | null {
+  const nodes: string[] = [], initial: string[] = [], edges: string[] = [];
+  const add = (list: string[], x: string) => void (list.includes(x) || list.push(x));
+  let bad = false, inNote = false;
+  for (const raw of body) {
+    const line = raw.trim();
+    if (inNote) {
+      inNote = line !== "end note";
+      continue;
+    }
+    if (line === "" || line === "@startuml" || line === "@enduml" || line.startsWith("'") || line.startsWith("%%") || line === "stateDiagram" || line === "stateDiagram-v2") continue;
+    if (/^(hide|skinparam|title|direction) /.test(line) || /^note .*:/.test(line)) continue;
+    if (new RegExp(`^note (left|right|top|bottom) of ${NAME}$`).test(line)) {
+      inNote = true;
+      continue;
+    }
+    const m = EDGE.exec(line);
+    if (m && !(m[1] === "[*]" && m[2] === "[*]")) {
+      const [, from, to] = m;
+      if (from === "[*]") {
+        add(initial, to);
+        add(nodes, to);
+      } else if (to === "[*]") add(nodes, from);
+      else {
+        add(nodes, from);
+        add(nodes, to);
+        add(edges, `${from}->${to}`);
+      }
+      continue;
+    }
+    bad = true;
+    err(`state diagram line is outside the grammar: ${line}`);
+  }
+  if (inNote) {
+    bad = true;
+    err("state diagram: a `note` block is not closed by `end note`");
+  }
+  return bad ? null : { nodes, initial, edges };
+}
+
 // ------------------------------------------------------------------------------------------ facts
 
 /** Facts from plain Markdown documents. Optional facts are present exactly when their anchor is configured. */
@@ -349,11 +411,11 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
   };
   const f = <T>(anchor: string, value: T): Fact<T> => ({ value, source: { anchor } });
   const parseError = (name: MarkdownFactName, msg: string) => diagnostics.push({ rule: FACT_RULE[name], kind: "markdown_parse", key: `facts.${name}`, msg });
-  // the section text of a configured fact, or null with a markdown_anchor diagnostic
-  const configured = (name: MarkdownFactName, anchor: string): Heading | null => {
+  // the section text of a configured fact, or null with a markdown_anchor diagnostic; `rule` and `key` default to those of the fact
+  const configured = (name: MarkdownFactName, anchor: string, rule: RuleId = FACT_RULE[name], key = `facts.${name}`): Heading | null => {
     const h = lookup(anchor);
     if (typeof h !== "string") return h;
-    diagnostics.push({ rule: FACT_RULE[name], kind: "markdown_anchor", key: `facts.${name}`, msg: `anchor ${anchor} of facts.${name} is ${h}` });
+    diagnostics.push({ rule, kind: "markdown_anchor", key, msg: `anchor ${anchor} of ${key} is ${h}` });
     return null;
   };
   const catalog = (name: MarkdownFactName, text: string | null): Set<string> => {
@@ -470,6 +532,68 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
       if (ids.size === 0) parseError("scenarios", "facts.scenarios: the section has no `- <id>: <text> (<action>, ...)` line");
     }
     facts.scenarios = { ids, cites };
+  }
+  if (config.stateMachines !== undefined) {
+    const machines = new Map<string, Fact<StateMachineFact | null>>();
+    for (const [object, anchor] of Object.entries(config.stateMachines)) {
+      const key = `facts.stateMachines.${object}`;
+      const h = configured("transitionTriggers", anchor, "R3", key);
+      let value: StateMachineFact | null = null;
+      if (h !== null) {
+        const err = (msg: string) => diagnostics.push({ rule: "R3", kind: "markdown_parse", key, msg });
+        const blocks = fences(h.text.split("\n")).blocks.filter((b) => b.info === "plantuml" || (b.info === "mermaid" && /^stateDiagram(-v2)?$/.test(firstMermaidLine(b.body))));
+        if (blocks.length !== 1) err(`${key} needs exactly one state diagram block (plantuml, or mermaid stateDiagram) in its section, found ${blocks.length}`);
+        else value = stateMachine(blocks[0].body, err);
+      }
+      machines.set(object, f(anchor, value));
+    }
+    facts.stateMachines = machines;
+  }
+  if (a.transitionTriggers !== undefined) {
+    const anchor = a.transitionTriggers;
+    const h = configured("transitionTriggers", anchor);
+    const triggers = new Map<string, Map<string, Fact<Set<string>>>>();
+    if (h !== null) {
+      const ts = tables(h);
+      if (ts.length !== 1) parseError("transitionTriggers", `facts.transitionTriggers needs exactly one pipe table in its section, found ${ts.length}`);
+      else if (ts[0].length === 0 || ts[0][0].length !== 3) parseError("transitionTriggers", `facts.transitionTriggers: the table header has ${ts[0][0]?.length ?? 0} columns, expected 3`);
+      else
+        for (const row of ts[0].slice(1)) {
+          if (row.length !== 3) {
+            parseError("transitionTriggers", `facts.transitionTriggers: row has ${row.length} columns, expected 3: ${row.join(" | ")}`);
+            continue;
+          }
+          const [object, transition, trigger] = row;
+          const edges: string[] = [];
+          const ids: string[] = [];
+          let ok = true;
+          // the object must be one of facts.stateMachines, so a row for a misspelled object or an object without a configured machine is not dropped silently
+          if (!Object.hasOwn(config.stateMachines ?? {}, object)) {
+            parseError("transitionTriggers", `facts.transitionTriggers: object ${JSON.stringify(object)} is not a key of facts.stateMachines: ${row.join(" | ")}`);
+            ok = false;
+          }
+          for (const part of transition.split(/[,，]/).map((x) => x.trim())) {
+            const m = TRANSITION.exec(part);
+            if (!m) {
+              parseError("transitionTriggers", `facts.transitionTriggers: ${JSON.stringify(part)} is not a transition \`<state> → <state>\``);
+              ok = false;
+            } else for (const from of m[1].split(" / ")) for (const to of m[2].split(" / ")) edges.push(`${from}->${to}`);
+          }
+          for (const x of trigger.split(/[,，]/).map((y) => y.trim()))
+            if (config.profile.actionIdPattern.test(x)) ids.push(x);
+            else {
+              parseError("transitionTriggers", `facts.transitionTriggers: trigger ${JSON.stringify(x)} does not match actionIdPattern`);
+              ok = false;
+            }
+          if (!ok) continue;
+          const byEdge = triggers.get(object) ?? triggers.set(object, new Map()).get(object)!;
+          for (const e of edges) {
+            const fact = byEdge.get(e) ?? byEdge.set(e, f(anchor, new Set<string>())).get(e)!;
+            for (const x of ids) fact.value.add(x);
+          }
+        }
+    }
+    facts.transitionTriggers = triggers;
   }
   return facts;
 }
