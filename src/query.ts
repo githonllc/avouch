@@ -2,13 +2,14 @@
 // cite an anchor. Pure functions: they never throw on any parsed YAML, and they return plain JSON (no Map, no Set).
 // Every result field is an ontology value or a mechanical projection of one; a missing or ill-typed value is null ([] for
 // a list). The read sets come from the type check (checkPredicate / derivedPropertyType with collect), as for R4.
+import { touchedObjects } from "./touched.js";
 import { checkPredicate, derivedPropertyType, isObj, newReads, own, type Expr, type Stage1Ontology, type Type } from "./expr.js";
 
 export type S = string | null;
 export type QueryCite = { doc: string; quote: string };
 export type QueryStamp = { ontology: string; /* equal to git.path in git; else the real path relative to the working directory, "/" separated */ git: { commit: string; dirty: boolean; path: string /* relative to the repository root, "/" separated */ } | null;
   check: { status: "not_run" } | { status: "pass" | "fail"; adapter: string; schemaErrors: number; violations: number; waived: number } };
-export type QueryVerb = "list" | "action" | "object" | "result" | "writes" | "reads" | "cites";
+export type QueryVerb = "list" | "action" | "object" | "result" | "writes" | "reads" | "cites" | "link";
 export type QueryEnvelope = { avouchQuery: 1; stamp: QueryStamp; verb: QueryVerb; arg: string; result: unknown /* one of the types below, or null */ };
 export type QueryList =
   | { kind: "actions"; items: { id: string; context: S; doc: S; docTerm: S; permissionKeys: string[] }[] }
@@ -48,6 +49,9 @@ export type QueryWrites = { target: string; kind: "property" | "derived"; unanal
 export type QueryReads = { target: string; kind: "property" | "derived"; materialized: string[]; unanalyzed: { at: string; error: string }[];
   conditions: { action: string; condition: string; source: "expr" | "reads"; direct: boolean; via: string[]; rows: number[] }[];
   derived: { id: string; source: "expr" | "reads"; direct: boolean; via: string[] }[] };
+export type QueryLink = { id: string; from: S; to: S; via: S; table: S; doc: S;
+  effects: { action: string; kind: "effect" | "none" | "unspecified"; text: S; cite: QueryCite | null; scenarios: string[]; incident: boolean /* the action touches from or to; false is an R6 stray */ }[];
+  missing: string[] /* actions that touch from or to and have no link_effects entry for this link (R6 link_effect_missing) */ };
 export type QueryCites = { anchor: string; claims: { path: string; subject: string; quote: S }[] };
 
 type Any = Record<string, any>;
@@ -664,6 +668,33 @@ function claims(ont: unknown): Claim[] {
 
 export function queryCites(ont: unknown, anchor: string): QueryCites {
   return { anchor, claims: claims(ont).filter((c) => c.doc === anchor).map(({ path, subject, quote }) => ({ path, subject, quote })) };
+}
+
+// ---------------------------------------------------------------------------------------------------------- link
+
+export function queryLink(ont: unknown, id: string): QueryLink | null {
+  const ls = arr(root(ont).linkTypes).filter((l) => isObj(l) && l.id === id);
+  if (ls.length === 0) return null;
+  const objs = objects(ont);
+  // the checker's rule (R6): a link is needed by an action that touches its from or its to object
+  const incident = (a: Any) => {
+    const t = touchedObjects(a, objs);
+    return ls.some((l) => t.has(l.from) || t.has(l.to));
+  };
+  const effects: QueryLink["effects"] = [];
+  const missing: string[] = [];
+  for (const [aid, a] of sortedActions(ont)) {
+    const inc = incident(a);
+    const le = ownObj(map(a.link_effects), id);
+    if (le === undefined) {
+      if (inc && !Object.hasOwn(map(a.link_effects), id)) missing.push(aid); // an entry that is not a mapping still counts as present (R6)
+      continue;
+    }
+    const kind = LINK_KINDS.find((k) => k in le);
+    if (kind !== undefined) effects.push({ action: aid, kind, text: str(le[kind]), cite: citeOf(le.cite), scenarios: strs(le.scenarios), incident: inc });
+  }
+  const l = ls[0];
+  return { id, from: str(l.from), to: str(l.to), via: str(l.via), table: str(l.table), doc: str(l.doc), effects, missing };
 }
 
 // ---------------------------------------------------------------------------------------------------------- list

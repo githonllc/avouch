@@ -2,6 +2,7 @@
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
 import { checkPermissionWhen, derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
+import { touchedObjects } from "./touched.js";
 import { analyzeConditions, asReads, parseScope, quoteHasLiteral, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -591,8 +592,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     if (!objType(x) && !outOfScope.has(x)) v("R5", `entity:${x}`, `the source lists entity ${x}; it must be in objectTypes or outOfScopeObjectTypes`, "context_entity_uncovered");
   for (const x of outOfScope) if (!entities.has(x)) v("R5", `entity:${x}`, `outOfScopeObjectTypes.${x} is not a source entity`, "out_of_scope_unknown");
   }
-  const touched = (c: Any) =>
-    new Set<string>([...arr(c.edits).map((e: string) => e.split(".")[0]), ...arr(c.creates), ...arr(c.deletes)].filter(objType));
+  const touched = (c: Any) => touchedObjects(c, objects);
   for (const [cid, c] of Object.entries(commands)) {
     if (!isObj(c)) continue;
     const cross = [...touched(c)].filter((o) => objects[o].context !== c.context);

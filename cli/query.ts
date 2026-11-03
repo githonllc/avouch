@@ -8,6 +8,7 @@ import {
   queryAction,
   queryCites,
   queryDisposition,
+  queryLink,
   queryList,
   queryObject,
   queryReads,
@@ -19,8 +20,8 @@ import {
 import { checkStamp, resolveQueryProject, type Adapter } from "./check.js";
 import { expectPositionals, parseOptions, wantsHelp } from "./reconcile.js";
 
-export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
-const VERBS: readonly QueryVerb[] = ["list", "action", "object", "result", "writes", "reads", "cites"];
+export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites|link> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
+const VERBS: readonly QueryVerb[] = ["list", "action", "object", "result", "writes", "reads", "cites", "link"];
 
 // Read-only git commands, run from the directory of the ontology file. null when any of them fails.
 function gitStamp(file: string): QueryStamp["git"] {
@@ -48,7 +49,7 @@ function run(verb: QueryVerb, arg: string, ont: unknown): { result: unknown; emp
       return { result: r, empty: r.claims.length === 0 };
     }
     default: {
-      const f = { action: queryAction, object: queryObject, result: queryDisposition, writes: queryWrites, reads: queryReads }[verb];
+      const f = { action: queryAction, object: queryObject, result: queryDisposition, writes: queryWrites, reads: queryReads, link: queryLink }[verb];
       const r = f(ont, arg);
       return { result: r, empty: r === null };
     }
