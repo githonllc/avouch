@@ -25,7 +25,7 @@ const withoutEvidence = (o: any) => {
 };
 const rows = (xs: Violation[]) => xs.map((x) => [x.rule, x.kind, x.key, x.msg].join("\t")).sort();
 const genericOnly = (x: Violation) => !(x.rule === "R6" && x.kind === "fact_missing");
-const toyOnly = (x: Violation) => !["R3", "R7", "R9"].includes(x.rule) && !(x.rule === "R6" && x.kind === "none_but_written");
+const toyOnly = (x: Violation) => !["R3", "R7"].includes(x.rule) && !(x.rule === "R6" && x.kind === "none_but_written");
 
 // one inline document through the adapter
 const md = (text: string, facts: Partial<Record<MarkdownFactName, string>> = {}) =>
@@ -49,19 +49,19 @@ describe("toy library through the Markdown adapter", () => {
   it("has the clean ontology and 28 mutations", () => expect(cases.length).toBe(29));
 
   for (const [name, o] of cases)
-    it(`${name}: same findings as the toy adapter, outside R3, R7, R9 and R6 none_but_written`, () => {
+    it(`${name}: same findings as the toy adapter, outside R3, R7 and R6 none_but_written`, () => {
       const g = check(withoutEvidence(o), generic());
       const t = check(withoutEvidence(o), toy());
       expect(rows(g.violations.filter(genericOnly))).toEqual(rows(t.violations.filter(toyOnly)));
       expect(rows(g.waived.filter(genericOnly))).toEqual(rows(t.waived.filter(toyOnly)));
     });
 
-  it("misses exactly the five mutations that need state machines, evidence or scenarios", () => {
+  it("misses exactly the four mutations that need state machines or evidence", () => {
     const unseen = cases
       .filter(([, o, expect]) => expect !== null && !check(withoutEvidence(o), generic()).violations.filter(genericOnly).some((x) => x.rule === expect))
       .map(([name]) => name)
       .sort();
-    expect(unseen).toEqual(["lib-r3-transition-binding", "lib-r6-none-but-written", "lib-r7-effect-unwitnessed", "lib-r7-undeclared-store", "lib-r9-unknown-scenario"]);
+    expect(unseen).toEqual(["lib-r3-transition-binding", "lib-r6-none-but-written", "lib-r7-effect-unwitnessed", "lib-r7-undeclared-store"]);
   });
 
   it("the clean toy without evidence ids: only R6 fact_missing alone, nothing with the evidence composed in", () => {
@@ -82,12 +82,20 @@ describe("toy library through the Markdown adapter", () => {
 });
 
 describe("configuration", () => {
-  it("default rules: R3, R7 and R9 off with their reasons, every other rule on (R6 included)", () => {
+  it("default rules: R3 and R7 off with their reasons, every other rule on (R6 and R9 included, as facts.scenarios is set)", () => {
     expect(cfg.profile.rules).toEqual({
       R1: true, R2: true, R3: { disabled: "the Markdown adapter does not parse state machines or transition triggers" }, R4: true, R5: true, R6: true,
-      R7: { disabled: "the Markdown adapter reads no execution evidence" }, R8: true, R9: { disabled: "the Markdown adapter does not parse scenarios" }, R10: true, R11: true, R12: true,
+      R7: { disabled: "the Markdown adapter reads no execution evidence" }, R8: true, R9: true, R10: true, R11: true, R12: true,
     });
     expect(Object.keys(cfg.profile.rules).sort()).toEqual([...RULES].sort());
+  });
+
+  it("R9 is off by default without facts.scenarios, on with it, and an explicit switch overrides both", () => {
+    const rules = (profile: unknown, facts: unknown) => parseMarkdownConfig(JSON.stringify({ docs: ["a.md"], facts, profile }), "c.json").profile.rules;
+    expect(rules({}, {}).R9).toEqual({ disabled: "the Markdown adapter does not parse scenarios" });
+    expect(rules({}, { scenarios: "L11" }).R9).toBe(true);
+    expect(rules({ rules: { R9: { disabled: "x" } } }, { scenarios: "L11" }).R9).toEqual({ disabled: "x" });
+    expect(rules({ rules: { R9: true } }, {}).R9).toBe(true);
   });
 
   it("profile defaults and requiredSource", () => {
@@ -114,7 +122,7 @@ describe("configuration", () => {
     ['{"facts":{}}', "c.json: docs: missing"],
     ['{"docs":[]}', "c.json: docs: must be a non-empty array of strings"],
     ['{"docs":["a.md","a.md"]}', "c.json: docs[1]: duplicate of docs[0]"],
-    ['{"docs":["a.md"],"facts":{"scenarios":"L1"}}', "c.json: facts.scenarios: unknown key"],
+    ['{"docs":["a.md"],"facts":{"stateMachines":"L1"}}', "c.json: facts.stateMachines: unknown key"],
     ['{"docs":["a.md"],"profile":{"actionIdPattern":"("}}', "c.json: profile.actionIdPattern: invalid regular expression"],
     ['{"docs":["a.md"],"profile":{"rules":{"R13":true}}}', "c.json: profile.rules.R13: unknown rule"],
     ['{"docs":["a.md"],"profile":{"rules":{"R6":false}}}', "c.json: profile.rules.R6: must be true"],
@@ -305,6 +313,51 @@ describe("configured facts", () => {
     const twice = md("## C Contexts\n- A: X\n- A: Y\n", { contextMembers: "C" });
     expect(parseDiags(twice)).toEqual([["R5", "markdown_parse", "facts.contextMembers"]]);
     expect(twice.contextMembers!.get("A")!.value).toEqual(new Set(["X"]));
+  });
+
+  const scen = (body: string, profile = {}) =>
+    markdownFacts([{ path: "a.md", text: `## L11 Scenarios\n\n${body}\n` }], parseMarkdownConfig(JSON.stringify({ docs: ["a.md"], facts: { scenarios: "L11" }, profile }), "c.json"));
+
+  it("scenarios: a scenario cites the actions in its closing bracket, not other upper-case words", () => {
+    const f = scen("- S1: an AVAILABLE book (BORROW).");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.scenarios).toEqual({ ids: new Set(["S1"]), cites: new Map([["S1", new Set(["BORROW"])]]) });
+  });
+
+  it("scenarios: full-width brackets, full-width comma and ideographic full stop", () => {
+    const f = scen("- S2: x （RETURN，BORROW）。");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.scenarios!.cites.get("S2")).toEqual(new Set(["RETURN", "BORROW"]));
+  });
+
+  it("scenarios: a line with no closing bracket cites nothing", () => {
+    const f = scen("- S3: no actions");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.scenarios).toEqual({ ids: new Set(["S3"]), cites: new Map([["S3", new Set()]]) });
+  });
+
+  it("scenarios: a cited item that does not match actionIdPattern is markdown_parse and is not cited", () => {
+    const f = scen("- S1: x (BORROW, lower)");
+    expect(parseDiags(f)).toEqual([["R9", "markdown_parse", "facts.scenarios"]]);
+    expect(f.scenarios!.cites.get("S1")).toEqual(new Set(["BORROW"]));
+  });
+
+  it("scenarios: a repeated id is markdown_parse and the first is kept", () => {
+    const f = scen("- S1: x (BORROW)\n- S1: y (RETURN)");
+    expect(parseDiags(f)).toEqual([["R9", "markdown_parse", "facts.scenarios"]]);
+    expect(f.scenarios).toEqual({ ids: new Set(["S1"]), cites: new Map([["S1", new Set(["BORROW"])]]) });
+  });
+
+  it("scenarios: a section with no scenario line is markdown_parse; a line inside a fence is not a scenario", () => {
+    const f = scen("nothing\n```\n- S1: x (BORROW)\n```");
+    expect(parseDiags(f)).toEqual([["R9", "markdown_parse", "facts.scenarios"]]);
+    expect(f.scenarios).toEqual({ ids: new Set(), cites: new Map() });
+  });
+
+  it("scenarios: a missing anchor is markdown_anchor and an empty fact", () => {
+    const f = md("## L1 A\n", { scenarios: "L11" });
+    expect(parseDiags(f)).toEqual([["R9", "markdown_anchor", "facts.scenarios"]]);
+    expect(f.scenarios).toEqual({ ids: new Set(), cites: new Map() });
   });
 
   const perm = (table: string) => md(`## P Permissions\n\`\`\`text\nloan:create\nloan:close\n\`\`\`\n\n${table}\n`, { permissions: "P" });

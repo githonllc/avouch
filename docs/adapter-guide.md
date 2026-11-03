@@ -85,18 +85,18 @@ The configuration is either the `adapter.markdown` object of the project configu
 ```json
 {
   "docs": ["library.md"],
-  "facts": { "storeCatalog": "L8", "eventCatalog": "L9", "contextMembers": "L7", "permissions": "L10" },
+  "facts": { "storeCatalog": "L8", "eventCatalog": "L9", "contextMembers": "L7", "permissions": "L10", "scenarios": "L11" },
   "profile": { "crossContextMechanisms": ["same_transaction"] }
 }
 ```
 
 - `docs` (required): the source documents, a non-empty list of distinct paths. A relative path resolves from the directory of the configuration file. Two entries that resolve to the same file, or a file that cannot be read, stop the command with exit code 2.
-- `facts` (optional): the anchor of the section that holds each optional fact: `storeCatalog` (R2), `eventCatalog` (R8), `contextMembers` (R5), `permissions` (R10). A fact without an anchor is not supplied.
+- `facts` (optional): the anchor of the section that holds each optional fact: `storeCatalog` (R2), `eventCatalog` (R8), `contextMembers` (R5), `permissions` (R10), `scenarios` (R9). A fact without an anchor is not supplied.
 - `profile` (optional): `actionIdPattern` and `linkFieldPattern` (regular expression strings), `stateProperty`, `crossContextMechanisms`, `scenarioCoverage`, `idempotencyDeclarationRequired`, `evidenceRequired` and `rules`. A `rules` entry is `true` or `{"disabled": "<reason>"}` and replaces the default for that rule.
 
 An unknown key, a wrong type or an invalid regular expression is an error `<file>: <json path>: <problem>` (exit code 2).
 
-Defaults: `actionIdPattern` `^[A-Z][A-Z_]*$`, `linkFieldPattern` `_id$`, `stateProperty` `state`, `crossContextMechanisms` empty. `requiredSource` is `{R10: <permissions anchor>}` when `facts.permissions` is set, else empty; it cannot be set separately. `scenarioCoverage`, `idempotencyDeclarationRequired` and `evidenceRequired` are set only when given. Rules R1, R2, R4, R5, R6, R8, R10, R11 and R12 are on. Three rules are off, because the adapter supplies none of their facts; the checker prints the reason:
+Defaults: `actionIdPattern` `^[A-Z][A-Z_]*$`, `linkFieldPattern` `_id$`, `stateProperty` `state`, `crossContextMechanisms` empty. `requiredSource` is `{R10: <permissions anchor>}` when `facts.permissions` is set, else empty; it cannot be set separately. `scenarioCoverage`, `idempotencyDeclarationRequired` and `evidenceRequired` are set only when given. Rules R1, R2, R4, R5, R6, R8, R10, R11 and R12 are on. R9 is on when `facts.scenarios` is set. Without it, R9 is off, like R3 and R7, because the adapter supplies none of their facts; the checker prints the reason:
 
 | Rule | Reason |
 |---|---|
@@ -116,9 +116,10 @@ The conventions are fixed in code, not in configuration.
 - `containsTerm(term)`: the term as a whole identifier in any document, generated blocks removed.
 - Catalogs (`storeCatalog`, `eventCatalog`, the catalog of `permissions`): the one `text` code block in the section; a text block in a subsection counts toward that one. Each line, without its comment (two slashes to the end of the line) and trimmed, is a list of names; an empty line is skipped. ` / ` (a space, a slash and a space) separates names, as in a field list, and each name is trimmed: `a / b` is the names `a` and `b`. Any other `/` is part of a name, so `a/b` is one name. An empty name or a name with white space (`a b`, `a / b /`, `a /  / b`) is a `markdown_parse` diagnostic.
 - `contextMembers`: each line `- <context>: <member>, <member>` outside fences.
+- `scenarios`: each line `- <id>: <text>` outside fences in the section is one scenario; the id is the text up to the first `: `. The scenario cites the action ids in the last bracket pair at the end of the line: one trailing `.` or `。` is removed, then the text inside a closing `(...)` or `（...）` is split on `,` and `，`, and each item is trimmed. `- S1: an AVAILABLE book (BORROW).` cites `BORROW` only; other upper-case words in the text are not cited. A line without a closing bracket pair cites nothing. An item that does not match `actionIdPattern` is a `markdown_parse` diagnostic and is not cited. A repeated id is a `markdown_parse` diagnostic and the first line is kept. A section with no scenario line is a `markdown_parse` diagnostic.
 - `permissions`: the one pipe table outside fences in the section (lines that start with `|`; the alignment row is dropped; the trailing `|` is optional; a data row made only of dashes, such as `| - | - |`, is read as an alignment row and dropped). The header has two columns. In each data row, the first cell lists the row names, split on `,` and on `、` (U+3001); the keys are the code spans in the second cell, and the second cell is the row text. `\|` and a `|` inside a code span do not split cells. A quote names a key when it contains the key in backticks. R10 requires each permission cite to name the configured `facts.permissions` anchor exactly; a full-title anchor of the same section fails with `permission_cite_mismatch`.
 
-A configured anchor that is missing or ambiguous is a diagnostic of kind `markdown_anchor` (key `facts.<name>`) under the rule of the fact; the fact is still supplied, with an empty value. Any other parse problem (not exactly one catalog block, a catalog line with an empty name or white space in a name, no context line, a repeated context, not exactly one table, a header or a row without two columns, a repeated row name, of which the first row is kept) is a diagnostic of kind `markdown_parse` with the same key. A diagnostic fails the check like a violation.
+A configured anchor that is missing or ambiguous is a diagnostic of kind `markdown_anchor` (key `facts.<name>`) under the rule of the fact; the fact is still supplied, with an empty value. Any other parse problem (not exactly one catalog block, a catalog line with an empty name or white space in a name, no context line, a repeated context, not exactly one table, a header or a row without two columns, a repeated row name, of which the first row is kept, an action id of a scenario that does not match `actionIdPattern`, a repeated scenario id, no scenario line) is a diagnostic of kind `markdown_parse` with the same key. A diagnostic fails the check like a violation.
 
 ### Evidence and R6
 
@@ -151,7 +152,7 @@ Without `--check` and without `--adapter`, the check stamp of `avouch query` sta
 
 `test/markdown.test.ts` runs the clean toy ontology and its 28 mutations through both adapters, with every `evidence` id removed. The findings are the same, except:
 
-- the toy adapter also reports R3, R7, R9 and R6 `none_but_written` (the generic adapter has no state machines, transition triggers, scenarios or evidence);
+- the toy adapter also reports R3, R7 and R6 `none_but_written` (the generic adapter has no state machines, transition triggers or evidence);
 - the generic adapter also reports R6 `fact_missing facts.evidence`.
 
-So the generic adapter does not catch five mutations: `lib-r3-transition-binding`, `lib-r6-none-but-written`, `lib-r7-effect-unwitnessed`, `lib-r7-undeclared-store` and `lib-r9-unknown-scenario`. It catches the other 23, `lib-r6-link-sweep-missing` included. With the evidence ids kept, the clean toy fails with three violations: R1 for each of the two evidence ids, and R6 `fact_missing`.
+The R9 findings are the same, because the configuration sets `facts.scenarios`. So the generic adapter does not catch four mutations: `lib-r3-transition-binding`, `lib-r6-none-but-written`, `lib-r7-effect-unwitnessed` and `lib-r7-undeclared-store`. It catches the other 24, `lib-r6-link-sweep-missing` and `lib-r9-unknown-scenario` included. With the evidence ids kept, the clean toy fails with three violations: R1 for each of the two evidence ids, and R6 `fact_missing`.
