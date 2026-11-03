@@ -271,7 +271,7 @@ A release needs the explicit approval of the project owner. Releases are publish
 3. The job waits in the `npm` environment until the owner approves it in GitHub. The owner's approval is the release approval.
 4. Make sure that the release works:
    - `npm view @githonllc/avouch version` shows the new version (a new version can take a few minutes to become available);
-   - in an empty directory, `npx -y @githonllc/avouch@<version> check` prints the usage line and exits with code 2.
+   - in an empty directory, `npx -y @githonllc/avouch@<version>` (no arguments) prints the usage lines and exits with code 2.
 
 Version 0.1.0 was published by hand, because npm accepts a trusted publisher only for a package that exists.
 
