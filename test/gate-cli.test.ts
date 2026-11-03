@@ -198,9 +198,9 @@ describe("avouch gate verify", () => {
 });
 
 describe("avouch without a known command", () => {
-  it("prints the four usages and exits with 2", () => {
+  it("prints the five usages and exits with 2", () => {
     const r = avouch();
     expect(r.status).toBe(2);
-    for (const usage of ["usage: avouch check", "usage: avouch query", "usage: avouch reconcile", "usage: avouch gate verify"]) expect(r.stderr).toContain(usage);
+    for (const usage of ["usage: avouch check", "usage: avouch query", "usage: avouch reconcile", "usage: avouch gate verify", "usage: avouch gate docs"]) expect(r.stderr).toContain(usage);
   });
 });

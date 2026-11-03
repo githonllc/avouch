@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 
 // One JSON value per line, with its line number (from 1). Lines that are empty or only white space are skipped; the
-// line numbers count them.
-export function jsonLines(file: string): { line: number; value: unknown }[] {
-  return readFileSync(file, "utf8")
+// line numbers count them. `text`: the text of the file, when the caller has read it.
+export function jsonLines(file: string, text = readFileSync(file, "utf8")): { line: number; value: unknown }[] {
+  return text
     .split("\n")
     .flatMap((text, i) => {
       if (text.trim() === "") return [];

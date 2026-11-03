@@ -43,9 +43,10 @@ describe("runtime import boundary", () => {
 });
 
 describe("the Markdown adapter is optional", () => {
-  it("no src/ file other than index.ts and markdown.ts imports it", () => {
+  // ledger.ts (`avouch gate docs`) cuts documents with the heading and fence scan of markdown.ts; the checker does not use it
+  it("no src/ file other than index.ts, markdown.ts and ledger.ts imports it", () => {
     const importers = Object.entries(files)
-      .filter(([file]) => file.startsWith("../src/") && !["../src/index.ts", "../src/markdown.ts"].includes(file))
+      .filter(([file]) => file.startsWith("../src/") && !["../src/index.ts", "../src/markdown.ts", "../src/ledger.ts"].includes(file))
       .filter(([, text]) => ts.preProcessFile(text, true, true).importedFiles.some((i) => /(^|\/)markdown(\.js|\.ts)?$/.test(i.fileName)))
       .map(([file]) => file);
     expect(importers).toEqual([]);

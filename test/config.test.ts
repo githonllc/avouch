@@ -671,7 +671,7 @@ describe.skipIf(!gitAvailable)("--check, --config and the stamp", () => {
     const r = runIn(root, "frobnicate");
     expect(r.status).toBe(2);
     const lines = r.stderr.trim().split("\n");
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     for (const line of lines) expect(line).toContain("--config <avouch.config.json>");
     expect(lines[1]).toContain("[--check]");
     expect(lines[3]).toContain("[--check]");

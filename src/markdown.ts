@@ -196,15 +196,21 @@ function withoutGenerated(text: string): { text: string; breaks: Set<number> } {
 
 interface Heading { title: string; text: string; anchors: string[]; breaks: Set<number> } // breaks: relative to the heading line
 
-/** ATX headings outside fences. Each heading has a short anchor (first word, one trailing `.` removed) and a full-title anchor. */
-function headings(text: string, breaks: Set<number>): { list: Heading[]; fenceOpen: boolean } {
-  const lines = text.split("\n");
+/** The ATX heading lines outside fences: line index (from 0), level and title as written. `open`: the text ends inside a fence. */
+export function atxHeadings(lines: string[]): { heads: { line: number; level: number; title: string }[]; open: boolean } {
   const { inFence, open } = fences(lines);
   const heads: { line: number; level: number; title: string }[] = [];
   lines.forEach((line, i) => {
     const m = inFence[i] ? null : /^(#{1,6}) (.+)$/.exec(line);
     if (m) heads.push({ line: i, level: m[1].length, title: m[2] });
   });
+  return { heads, open };
+}
+
+/** ATX headings outside fences. Each heading has a short anchor (first word, one trailing `.` removed) and a full-title anchor. */
+function headings(text: string, breaks: Set<number>): { list: Heading[]; fenceOpen: boolean } {
+  const lines = text.split("\n");
+  const { heads, open } = atxHeadings(lines);
   const list = heads.map((h, k) => {
     let end = lines.length;
     for (const n of heads.slice(k + 1))
