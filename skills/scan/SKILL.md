@@ -53,7 +53,7 @@ git ls-files '*.ontology.yaml' 'avouch.config.json' 'avouch.json' '**/avouch.jso
 { "ontology": "avouch/avouch.ontology.yaml", "adapter": { "markdown": { "docs": ["docs/design.md"], "facts": {}, "profile": {} } } }
 ```
 
-Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permissions`, `scenarios`) only when a document section already holds that fact in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository). Do not add sections to the documents yourself.
+Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permissions`, `scenarios`, `stateMachines`, `transitionTriggers`) only when a document section already holds that fact in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository). R3 runs only when `facts.stateMachines` and `facts.transitionTriggers` are both set, and you may set them only when the documents already hold a state diagram and a transition table in the adapter syntax. Do not add sections to the documents yourself.
 
 Write the ontology in the shape of `examples/library/library.ontology.yaml` of the Avouch repository. Read `SPEC.md` sections 2 and 9 of the Avouch repository for the keys and expressions. Model only what a document states:
 
@@ -65,7 +65,7 @@ Write the ontology in the shape of `examples/library/library.ontology.yaml` of t
 
 When the documents name no bounded context, use one context named after the project and record it as a gap.
 
-Write a state transition only when the document names both its `from` and its `to` state. For example, "staff retire a tool" without the state it leaves is not a transition. Leave it out and report it (report item 4). R3 is off in this adapter, so the check cannot catch a guessed edge.
+Write a state transition only when the document names both its `from` and its `to` state. For example, "staff retire a tool" without the state it leaves is not a transition. Leave it out and report it (report item 4). When R3 is off, the check cannot catch a guessed edge.
 
 Free-text fields that the check does not verify (`out_of_scope`, `unspecified`, a context label) copy the document's sentence verbatim. Do not paraphrase them.
 

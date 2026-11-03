@@ -25,7 +25,7 @@ const withoutEvidence = (o: any) => {
 };
 const rows = (xs: Violation[]) => xs.map((x) => [x.rule, x.kind, x.key, x.msg].join("\t")).sort();
 const genericOnly = (x: Violation) => !(x.rule === "R6" && x.kind === "fact_missing");
-const toyOnly = (x: Violation) => !["R3", "R7"].includes(x.rule) && !(x.rule === "R6" && x.kind === "none_but_written");
+const toyOnly = (x: Violation) => x.rule !== "R7" && !(x.rule === "R6" && x.kind === "none_but_written");
 
 // one inline document through the adapter
 const md = (text: string, facts: Partial<Record<MarkdownFactName, string>> = {}) =>
@@ -49,19 +49,19 @@ describe("toy library through the Markdown adapter", () => {
   it("has the clean ontology and 28 mutations", () => expect(cases.length).toBe(29));
 
   for (const [name, o] of cases)
-    it(`${name}: same findings as the toy adapter, outside R3, R7 and R6 none_but_written`, () => {
+    it(`${name}: same findings as the toy adapter, outside R7 and R6 none_but_written`, () => {
       const g = check(withoutEvidence(o), generic());
       const t = check(withoutEvidence(o), toy());
       expect(rows(g.violations.filter(genericOnly))).toEqual(rows(t.violations.filter(toyOnly)));
       expect(rows(g.waived.filter(genericOnly))).toEqual(rows(t.waived.filter(toyOnly)));
     });
 
-  it("misses exactly the four mutations that need state machines or evidence", () => {
+  it("misses exactly the three mutations that need evidence", () => {
     const unseen = cases
       .filter(([, o, expect]) => expect !== null && !check(withoutEvidence(o), generic()).violations.filter(genericOnly).some((x) => x.rule === expect))
       .map(([name]) => name)
       .sort();
-    expect(unseen).toEqual(["lib-r3-transition-binding", "lib-r6-none-but-written", "lib-r7-effect-unwitnessed", "lib-r7-undeclared-store"]);
+    expect(unseen).toEqual(["lib-r6-none-but-written", "lib-r7-effect-unwitnessed", "lib-r7-undeclared-store"]);
   });
 
   it("the clean toy without evidence ids: only R6 fact_missing alone, nothing with the evidence composed in", () => {
@@ -82,9 +82,9 @@ describe("toy library through the Markdown adapter", () => {
 });
 
 describe("configuration", () => {
-  it("default rules: R3 and R7 off with their reasons, every other rule on (R6 and R9 included, as facts.scenarios is set)", () => {
+  it("default rules: R7 off with its reason, every other rule on (R3, R6 and R9 included, as their facts are set)", () => {
     expect(cfg.profile.rules).toEqual({
-      R1: true, R2: true, R3: { disabled: "the Markdown adapter does not parse state machines or transition triggers" }, R4: true, R5: true, R6: true,
+      R1: true, R2: true, R3: true, R4: true, R5: true, R6: true,
       R7: { disabled: "the Markdown adapter reads no execution evidence" }, R8: true, R9: true, R10: true, R11: true, R12: true,
     });
     expect(Object.keys(cfg.profile.rules).sort()).toEqual([...RULES].sort());
@@ -122,7 +122,12 @@ describe("configuration", () => {
     ['{"facts":{}}', "c.json: docs: missing"],
     ['{"docs":[]}', "c.json: docs: must be a non-empty array of strings"],
     ['{"docs":["a.md","a.md"]}', "c.json: docs[1]: duplicate of docs[0]"],
-    ['{"docs":["a.md"],"facts":{"stateMachines":"L1"}}', "c.json: facts.stateMachines: unknown key"],
+    ['{"docs":["a.md"],"facts":{"stateMachines":"L1"}}', "c.json: facts.stateMachines: must be a non-empty object of anchors"],
+    ['{"docs":["a.md"],"facts":{"stateMachines":{}}}', "c.json: facts.stateMachines: must be a non-empty object of anchors"],
+    ['{"docs":["a.md"],"facts":{"stateMachines":{"Book":""},"transitionTriggers":"L6"}}', "c.json: facts.stateMachines.Book: must be a non-empty string"],
+    ['{"docs":["a.md"],"facts":{"transitionTriggers":""}}', "c.json: facts.transitionTriggers: must be a non-empty string"],
+    ['{"docs":["a.md"],"facts":{"stateMachines":{"Book":"L4"}}}', "c.json: facts.stateMachines: requires facts.transitionTriggers"],
+    ['{"docs":["a.md"],"facts":{"transitionTriggers":"L6"}}', "c.json: facts.transitionTriggers: requires facts.stateMachines"],
     ['{"docs":["a.md"],"profile":{"actionIdPattern":"("}}', "c.json: profile.actionIdPattern: invalid regular expression"],
     ['{"docs":["a.md"],"profile":{"rules":{"R13":true}}}', "c.json: profile.rules.R13: unknown rule"],
     ['{"docs":["a.md"],"profile":{"rules":{"R6":false}}}', "c.json: profile.rules.R6: must be true"],
@@ -368,6 +373,169 @@ describe("configured facts", () => {
     const f = md("## L1 A\n", { scenarios: "L11" });
     expect(parseDiags(f)).toEqual([["R9", "markdown_anchor", "facts.scenarios"]]);
     expect(f.scenarios).toEqual({ ids: new Set(), cites: new Map() });
+  });
+
+  const diag = (f: ReturnType<typeof md>) => f.diagnostics.map((d) => [d.rule, d.kind, d.key]);
+  const machines = (text: string, object = "Book") =>
+    markdownFacts([{ path: "a.md", text }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), stateMachines: { [object]: "L4" } });
+  const bind = (table: string) =>
+    markdownFacts([{ path: "a.md", text: `## L6 Actions\n\n${table}\n` }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), facts: { transitionTriggers: "L6" } });
+  const triggers = (table: string) => {
+    const f = bind(`| Object | Transition | Trigger |\n|---|---|---|\n${table}`);
+    return { f, map: f.transitionTriggers! };
+  };
+
+  it("state machine: the spaces around --> and before : are optional", () => {
+    const f = machines("## L4 Book State\n\n```mermaid\nstateDiagram-v2\n[*]-->A\nA --> B: go\n```\n");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.stateMachines!.get("Book")!.value).toEqual({ nodes: ["A", "B"], initial: ["A"], edges: ["A->B"] });
+  });
+
+  it("state machine: a labelled initial edge parses; one-line and block notes are ignored", () => {
+    const f = machines("## L4 Book State\n\n```plantuml\n@startuml\ntitle Book\n[*] --> A : START\nnote left of A : x\nA --> B\nnote right of A\n  A --> Z\n  free text\nend note\nB --> [*]\n@enduml\n```\n");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.stateMachines!.get("Book")).toEqual({ value: { nodes: ["A", "B"], initial: ["A"], edges: ["A->B"] }, source: { anchor: "L4" } });
+  });
+
+  it("state machine: a repeated edge is kept once; a transition into [*] adds a node and no edge", () => {
+    const f = machines("## L4 Book State\n```plantuml\n[*] --> A\nA --> B : x\nA --> B : y\nB --> [*]\nC --> [*]\n```\n");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.stateMachines!.get("Book")!.value).toEqual({ nodes: ["A", "B", "C"], initial: ["A"], edges: ["A->B"] });
+  });
+
+  it("state machine: mermaid whose first line is a %% comment, then stateDiagram-v2", () => {
+    const f = machines("## L4 Book State\n```mermaid\n%% lifecycle\n\nstateDiagram-v2\ndirection LR\n[*] --> A\nA --> B\n```\n");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.stateMachines!.get("Book")!.value).toEqual({ nodes: ["A", "B"], initial: ["A"], edges: ["A->B"] });
+  });
+
+  it("state machine: a mermaid block that is not a state diagram is not a state block", () => {
+    const f = machines("## L4 Book State\n```mermaid\nflowchart LR\nA --> B\n```\n```plantuml\n[*] --> A\n```\n");
+    expect(f.diagnostics).toEqual([]);
+    expect(f.stateMachines!.get("Book")!.value).toEqual({ nodes: ["A"], initial: ["A"], edges: [] });
+  });
+
+  it.each([
+    ["an arrow of one dash pair", "A -> B"],
+    ["a composite state", "state X {"],
+    ["a quoted state", 'state "x" as X'],
+    ["a stereotype", "state C <<choice>>"],
+    ["an edge from the initial state to itself", "[*] --> [*]"],
+    ["a name that is not an identifier", "A --> B-1"],
+    ["a note block that is not closed", "note left of A"],
+  ])("state machine: %s is markdown_parse and the value is null", (_, line) => {
+    const f = machines(`## L4 Book State\n\`\`\`plantuml\n[*] --> A\n${line}\n\`\`\`\n`);
+    expect(diag(f)).toEqual([["R3", "markdown_parse", "facts.stateMachines.Book"]]);
+    expect(f.stateMachines!.get("Book")).toEqual({ value: null, source: { anchor: "L4" } });
+  });
+
+  it("state machine: two state blocks in one section are markdown_parse and the value is null; none too", () => {
+    const one = "```plantuml\n[*] --> A\n```\n";
+    const two = machines(`## L4 Book State\n${one}${one}`);
+    expect(diag(two)).toEqual([["R3", "markdown_parse", "facts.stateMachines.Book"]]);
+    expect(two.stateMachines!.get("Book")!.value).toBeNull();
+    expect(diag(machines("## L4 Book State\n```text\n[*] --> A\n```\n"))).toEqual([["R3", "markdown_parse", "facts.stateMachines.Book"]]);
+  });
+
+  it("state machine: a missing or ambiguous anchor is markdown_anchor with the key of the object; one fact for each configured object", () => {
+    const f = markdownFacts([{ path: "a.md", text: "## L4 A\n```plantuml\n[*] --> A\n```\n## L5 B\n## L5 C\n" }], {
+      ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"),
+      stateMachines: { Book: "L4", Loan: "L5", Member: "L9" },
+    });
+    expect(f.diagnostics).toEqual([
+      { rule: "R3", kind: "markdown_anchor", key: "facts.stateMachines.Loan", msg: "anchor L5 of facts.stateMachines.Loan is ambiguous" },
+      { rule: "R3", kind: "markdown_anchor", key: "facts.stateMachines.Member", msg: "anchor L9 of facts.stateMachines.Member is missing" },
+    ]);
+    expect([...f.stateMachines!.keys()]).toEqual(["Book", "Loan", "Member"]);
+    expect(f.stateMachines!.get("Loan")).toEqual({ value: null, source: { anchor: "L5" } });
+    expect(f.stateMachines!.get("Book")!.value).not.toBeNull();
+  });
+
+  it("transition triggers: a missing anchor is markdown_anchor and an empty map", () => {
+    const f = markdownFacts([{ path: "a.md", text: "## L1 A\n" }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), facts: { transitionTriggers: "L6" } });
+    expect(f.diagnostics).toEqual([{ rule: "R3", kind: "markdown_anchor", key: "facts.transitionTriggers", msg: "anchor L6 of facts.transitionTriggers is missing" }]);
+    expect(f.transitionTriggers).toEqual(new Map());
+  });
+
+  it("transition triggers: the toy table", () => {
+    const f = generic();
+    expect(f.diagnostics).toEqual([]);
+    expect(f.transitionTriggers).toEqual(new Map([
+      ["Book", new Map([["AVAILABLE->ON_LOAN", { value: new Set(["BORROW"]), source: { anchor: "L6" } }], ["ON_LOAN->AVAILABLE", { value: new Set(["RETURN"]), source: { anchor: "L6" } }]])],
+      ["Loan", new Map([["ACTIVE->RETURNED", { value: new Set(["RETURN"]), source: { anchor: "L6" } }]])],
+    ]));
+  });
+
+  it("transition triggers: a cell that is not a list of action ids is markdown_parse and the row binds nothing", () => {
+    const { f, map } = triggers("| Task | PENDING → STARTED | START_RUN；或任一 Fact（COMPLETE_TASK） |\n| Task | STARTED → DONE | COMPLETE_TASK |");
+    expect(parseDiags(f)).toEqual([["R3", "markdown_parse", "facts.transitionTriggers"]]);
+    expect(map.get("Task")!.has("PENDING->STARTED")).toBe(false);
+    expect(map.get("Task")!.get("STARTED->DONE")!.value).toEqual(new Set(["COMPLETE_TASK"]));
+  });
+
+  it("transition triggers: ' / ' lists states on either side, a comma lists transitions, the same edge in two rows is a union", () => {
+    const { f, map } = triggers("| Task | PENDING / ACCEPTED → STARTED | START_RUN |\n| Task | PENDING -> STARTED，STARTED → DONE | PAUSE, START_RUN |\n| Task | DONE → A / B | X |");
+    expect(f.diagnostics).toEqual([]);
+    const t = map.get("Task")!;
+    expect([...t.keys()]).toEqual(["PENDING->STARTED", "ACCEPTED->STARTED", "STARTED->DONE", "DONE->A", "DONE->B"]);
+    expect(t.get("PENDING->STARTED")!.value).toEqual(new Set(["START_RUN", "PAUSE"]));
+    expect(t.get("ACCEPTED->STARTED")!.value).toEqual(new Set(["START_RUN"]));
+    expect(t.get("STARTED->DONE")!.value).toEqual(new Set(["START_RUN", "PAUSE"]));
+  });
+
+  it.each([
+    ["a transition that is not 'S → S'", "| Task | PENDING STARTED | START_RUN |"],
+    ["a state that is not an identifier", "| Task | PENDING → STARTED-1 | START_RUN |"],
+    ["an empty part of the transition list", "| Task | PENDING → STARTED, | START_RUN |"],
+    ["an empty trigger cell", "| Task | PENDING → STARTED | |"],
+    ["a trigger that does not match actionIdPattern", "| Task | PENDING → STARTED | start_run |"],
+    ["a row of two columns", "| Task | PENDING → STARTED |"],
+  ])("transition triggers: %s is markdown_parse and the row binds nothing", (_, row) => {
+    const { f, map } = triggers(row);
+    expect(parseDiags(f)).toEqual([["R3", "markdown_parse", "facts.transitionTriggers"]]);
+    expect(map).toEqual(new Map());
+  });
+
+  it.each([
+    ["no table", ""],
+    ["two tables", "| A | B | C |\n|---|---|---|\n| x | A → B | Y |\n\ntext\n\n| A | B | C |\n|---|---|---|\n| x | A → B | Y |"],
+    ["a two-column header", "| A | B |\n|---|---|\n| x | y |"],
+  ])("transition triggers: %s is markdown_parse and an empty map", (_, table) => {
+    const f = bind(table);
+    expect(parseDiags(f)).toEqual([["R3", "markdown_parse", "facts.transitionTriggers"]]);
+    expect(f.transitionTriggers).toEqual(new Map());
+  });
+
+  it("a line outside the grammar in L4 of the clean toy fails the check", () => {
+    const f = markdownFacts([{ path: cfg.docs[0], text: doc.replace("AVAILABLE --> WITHDRAWN\n", "AVAILABLE --> WITHDRAWN\nA -> B\n") }], cfg);
+    expect(f.stateMachines!.get("Book")!.value).toBeNull();
+    const r = check(withoutEvidence(ont), f).violations.filter((x) => x.rule === "R3");
+    expect(r.map((x) => [x.kind, x.key])).toEqual([["markdown_parse", "facts.stateMachines.Book"]]);
+  });
+
+  it("a trigger row for an action that the ontology does not declare: R3 transition_binding_missing (the adapter does not filter by the ontology)", () => {
+    const row = "| Loan | ACTIVE → RETURNED | RETURN |\n";
+    expect(doc).toContain(row);
+    const f = markdownFacts([{ path: cfg.docs[0], text: doc.replace(row, `${row}| Book | AVAILABLE → WITHDRAWN | WITHDRAW |\n`) }], cfg);
+    expect(f.diagnostics).toEqual([]);
+    const r = check(withoutEvidence(ont), f).violations.filter((x) => x.rule === "R3");
+    expect(r.map((x) => [x.kind, x.key])).toEqual([["transition_binding_missing", "Book:AVAILABLE->WITHDRAWN:WITHDRAW"]]);
+  });
+
+  it("state machines and transition triggers are set together or not at all", () => {
+    const cfgOf = (facts: unknown) => () => parseMarkdownConfig(JSON.stringify({ docs: ["a.md"], facts }), "c.json");
+    expect(cfgOf({ stateMachines: { Book: "L4" } })).toThrow("c.json: facts.stateMachines: requires facts.transitionTriggers");
+    expect(cfgOf({ transitionTriggers: "L6" })).toThrow("c.json: facts.transitionTriggers: requires facts.stateMachines");
+    expect(cfgOf({ stateMachines: { Book: "L4" }, transitionTriggers: "L6" })().stateMachines).toEqual({ Book: "L4" });
+  });
+
+  it("R3 is on by default when both are set, off with the reason when neither is, and an explicit switch overrides", () => {
+    const rules = (profile: unknown, facts: unknown) => parseMarkdownConfig(JSON.stringify({ docs: ["a.md"], facts, profile }), "c.json").profile.rules;
+    const both = { stateMachines: { Book: "L4" }, transitionTriggers: "L6" };
+    expect(rules({}, both).R3).toBe(true);
+    expect(rules({}, {}).R3).toEqual({ disabled: "facts.stateMachines and facts.transitionTriggers are not set: the Markdown adapter reads state machines only from those sections" });
+    expect(rules({ rules: { R3: { disabled: "x" } } }, both).R3).toEqual({ disabled: "x" });
+    expect(rules({ rules: { R3: true } }, {}).R3).toBe(true);
   });
 
   const perm = (table: string) => md(`## P Permissions\n\`\`\`text\nloan:create\nloan:close\n\`\`\`\n\n${table}\n`, { permissions: "P" });
