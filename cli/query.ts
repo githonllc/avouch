@@ -17,7 +17,7 @@ import {
   type QueryVerb,
 } from "../src/query.js";
 import { checkStamp, resolveQueryProject, type Adapter } from "./check.js";
-import { expectPositionals, parseOptions } from "./reconcile.js";
+import { expectPositionals, parseOptions, wantsHelp } from "./reconcile.js";
 
 export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 const VERBS: readonly QueryVerb[] = ["list", "action", "object", "result", "writes", "reads", "cites"];
@@ -138,6 +138,10 @@ async function query(args: string[]): Promise<number> {
 
 // Exit 0: a result; 1: no result (null or an empty list); 2: a usage, file, parse or adapter error (one stderr line).
 export async function runQuery(args: string[]): Promise<number> {
+  if (wantsHelp(args, ["-f", "--config", "--adapter"])) {
+    console.log(QUERY_USAGE);
+    return 0;
+  }
   try {
     return await query(args);
   } catch (error) {

@@ -72,7 +72,7 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 
 ## Command line
 
-Build with `npm run build`, then run:
+Build with `npm run build`, then run it. `avouch --help` (or `-h`) prints the usage lines of all commands; `avouch <command> --help` prints the usage of one command. Both exit with 0 and need no files, configuration or git. For example:
 
 ```sh
 avouch check [-f <ontology.yaml>] [--config <avouch.config.json>] [--adapter <module|config.json>]
