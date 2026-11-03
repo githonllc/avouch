@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
@@ -15,6 +15,11 @@ const run = (...args: string[]) => spawnSync(process.execPath, ["dist/cli/avouch
 const json = (...args: string[]) => {
   const r = run(...args, "--json");
   return { ...r, envelope: r.stdout ? JSON.parse(r.stdout) : null };
+};
+const runIn = (cwd: string, ...args: string[]) => spawnSync(process.execPath, [join(root, "dist/cli/avouch.js"), "query", ...args], { cwd, encoding: "utf8" });
+// The stamp must not hold the absolute path of a temporary directory that the user did not write.
+const expectNoTemporaryPath = (output: string) => {
+  for (const prefix of new Set([realpathSync(tmpdir()), tmpdir()])) expect(output).not.toContain(prefix);
 };
 const temporaryDirectory = () => {
   const directory = mkdtempSync(join(tmpdir(), "avouch-query-"));
@@ -83,6 +88,49 @@ describe("avouch query", () => {
     expect(r.envelope.stamp.git).toBeNull();
     const text = run("action", "BORROW", "-f", path);
     expect(text.stdout.split("\n")[1]).toBe("commit: none (not in git)");
+  });
+
+  it("stamps the ontology path relative to the working directory outside a repository", () => {
+    const { directory, path } = copyOntology();
+    const sibling = temporaryDirectory();
+    const cases: [string, string][] = [
+      [directory, "library.ontology.yaml"],
+      [dirname(directory), `${basename(directory)}/library.ontology.yaml`],
+      [sibling, `../${basename(directory)}/library.ontology.yaml`],
+    ];
+    for (const [cwd, expected] of cases) {
+      const r = runIn(cwd, "action", "BORROW", "-f", path, "--json");
+      expect(r.status, r.stderr).toBe(0);
+      expect(JSON.parse(r.stdout).stamp.ontology).toBe(expected);
+      expect(JSON.parse(r.stdout).stamp.git).toBeNull();
+      expectNoTemporaryPath(r.stdout);
+      const text = runIn(cwd, "action", "BORROW", "-f", path);
+      expect(text.stdout.split("\n")[0]).toBe(`ontology: ${expected}`);
+      expectNoTemporaryPath(text.stdout);
+    }
+  });
+
+  it.skipIf(!gitAvailable)("stamps the ontology equal to the repository path in git, from any working directory", () => {
+    const { directory } = copyOntology();
+    mkdirSync(join(directory, "specs"));
+    const path = join(directory, "specs", "library.ontology.yaml");
+    copyFileSync(join(root, ontology), path);
+    expect(git(directory, "init", "-q").status).toBe(0);
+    expect(git(directory, "add", ".").status).toBe(0);
+    const c = git(directory, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "x");
+    expect(c.status, c.stderr).toBe(0);
+    const sibling = temporaryDirectory();
+    for (const cwd of [directory, join(directory, "specs"), dirname(directory), sibling]) {
+      const r = runIn(cwd, "action", "BORROW", "-f", path, "--json");
+      expect(r.status, r.stderr).toBe(0);
+      const { stamp } = JSON.parse(r.stdout);
+      expect(stamp.git.path).toBe("specs/library.ontology.yaml");
+      expect(stamp.ontology).toBe(stamp.git.path);
+      expectNoTemporaryPath(r.stdout);
+      const text = runIn(cwd, "action", "BORROW", "-f", path);
+      expect(text.stdout.split("\n")[0]).toBe("ontology: specs/library.ontology.yaml");
+      expectNoTemporaryPath(text.stdout);
+    }
   });
 
   it.skipIf(!gitAvailable)("stamps the commit, the dirty flag and the repository path", () => {

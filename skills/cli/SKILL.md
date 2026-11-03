@@ -38,7 +38,7 @@ Notes:
 
 ## Stamp
 
-Every answer starts with the stamp: the ontology path, the git `commit` (with `(dirty)` when the file has uncommitted changes), and `check`. When you quote an answer, give the commit and the check status. Pass `--check` (the adapter of `avouch.config.json`) or `--adapter <module|config.json>` to get a real check status.
+Every answer starts with the stamp: the ontology path (relative to the repository root, or to the working directory outside git), the git `commit` (with `(dirty)` when the file has uncommitted changes), and `check`. When you quote an answer, give the commit and the check status. Pass `--check` (the adapter of `avouch.config.json`) or `--adapter <module|config.json>` to get a real check status.
 
 ## Exit codes
 

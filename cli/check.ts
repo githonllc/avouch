@@ -33,7 +33,8 @@ export function adapterFromArgument(arg: string): Adapter {
 interface ProjectConfig { file: string; ontology: string; adapter: Adapter | { written: string; path: string } }
 
 // Reads and validates an avouch.config.json (strict: an unknown key is an error). Throws `<file>: <json path>: <problem>`.
-function loadProjectConfig(file: string): ProjectConfig {
+// `label` names the file in the stamp: the --config argument as given, or CONFIG_FILE when the file was found at the git top.
+function loadProjectConfig(file: string, label: string): ProjectConfig {
   const fail = (path: string, problem: string): never => {
     throw new Error(`${file}: ${path}: ${problem}`);
   };
@@ -60,7 +61,7 @@ function loadProjectConfig(file: string): ProjectConfig {
   if (!Object.hasOwn(a, "markdown")) fail("adapter.markdown", "missing");
   if (!isObj(a.markdown)) fail("adapter.markdown", "must be an object");
   const where = `${file}: adapter.markdown`;
-  return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${file}#adapter` } };
+  return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${label}#adapter` } };
 }
 
 // The git top level of a directory, or null when it is not in a git repository (or git is not available).
@@ -113,13 +114,16 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
   let config: ProjectConfig | null = null;
   if (readConfig) {
     let configFile: string | null = null;
-    if (o.config !== undefined) configFile = o.config;
-    else {
+    let label = CONFIG_FILE;
+    if (o.config !== undefined) {
+      configFile = o.config;
+      label = o.config;
+    } else {
       // with -f, a directory that is not in a git repository has no configuration file
       top = gitTop(o.file !== undefined ? dirname(resolve(o.file)) : process.cwd());
       if (top !== null && existsSync(join(top, CONFIG_FILE))) configFile = join(top, CONFIG_FILE);
     }
-    if (configFile !== null) config = loadProjectConfig(configFile);
+    if (configFile !== null) config = loadProjectConfig(configFile, label);
   }
   let file: string;
   if (o.file !== undefined) file = o.file;

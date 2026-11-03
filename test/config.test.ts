@@ -27,6 +27,10 @@ const first = (stderr: string) => {
   expect(lines, stderr).toHaveLength(1);
   return lines[0];
 };
+// The stamp must not hold the absolute path of a temporary directory that the user did not write.
+const expectNoTemporaryPath = (output: string) => {
+  for (const prefix of new Set([realpathSync(tmpdir()), tmpdir()])) expect(output).not.toContain(prefix);
+};
 const lastLine = (stdout: string) => stdout.trim().split("\n").at(-1);
 
 const directory = () => {
@@ -292,11 +296,11 @@ describe.skipIf(!gitAvailable)("precedence", () => {
       expect(r.status, r.stderr).toBe(0);
       return JSON.parse(r.stdout).stamp.ontology as string;
     };
-    expect(ids([])).toBe(join(top, "specs/o.yaml"));
-    expect(ids(["-f", other])).toBe(other);
+    expect(ids([])).toBe("specs/o.yaml");
+    expect(ids(["-f", other])).toBe("other.yaml");
     // without a configuration: the default
     rmSync(join(top, CONFIG));
-    expect(ids([])).toBe(join(top, ONTOLOGY));
+    expect(ids([])).toBe(ONTOLOGY);
   });
 
   it("the adapter: --adapter over the configuration", () => {
@@ -561,9 +565,65 @@ describe.skipIf(!gitAvailable)("--check, --config and the stamp", () => {
     expect(r.status, r.stderr).toBe(0);
     const env = JSON.parse(r.stdout);
     expect(env.avouchQuery).toBe(1);
-    expect(env.stamp.check).toEqual({ status: "pass", adapter: `${join(top, CONFIG)}#adapter`, schemaErrors: 0, violations: 0, waived: 1 });
+    expect(env.stamp.check).toEqual({ status: "pass", adapter: `${CONFIG}#adapter`, schemaErrors: 0, violations: 0, waived: 1 });
     const text = runIn(top, "query", "list", "actions", "--check");
     expect(text.stdout).toContain("check: pass (0 schema error(s), 0 violation(s), 1 waived)");
+  });
+
+  it("an inline adapter: the label is avouch.config.json#adapter when discovered, the --config argument as given otherwise", () => {
+    const top = markdownProject();
+    writeJson(join(top, "conf/x.json"), { ontology: `../${ONTOLOGY}`, adapter: { markdown: markdown() } });
+    const rows = write(join(top, "rows.jsonl"), "");
+    const adapterOf = (cwd: string, ...args: string[]) => {
+      const r = runIn(cwd, ...args, "--json");
+      expect(r.status, r.stderr).toBeLessThan(2); // a gate with no rows may fail
+      const j = JSON.parse(r.stdout);
+      return (j.stamp?.check ?? j.check).adapter as string;
+    };
+    expect(adapterOf(top, "query", "list", "actions", "--check")).toBe("avouch.config.json#adapter");
+    expect(adapterOf(join(top, "avouch"), "query", "list", "actions", "--check")).toBe("avouch.config.json#adapter");
+    expect(adapterOf(top, "gate", "verify", "--rows", rows, "--check")).toBe("avouch.config.json#adapter");
+    expect(adapterOf(top, "query", "list", "actions", "--check", "--config", "conf/x.json")).toBe("conf/x.json#adapter");
+    expect(adapterOf(top, "query", "list", "actions", "--check", "--config", "./avouch.config.json")).toBe("./avouch.config.json#adapter");
+    // an absolute --config is the user's own path: it is kept
+    expect(adapterOf(top, "query", "list", "actions", "--check", "--config", join(top, "conf/x.json"))).toBe(`${join(top, "conf/x.json")}#adapter`);
+    // no stamp holds the temporary directory, except the absolute --config above
+    for (const cwd of [top, join(top, "avouch")]) {
+      expectNoTemporaryPath(runIn(cwd, "query", "list", "actions", "--check", "--json").stdout);
+      expectNoTemporaryPath(runIn(cwd, "query", "list", "actions", "--check").stdout);
+      expectNoTemporaryPath(runIn(cwd, "gate", "verify", "--rows", rows, "--check", "--json").stdout);
+    }
+  });
+
+  it("query stamps the ontology relative: to the repository root in git, to the working directory outside git", (ctx) => {
+    const top = markdownProject();
+    expect(git(top, "add", ".").status).toBe(0);
+    const c = git(top, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "x");
+    expect(c.status, c.stderr).toBe(0);
+    for (const cwd of [top, join(top, "avouch"), nonGit]) {
+      if (cwd === nonGit && !outsideGit) continue;
+      const r = runIn(cwd, "query", "list", "actions", "--json", "-f", join(top, ONTOLOGY));
+      expect(r.status, r.stderr).toBe(0);
+      expectNoTemporaryPath(r.stdout);
+      const { stamp } = JSON.parse(r.stdout);
+      expect(stamp.git.path).toBe(ONTOLOGY);
+      expect(stamp.ontology).toBe(stamp.git.path);
+      expect(runIn(cwd, "query", "list", "actions", "-f", join(top, ONTOLOGY)).stdout.split("\n")[0]).toBe(`ontology: ${ONTOLOGY}`);
+    }
+    if (!outsideGit) ctx.skip();
+    const dir = directory();
+    const file = write(join(dir, "a/b/o.yaml"), waived());
+    const sibling = join(dir, "c");
+    mkdirSync(sibling);
+    for (const [cwd, expected] of [[dir, "a/b/o.yaml"], [sibling, "../a/b/o.yaml"]]) {
+      const r = runIn(cwd, "query", "list", "actions", "--json", "-f", file);
+      expect(r.status, r.stderr).toBe(0);
+      expect(JSON.parse(r.stdout).stamp).toMatchObject({ ontology: expected, git: null });
+      expectNoTemporaryPath(r.stdout);
+      const text = runIn(cwd, "query", "list", "actions", "-f", file);
+      expect(text.stdout.split("\n")[0]).toBe(`ontology: ${expected}`);
+      expectNoTemporaryPath(text.stdout);
+    }
   });
 
   it("query --check with a module path: the stamp holds the path as written in the configuration", () => {

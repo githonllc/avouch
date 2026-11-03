@@ -98,7 +98,7 @@ function text(env: QueryEnvelope): string {
   const { stamp } = env;
   const c = stamp.check;
   const lines = [
-    `ontology: ${stamp.git?.path ?? stamp.ontology}`,
+    `ontology: ${stamp.ontology}`,
     stamp.git === null ? "commit: none (not in git)" : `commit: ${stamp.git.commit}${stamp.git.dirty ? " (dirty)" : ""}`,
     c.status === "not_run" ? "check: not_run" : `check: ${c.status} (${c.schemaErrors} schema error(s), ${c.violations} violation(s), ${c.waived} waived)`,
     "",
@@ -128,7 +128,10 @@ async function query(args: string[]): Promise<number> {
   if (!isObj(ont)) throw new Error(`${file}: the root is not a mapping`);
   const check = await checkStamp(file, adapter);
   const { result, empty } = run(verb, arg, ont);
-  const env: QueryEnvelope = { avouchQuery: 1, stamp: { ontology: real, git: gitStamp(real), check }, verb, arg, result };
+  const git = gitStamp(real);
+  // the stamp holds no absolute path: the path in the repository, or else the path from the working directory
+  const stampPath = git?.path ?? relative(realpathSync(process.cwd()), real).split(sep).join("/");
+  const env: QueryEnvelope = { avouchQuery: 1, stamp: { ontology: stampPath, git, check }, verb, arg, result };
   process.stdout.write(json ? `${JSON.stringify(env, null, 2)}\n` : text(env));
   return empty ? 1 : 0;
 }
