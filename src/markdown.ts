@@ -19,17 +19,26 @@ const PROFILE_KEYS = ["actionIdPattern", "linkFieldPattern", "stateProperty", "c
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const isStr = (x: unknown): x is string => typeof x === "string" && x.length > 0;
 
-/** Parses the JSON configuration (`avouch.json`). Throws `<file>: <json path>: <problem>` on any error. */
+/** Parses the JSON configuration (the `.json` file of `--adapter`). Throws `<file>: <json path>: <problem>` on any error. */
 export function parseMarkdownConfig(text: string, file: string): MarkdownConfig {
-  const fail = (path: string, problem: string): never => {
-    throw new Error(`${file}: ${path}: ${problem}`);
-  };
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    return fail("(root)", `not valid JSON: ${(error as Error).message}`);
+    throw new Error(`${file}: (root): not valid JSON: ${(error as Error).message}`);
   }
+  return validateMarkdownConfig(raw, file);
+}
+
+/**
+ * Validates a parsed Markdown configuration: the content of a `.json` file, or the `adapter.markdown` object of
+ * `avouch.config.json`. Throws `<where>: <json path>: <problem>` on any error.
+ */
+export function validateMarkdownConfig(value: unknown, where: string): MarkdownConfig {
+  const fail = (path: string, problem: string): never => {
+    throw new Error(`${where}: ${path}: ${problem}`);
+  };
+  const raw = value;
   if (!isObj(raw)) return fail("(root)", "must be an object");
   for (const k of Object.keys(raw)) if (!["docs", "facts", "profile"].includes(k)) fail(k, "unknown key");
 

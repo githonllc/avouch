@@ -16,10 +16,10 @@ import {
   type QueryStamp,
   type QueryVerb,
 } from "../src/query.js";
-import { ontologyFile, runCheck } from "./check.js";
+import { checkStamp, resolveQueryProject, type Adapter } from "./check.js";
 import { expectPositionals, parseOptions } from "./reconcile.js";
 
-export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> [-f <ontology.yaml>] [--json] [--adapter <module|config.json>]";
+export const QUERY_USAGE = "usage: avouch query <list|action|object|result|writes|reads|cites> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 const VERBS: readonly QueryVerb[] = ["list", "action", "object", "result", "writes", "reads", "cites"];
 
 // Read-only git commands, run from the directory of the ontology file. null when any of them fails.
@@ -109,16 +109,16 @@ function text(env: QueryEnvelope): string {
 
 // ---------------------------------------------------------------------------------------------------------- main
 
-function parseArgs(args: string[]): { verb: QueryVerb; arg: string; file: string; json: boolean; adapter: string | null } {
-  const { pos, opts } = parseOptions(args, ["-f", "--adapter"], ["--json"]);
+function parseArgs(args: string[]): { verb: QueryVerb; arg: string; file: string; json: boolean; adapter: Adapter | null } {
+  const { pos, opts } = parseOptions(args, ["-f", "--config", "--adapter"], ["--json", "--check"]);
   expectPositionals(pos, 2);
   const json = opts.get("--json") === true;
-  const adapter = (opts.get("--adapter") as string | undefined) ?? null;
   const [verb, arg] = pos;
   if (!(VERBS as readonly string[]).includes(verb)) throw new Error(`unknown verb ${verb}`);
   if (verb === "list" && !(QUERY_LIST_KINDS as readonly string[]).includes(arg)) throw new Error(`unknown list kind ${arg}`);
   if ((verb === "writes" || verb === "reads") && arg.split(".").length !== 2) throw new Error(`${verb} takes <Object>.<property>`);
-  return { verb: verb as QueryVerb, arg, file: ontologyFile(opts.get("-f") as string | undefined), json, adapter };
+  const { file, adapter } = resolveQueryProject(opts);
+  return { verb: verb as QueryVerb, arg, file, json, adapter };
 }
 
 async function query(args: string[]): Promise<number> {
@@ -126,12 +126,7 @@ async function query(args: string[]): Promise<number> {
   const real = realpathSync(resolve(file));
   const ont: unknown = parse(readFileSync(real, "utf8"));
   if (!isObj(ont)) throw new Error(`${file}: the root is not a mapping`);
-  let check: QueryStamp["check"] = { status: "not_run" };
-  if (adapter !== null) {
-    const { schemaErrors, report } = await runCheck(file, adapter);
-    const pass = schemaErrors.length === 0 && report.violations.length === 0;
-    check = { status: pass ? "pass" : "fail", adapter, schemaErrors: schemaErrors.length, violations: report.violations.length, waived: report.waived.length };
-  }
+  const check = await checkStamp(file, adapter);
   const { result, empty } = run(verb, arg, ont);
   const env: QueryEnvelope = { avouchQuery: 1, stamp: { ontology: real, git: gitStamp(real), check }, verb, arg, result };
   process.stdout.write(json ? `${JSON.stringify(env, null, 2)}\n` : text(env));

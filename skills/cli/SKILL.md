@@ -11,12 +11,12 @@ description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and y
 
 In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.17` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
-Give the ontology with `-f <file>`. Without `-f`, the CLI uses `avouch/avouch.ontology.yaml` at the git top level. A positional ontology argument exits 2.
+Give the ontology with `-f <file>`. Without `-f`, the CLI uses the `ontology` of the project configuration `avouch.config.json` at the git top level, else `avouch/avouch.ontology.yaml` there. `--config <file>` names another configuration file. The configuration also holds the `adapter` (`{markdown: {docs, facts, profile}}` or `{module: path}`), so `check` needs no `--adapter`. A positional ontology argument exits 2.
 
 | Sub-command | Use |
 |---|---|
-| `check -f <ontology.yaml> [--adapter <module\|config.json>]` | JSON Schema plus checker rules. Without `--adapter` it reads `avouch.json` next to the ontology (the built-in Markdown adapter). A `.json` path is a Markdown adapter configuration; another path is a module that exports `facts(ontologyPath)`. Exit 0 pass, 1 schema errors or violations, 2 usage, file or adapter error. |
-| `query <verb> <arg> -f <ontology.yaml> [--json] [--adapter <module\|config.json>]` | read-only questions about the specification (below). Without `--adapter` the check status is `not_run`, even when `avouch.json` exists. |
+| `check [-f <ontology.yaml>] [--config <file>] [--adapter <module\|config.json>]` | JSON Schema plus checker rules. Without `--adapter` it uses the `adapter` of `avouch.config.json`; with neither it exits 2. An `avouch.json` next to the ontology is no longer read. A `.json` path is a Markdown adapter configuration; another path is a module that exports `facts(ontologyPath)`. Exit 0 pass, 1 schema errors or violations, 2 usage, file or adapter error. |
+| `query <verb> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <file>] [--adapter <module\|config.json>]` | read-only questions about the specification (below). Without `--check` and `--adapter` the check status is `not_run`, even when `avouch.config.json` exists. `--check` runs the check with the adapter of `avouch.config.json`. |
 
 ## query
 
@@ -38,7 +38,7 @@ Notes:
 
 ## Stamp
 
-Every answer starts with the stamp: the ontology path, the git `commit` (with `(dirty)` when the file has uncommitted changes), and `check`. When you quote an answer, give the commit and the check status. Pass `--adapter avouch/avouch.json` (or the project's adapter) to get a real check status.
+Every answer starts with the stamp: the ontology path, the git `commit` (with `(dirty)` when the file has uncommitted changes), and `check`. When you quote an answer, give the commit and the check status. Pass `--check` (the adapter of `avouch.config.json`) or `--adapter <module|config.json>` to get a real check status.
 
 ## Exit codes
 

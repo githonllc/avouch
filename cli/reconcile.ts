@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { isObj, type Stage1Ontology } from "../src/expr.js";
 import { reconcile, type RuntimeCase } from "../src/reconcile.js";
-import { ontologyFile } from "./check.js";
+import { resolveProject } from "./check.js";
 import { jsonLines } from "./jsonl.js";
 
-export const RECONCILE_USAGE = "usage: avouch reconcile [-f <ontology.yaml>] --cases <cases.jsonl>";
+export const RECONCILE_USAGE = "usage: avouch reconcile [-f <ontology.yaml>] [--config <avouch.config.json>] --cases <cases.jsonl>";
 
 const REASONS = ["missing", "unknown_param", "type", "not_found"];
 
@@ -69,11 +69,11 @@ function checkCase(x: unknown): string | null {
 }
 
 async function main(args: string[]): Promise<number> {
-  const { pos, opts } = parseOptions(args, ["-f", "--cases"], []);
+  const { pos, opts } = parseOptions(args, ["-f", "--config", "--cases"], []);
   expectPositionals(pos, 0);
   const cases = opts.get("--cases");
   if (typeof cases !== "string") throw new Error("--cases is required");
-  const ont = readOntology(ontologyFile(opts.get("-f") as string | undefined));
+  const ont = readOntology(resolveProject({ file: opts.get("-f") as string | undefined, config: opts.get("--config") as string | undefined, check: false }).file);
   const lines = jsonLines(cases);
   for (const { line, value } of lines) {
     const problem = checkCase(value);
