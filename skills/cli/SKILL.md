@@ -9,7 +9,7 @@ description: Use when a project has an Avouch ontology (`*.ontology.yaml`) and y
 
 ## Run it
 
-In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.19` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
+In every command below, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.20` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 Give the ontology with `-f <file>`. Without `-f`, the CLI uses the `ontology` of the project configuration `avouch.config.json` at the git top level, else `avouch/avouch.ontology.yaml` there. `--config <file>` names another configuration file. The configuration also holds the `adapter` (a string: a path relative to the configuration file, with the meaning of `--adapter`; or an object `{markdown: {docs, facts, profile}}`, inline), so `check` needs no `--adapter`. A positional ontology argument exits 2. `--help` or `-h` (alone, or after a command) prints the usage on stdout and exits 0.
 
