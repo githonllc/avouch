@@ -17,6 +17,7 @@ Give the ontology with `-f <file>`. Without `-f`, the CLI uses the `ontology` of
 |---|---|
 | `check [-f <ontology.yaml>] [--config <file>] [--adapter <module\|config.json>]` | JSON Schema plus checker rules. Without `--adapter` it uses the `adapter` of `avouch.config.json`; with neither it exits 2. An `avouch.json` next to the ontology is no longer read. A `.json` path is a Markdown adapter configuration; another path is a module that exports `facts(ontologyPath)`. Exit 0 pass, 1 schema errors or violations, 2 usage, file or adapter error. |
 | `query <verb> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <file>] [--adapter <module\|config.json>]` | read-only questions about the specification (below). Without `--check` and `--adapter` the check status is `not_run`, even when `avouch.config.json` exists. `--check` runs the check with the adapter of `avouch.config.json`. |
+| `gate docs [--config <file>] [--json]` | document review ledger: each unit (heading to next heading) of each configured document must have an entry in `avouch.ledger.jsonl` with its current sha256 and a decision (`claims`: JSON Pointers into the ontology, or `noClaim`: a reason). Exit 0 pass, 1 `FAIL changed`, `unreviewed`, `stale`, `outline` or `dangling`, 2 usage, configuration, file or ledger shape error. `--json` gives each failing unit an `entry` line to complete. |
 
 ## query
 

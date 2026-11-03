@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolveProject, runCheck } from "./check.js";
-import { GATE_USAGE, runGate } from "./gate.js";
+import { GATE_DOCS_USAGE, GATE_USAGE, runGate } from "./gate.js";
 import { QUERY_USAGE, runQuery } from "./query.js";
 import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile } from "./reconcile.js";
 
@@ -38,6 +38,7 @@ async function main(): Promise<number> {
   console.error(QUERY_USAGE);
   console.error(RECONCILE_USAGE);
   console.error(GATE_USAGE);
+  console.error(GATE_DOCS_USAGE);
   return 2;
 }
 

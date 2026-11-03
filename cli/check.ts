@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { parse } from "yaml";
@@ -30,7 +30,8 @@ export function adapterFromArgument(arg: string): Adapter {
 
 // `adapter` is an adapter ready to run (the inline Markdown configuration), or a string adapter: the path as written in the file
 // and as resolved against it. The file that the string names is checked and read only when the adapter is used.
-interface ProjectConfig { file: string; ontology: string; adapter: Adapter | { written: string; path: string } }
+// `ledger`: the optional `ledger` key of `avouch gate docs`, validated, with its paths as written.
+interface ProjectConfig { file: string; ontology: string; adapter: Adapter | { written: string; path: string }; ledger: { file?: string; docs?: string[] } | null }
 
 // Reads and validates an avouch.config.json (strict: an unknown key is an error). Throws `<file>: <json path>: <problem>`.
 // `label` names the file in the stamp: the --config argument as given, or CONFIG_FILE when the file was found at the git top.
@@ -45,23 +46,44 @@ function loadProjectConfig(file: string, label: string): ProjectConfig {
     return fail("(root)", `not valid JSON: ${(error as Error).message}`);
   }
   if (!isObj(raw)) return fail("(root)", "must be an object");
-  for (const k of Object.keys(raw)) if (k !== "ontology" && k !== "adapter") fail(k, "unknown key");
+  for (const k of Object.keys(raw)) if (k !== "ontology" && k !== "adapter" && k !== "ledger") fail(k, "unknown key");
   if (!Object.hasOwn(raw, "ontology")) fail("ontology", "missing");
   if (typeof raw.ontology !== "string" || raw.ontology === "") fail("ontology", "must be a non-empty string");
   if (!Object.hasOwn(raw, "adapter")) fail("adapter", "missing");
   const a = raw.adapter;
   const dir = dirname(resolve(file));
   const ontology = resolve(dir, raw.ontology);
+  let ledger: ProjectConfig["ledger"] = null;
+  if (Object.hasOwn(raw, "ledger")) {
+    const l = raw.ledger;
+    if (!isObj(l)) fail("ledger", "must be an object");
+    for (const k of Object.keys(l)) if (k !== "file" && k !== "docs") fail(`ledger.${k}`, "unknown key");
+    ledger = {};
+    if (Object.hasOwn(l, "file")) {
+      if (typeof l.file !== "string" || l.file === "") fail("ledger.file", "must be a non-empty string");
+      ledger.file = l.file;
+    }
+    if (Object.hasOwn(l, "docs")) {
+      if (!Array.isArray(l.docs) || l.docs.length === 0) fail("ledger.docs", "must be a non-empty array of strings");
+      const docs = l.docs as unknown[];
+      docs.forEach((d, i) => {
+        if (typeof d !== "string" || d === "") fail(`ledger.docs[${i}]`, "must be a non-empty string");
+        const j = docs.indexOf(d);
+        if (j !== i) fail(`ledger.docs[${i}]`, `duplicate of ledger.docs[${j}]`);
+      });
+      ledger.docs = [...docs] as string[];
+    }
+  }
   if (typeof a === "string") {
     if (a === "") fail("adapter", "must be a non-empty string");
-    return { file, ontology, adapter: { written: a, path: resolve(dir, a) } };
+    return { file, ontology, adapter: { written: a, path: resolve(dir, a) }, ledger };
   }
   if (!isObj(a)) return fail("adapter", "must be a string or an object");
   for (const k of Object.keys(a)) if (k !== "markdown") fail(`adapter.${k}`, "unknown key");
   if (!Object.hasOwn(a, "markdown")) fail("adapter.markdown", "missing");
   if (!isObj(a.markdown)) fail("adapter.markdown", "must be an object");
   const where = `${file}: adapter.markdown`;
-  return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${label}#adapter` } };
+  return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${label}#adapter` }, ledger };
 }
 
 // The git top level of a directory, or null when it is not in a git repository (or git is not available).
@@ -152,6 +174,55 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
   // the stamp holds the string as written, as --adapter stamps its argument as given
   if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
   return { file, adapter: { ...adapterFromArgument(config.adapter.path), label: config.adapter.written } };
+}
+
+/** The inputs of `avouch gate docs`: the ledger file, the ontology file and the documents (paths relative to the configuration directory, with `/`). */
+export interface LedgerProject { config: string; dir: string; ledger: string; ontology: string; docs: string[] }
+
+/**
+ * The project of `avouch gate docs`: --config, else avouch.config.json at the git top level of the working directory.
+ * The ledger file is `ledger.file` (default avouch.ledger.jsonl), relative to the configuration file. The documents are
+ * `ledger.docs`, else the docs of the Markdown adapter; a module adapter has no docs, so it needs `ledger.docs`.
+ */
+export function resolveLedger(configOption: string | undefined): LedgerProject {
+  let configFile: string;
+  let label = CONFIG_FILE;
+  if (configOption !== undefined) {
+    if (!isFile(configOption)) throw new Error(`--config ${configOption}: file not found`);
+    configFile = label = configOption;
+  } else {
+    const top = gitTop(process.cwd());
+    if (top === null) throw new Error("no --config, and the working directory is not in a git repository (or git is not available)");
+    configFile = join(top, CONFIG_FILE);
+    if (!existsSync(configFile)) throw new Error(`no --config, and no ${CONFIG_FILE} at ${top}`);
+  }
+  const c = loadProjectConfig(configFile, label);
+  const dir = dirname(resolve(configFile));
+  let base = dir;
+  let docs: string[];
+  if (c.ledger?.docs !== undefined) docs = c.ledger.docs;
+  else if (!("written" in c.adapter)) docs = c.adapter.kind === "markdown" ? c.adapter.config.docs : [];
+  else if (!c.adapter.written.endsWith(".json")) throw new Error(`${configFile}: ledger.docs: missing (required with a module adapter)`);
+  else {
+    if (!isFile(c.adapter.path)) throw new Error(`${configFile}: adapter: file not found`);
+    docs = parseMarkdownConfig(readFileSync(c.adapter.path, "utf8"), c.adapter.written).docs;
+    base = dirname(c.adapter.path);
+  }
+  const rel = docs.map((d) => relative(dir, resolve(base, d)).split(sep).join("/"));
+  // file identity (device and inode), as in markdownAdapter: a case variant on a case-insensitive file system or a link is the same document
+  const ids = rel.map((d) => {
+    try {
+      const st = statSync(resolve(dir, d));
+      return `${st.dev}:${st.ino}`;
+    } catch (error) {
+      throw new Error(`${configFile}: ledger: ${d}: ${(error as Error).message}`);
+    }
+  });
+  ids.forEach((id, j) => {
+    if (ids.indexOf(id) !== j) throw new Error(`${configFile}: ledger: document ${rel[j]} is named twice`);
+  });
+  if (!isFile(c.ontology)) throw new Error(`${configFile}: ontology: file not found`);
+  return { config: configFile, dir, ledger: resolve(dir, c.ledger?.file ?? "avouch.ledger.jsonl"), ontology: c.ontology, docs: rel };
 }
 
 // Built-in Markdown adapter: reads its documents (paths relative to the configuration file).

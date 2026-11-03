@@ -41,8 +41,9 @@ Read in this order:
 | `src/query.ts` | read-only queries over an ontology (`avouch query`) |
 | `src/reconcile.ts` | runtime consistency: `reconcile`, `projectSnapshot` (SPEC section 9) |
 | `src/coverage.ts` | decision-row coverage of reconcile rows, with a baseline (`verifyCoverage`, `avouch gate verify`) |
+| `src/ledger.ts` | document review ledger: units, outline, ledger shape, pointers (`verifyLedger`, `avouch gate docs`) |
 | `src/markdown.ts` | built-in adapter for plain Markdown sources (configured in `avouch.config.json`); see `docs/adapter-guide.md` section 7 |
-| `cli/` | command line: `avouch check` (`check.ts`), `avouch query` (`query.ts`), `avouch reconcile` (`reconcile.ts`) and `avouch gate verify` (`gate.ts`) |
+| `cli/` | command line: `avouch check` (`check.ts`), `avouch query` (`query.ts`), `avouch reconcile` (`reconcile.ts`), `avouch gate verify` and `avouch gate docs` (`gate.ts`) |
 | `tsconfig.build.json` | configuration for the JavaScript and type declaration build |
 | `dist/` | build output; not tracked in version control |
 | `examples/library/` | toy project: source document, ontology, mutations, adapter, profile, evidence |
@@ -108,6 +109,7 @@ The project configuration `avouch.config.json` names the ontology file and the a
 - `adapter`: required, in one of two forms.
   - A string: a file path, relative to the configuration file, with the same meaning as `--adapter`. A path that ends in `.json` is the configuration of the built-in Markdown adapter (a stand-alone file; its `docs` are relative to that file); any other path is an adapter module (`facts(ontologyPath)`). The file is read only when the command uses the adapter. An empty string is an error, and so is a path that is not a file (`<configuration file>: adapter: file not found`). In a query or gate stamp, `check.adapter` is the string as written in the configuration file (as `--adapter` stamps its argument as given).
   - An object with one key, `markdown`: the configuration of the built-in Markdown adapter, inline (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). Any other key (also `module`) is an unknown key. In a stamp, `check.adapter` is `<configuration file>#adapter`, where the configuration file is the `--config` argument as given, or `avouch.config.json` when the file was found at the git top level.
+- `ledger`: optional, used only by `avouch gate docs`: an object with the optional keys `file` (the ledger file, relative to the configuration file or absolute; default `avouch.ledger.jsonl`) and `docs` (a non-empty list of distinct document paths, relative to the configuration file; default the `docs` of the Markdown adapter; required with an adapter module). See "Document review ledger (gate docs)".
 - An error in the file is reported as `<file>: <json path>: <problem>` with exit code 2.
 
 Where the file is:
@@ -238,6 +240,33 @@ What the gate does not check. The gate does not compare the runtime result with 
 Exit code 0 means the gate passes. 1 means it fails. 2 means invalid arguments (also a repeated option), a file or parse error, an ontology without an `actionTypes` mapping, or a rows or baseline file with a wrong shape. Without `--json`, the command prints one `FAIL` line for each failure, `INFO` lines (`check`, `blocked`, `no_table`, `unasserted`), and a summary line that starts with `PASS` or `FAIL`. `--json` prints `{avouchGate: 1, gate: "verify", check, result}`.
 
 The same gate is a function in the package root, for tests that run without a file system or child processes: `verifyCoverage(ontology, rows, baseline)` returns the `result` object (`src/coverage.ts`). The command is a thin wrapper around it. The function does not run the check.
+
+### Document review ledger (gate docs)
+
+```sh
+avouch gate docs [--config <avouch.config.json>] [--json]
+```
+
+`avouch gate docs` makes sure that each change to a design document has a recorded review decision. It reads no facts, so it works with any document style. Like `gate verify`, it is a rule of the tool, not of the format.
+
+- Units. The gate removes the BOM and changes CRLF to LF. It does not remove the generated blocks: their text is hashed as other text, so a change in generated text re-opens its unit (fail closed). Then it cuts each document at the ATX headings outside fences. A unit runs from its heading line to the next heading of any level. The text before the first heading is the unit with the path `[]`. The key of a unit is the document, the path (the heading titles from the top-level ancestor to the heading, without closing `#`s) and `n`, the occurrence of that path in the document (from 1). The hash is the sha256 of the unit text, line breaks and trailing spaces included. A unit with only blank lines after its heading needs no entry.
+- Outline. The sha256 of the JSON text of the list of `[path, n, heading line]` of all units of a document, in document order, empty units included. The heading line is the exact first line of the unit (`null` for the text before the first heading), so a change of level or of closing `#`s changes the outline, also for an empty unit. A reorder changes the outline.
+- Ledger. By default `avouch.ledger.jsonl` next to the configuration file, one JSON value per line (a leading BOM is removed). The first line is `{"avouchLedger":1}`. Then, for each document, one outline entry `{"doc", "outline"}`, and one entry `{"doc", "path", "n", "sha256"}` for each unit that is not empty, with exactly one of `claims` (a non-empty list of distinct JSON Pointers into the ontology) and `noClaim` (a non-empty reason). The lines are sorted by `doc`, then the outline entry, then `path` element by element (a prefix first), then `n`. So two changes to different documents change different lines.
+- Pointers. RFC 6901, strict: a `~` must be followed by `0` or `1`, and the root pointer `""` is not a claim. One extension: on an array, a segment selects the element whose `id` is the segment, or the string element equal to it (`/linkTypes/loan_book`). A numeric index does not select an element.
+- Configuration. The optional key `"ledger": {"file": "<path>", "docs": ["<path>", ...]}` of `avouch.config.json` (section "Configuration"). A `doc` in the ledger is relative to the directory of `avouch.config.json`, with `/`. The docs of a stand-alone Markdown adapter configuration are converted from the directory of that file. Two names of one file (a link, or a case variant on a case-insensitive file system) are one document named twice.
+
+The gate fails (exit code 1) with one line for each failure: `FAIL changed <key>` (the hash of a unit changed), `FAIL unreviewed <key>` (a unit has no entry), `FAIL stale <key>` (an entry has no unit), `FAIL stale <doc> outline` (an outline entry of a document that is not configured), `FAIL outline <doc>` (the outline entry is missing or has another hash) and `FAIL dangling <key> <pointer>` (a pointer does not resolve). A key is printed as `<doc> <path as JSON> <n>`. The units in each list are in ledger order.
+
+Exit code 2, with one line on stderr, means:
+
+- invalid arguments;
+- an error in the configuration (`<file>: <json path>: <problem>`), or a module adapter without `ledger.docs`;
+- a missing ledger, ontology or document, or one document named twice;
+- a ledger line that is not JSON, or that has a wrong shape, a duplicate key, an unsorted position, a pointer that is not strict RFC 6901, or an unknown version (`<ledger>:<line>: <reason>`).
+
+`--json` prints `{avouchGate: 1, gate: "docs", result}`. Each changed or unreviewed unit has its current `sha256`, its `firstLine` and `entry`: the ledger line of the unit as it is now, without the decision. Add `claims` or `noClaim` to it and put it in the ledger.
+
+The gate does not check that a person read a unit, that `claims` lists every claim of the unit, or that the claimed places say what the unit says. Review the ledger diff in the pull request, next to the document diff. Known limit: two changes to adjacent ledger lines (for example two units of one document that follow each other) can still give a merge conflict in git.
 
 ## Claude Code plugin
 
