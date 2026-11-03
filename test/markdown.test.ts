@@ -379,11 +379,17 @@ describe("configured facts", () => {
   const machines = (text: string, object = "Book") =>
     markdownFacts([{ path: "a.md", text }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), stateMachines: { [object]: "L4" } });
   const bind = (table: string) =>
-    markdownFacts([{ path: "a.md", text: `## L6 Actions\n\n${table}\n` }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), facts: { transitionTriggers: "L6" } });
+    markdownFacts([{ path: "a.md", text: `## L1 Task State\n\n\`\`\`plantuml\n[*] --> PENDING\n\`\`\`\n\n## L6 Actions\n\n${table}\n` }], { ...parseMarkdownConfig('{"docs":["a.md"]}', "c.json"), facts: { transitionTriggers: "L6" }, stateMachines: { Task: "L1" } });
   const triggers = (table: string) => {
     const f = bind(`| Object | Transition | Trigger |\n|---|---|---|\n${table}`);
     return { f, map: f.transitionTriggers! };
   };
+
+  it("state machine: a note line that is neither a one-line note nor the start of a note block is outside the grammar", () => {
+    const f = machines("## L4 Book State\n\n```plantuml\n[*] --> A\nnote \"x\" as N1\nA --> B\n```\n");
+    expect(parseDiags(f)).toEqual([["R3", "markdown_parse", "facts.stateMachines.Book"]]);
+    expect(f.stateMachines!.get("Book")!.value).toBeNull();
+  });
 
   it("state machine: the spaces around --> and before : are optional", () => {
     const f = machines("## L4 Book State\n\n```mermaid\nstateDiagram-v2\n[*]-->A\nA --> B: go\n```\n");
@@ -490,6 +496,7 @@ describe("configured facts", () => {
     ["an empty trigger cell", "| Task | PENDING → STARTED | |"],
     ["a trigger that does not match actionIdPattern", "| Task | PENDING → STARTED | start_run |"],
     ["a row of two columns", "| Task | PENDING → STARTED |"],
+    ["an object that is not a key of facts.stateMachines", "| Tsk | PENDING → STARTED | START_RUN |"],
   ])("transition triggers: %s is markdown_parse and the row binds nothing", (_, row) => {
     const { f, map } = triggers(row);
     expect(parseDiags(f)).toEqual([["R3", "markdown_parse", "facts.transitionTriggers"]]);

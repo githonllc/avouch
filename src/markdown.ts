@@ -351,7 +351,7 @@ function stateMachine(body: string[], err: (msg: string) => void): StateMachineF
     }
     if (line === "" || line === "@startuml" || line === "@enduml" || line.startsWith("'") || line.startsWith("%%") || line === "stateDiagram" || line === "stateDiagram-v2") continue;
     if (/^(hide|skinparam|title|direction) /.test(line) || /^note .*:/.test(line)) continue;
-    if (line.startsWith("note ")) {
+    if (new RegExp(`^note (left|right|top|bottom) of ${NAME}$`).test(line)) {
       inNote = true;
       continue;
     }
@@ -567,8 +567,9 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
           const edges: string[] = [];
           const ids: string[] = [];
           let ok = true;
-          if (object === "") {
-            parseError("transitionTriggers", `facts.transitionTriggers: row has an empty object cell: ${row.join(" | ")}`);
+          // the object must be one of facts.stateMachines, so a row for a misspelled object or an object without a configured machine is not dropped silently
+          if (!Object.hasOwn(config.stateMachines ?? {}, object)) {
+            parseError("transitionTriggers", `facts.transitionTriggers: object ${JSON.stringify(object)} is not a key of facts.stateMachines: ${row.join(" | ")}`);
             ok = false;
           }
           for (const part of transition.split(/[,，]/).map((x) => x.trim())) {
