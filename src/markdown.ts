@@ -365,9 +365,9 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
     for (const line of blocks[0].split("\n")) {
       const t = line.split("//")[0].trim();
       if (t === "") continue;
-      // ` / ` (white space on both sides) separates names, as in a field list; `a/b` stays one name
-      const parts = t.split(/\s+\/\s+/);
-      if (parts.some((x) => /\s/.test(x))) parseError(name, `facts.${name}: catalog line has white space: ${t}`);
+      // " / " separates names, as in a field list; `a/b` stays one name
+      const parts = t.split(" / ").map((x) => x.trim());
+      if (parts.some((x) => x === "" || /\s/.test(x))) parseError(name, `facts.${name}: catalog line has an empty name or white space in a name: ${t}`);
       else for (const x of parts) set.add(x);
     }
     return set;
