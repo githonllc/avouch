@@ -30,6 +30,7 @@ Give the ontology with `-f <file>`. Without `-f`, the CLI uses the `ontology` of
 | `writes <Object>.<prop>` | which actions change a property (`writers`), create its object (`creators`) or delete it (`deleters`); for a derived property, which actions change its inputs |
 | `reads <Object>.<prop>` | impact of changing a property's meaning: conditions, decision rows and derived properties that read it, directly or `via` a derived property |
 | `cites <anchor>` | before you change a document section: every claim that cites it. The anchor matches exactly. |
+| `link <link id>` | before you change a link or an action that touches its ends: the effect of every action on this link (`incident: false` is an R6 stray), and `missing`, the actions that must have an entry and have none |
 
 Notes:
 

@@ -155,6 +155,7 @@ The command takes exactly two positional arguments. The options can be in any po
 | `writes` | `<Object>.<property>`, for example `Book.state` | the actions that edit the property; for a derived property, the actions that edit its inputs, with the input path |
 | `reads` | `<Object>.<property>` | the conditions, derived properties and materialized properties that read it, directly or through a derived property |
 | `cites` | source anchor, for example `L6` | every claim whose cite names this anchor, in file order, with a JSON Pointer path |
+| `link` | link id, for example `loan_book` | the ends of the link, the effect of every action that has an entry for it (`incident` is false for an action that touches neither end: an R6 stray), and `missing`, the actions that touch an end but have no entry (R6 `link_effect_missing`) |
 
 Notes:
 

@@ -71,6 +71,40 @@ describe("avouch query", () => {
     }
   });
 
+  it("link: prints the effects and the missing actions in text and in JSON, and exits 1 for an unknown link", () => {
+    const path = patchedOntology([
+      { op: "add", path: "/actionTypes/ADD_BOOK", value: { creates: ["Book"] } },
+      { op: "add", path: "/actionTypes/STRAY", value: { creates: ["Branch"], link_effects: { loan_book: { unspecified: "not in the doc" } } } },
+    ]);
+    const r = json("link", "loan_book", "-f", path);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.envelope.verb).toBe("link");
+    expect(r.envelope.result).toEqual({
+      id: "loan_book",
+      from: "Loan",
+      to: "Book",
+      via: "book_id",
+      table: "loans",
+      doc: "L3",
+      effects: [
+        { action: "BORROW", kind: "effect", text: "the new Loan refers to the Book", cite: { doc: "L3", quote: "The Loan refers to the Book by book_id" }, scenarios: [], incident: true },
+        { action: "RETURN", kind: "effect", text: "the Loan row that holds book_id is closed", cite: { doc: "L6", quote: "RETURN closes an ACTIVE Loan" }, scenarios: [], incident: true },
+        { action: "STRAY", kind: "unspecified", text: "not in the doc", cite: null, scenarios: [], incident: false },
+      ],
+      missing: ["ADD_BOOK"],
+    });
+    const lines = run("link", "loan_book", "-f", path).stdout.split("\n");
+    expect(lines).toContain("  - action: STRAY");
+    expect(lines).toContain("    incident: false");
+    expect(lines).toContain("missing: ADD_BOOK");
+    const none = run("link", "loan_branch", "-f", ontology);
+    expect(none.status, none.stderr).toBe(0);
+    expect(none.stdout.split("\n")).toContain("missing: -");
+    const unknown = json("link", "nope", "-f", ontology);
+    expect(unknown.status).toBe(1);
+    expect(unknown.envelope.result).toBeNull();
+  });
+
   it("prints a versioned envelope with check not_run", () => {
     const r = json("action", "BORROW", "-f", ontology);
     expect(r.status, r.stderr).toBe(0);

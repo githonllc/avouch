@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
+import doc from "../examples/library/library.md?raw";
+import { buildLibraryFacts } from "../examples/library/adapter";
+import { libraryEvidence } from "../examples/library/evidence";
+import { config } from "../examples/library/profile";
+import { check } from "../src/checker";
 import { applyPatch, type Op } from "../src/patch";
 import {
   queryAction,
   queryCites,
   queryDisposition,
+  queryLink,
   queryList,
   queryObject,
   queryReads,
@@ -488,6 +494,73 @@ describe("queryObject", () => {
   });
 });
 
+describe("queryLink", () => {
+  const act = (value: Record<string, unknown>, name = "X"): Op => ({ op: "add", path: `/actionTypes/${name}`, value });
+  const bookDoc = "The Loan refers to the Book by book_id";
+
+  it("lists every action's effect on a link, sorted by action id, and no missing action on the toy ontology", () => {
+    const r = queryLink(clean(), "loan_book")!;
+    expect(r).toMatchObject({ id: "loan_book", from: "Loan", to: "Book", via: "book_id", table: "loans", doc: "L3", missing: [] });
+    expect(r.effects.map((e) => [e.action, e.kind, e.incident])).toEqual([["BORROW", "effect", true], ["RETURN", "effect", true]]);
+    expect(r.effects[0]).toMatchObject({ text: "the new Loan refers to the Book", cite: cite("L3", bookDoc), scenarios: [] });
+    expect(queryLink(clean(), "loan_member")!.table).toBeNull();
+  });
+
+  it("reports a none entry and an unspecified entry with their kind", () => {
+    const ont = patched([act({ creates: ["Book"], link_effects: { loan_book: { unspecified: "the doc does not say" }, member_person: { none: "no change" } } }, "ADD_BOOK")]);
+    expect(queryLink(ont, "loan_book")!.effects.map((e) => [e.action, e.kind, e.text])).toEqual([
+      ["ADD_BOOK", "unspecified", "the doc does not say"],
+      ["BORROW", "effect", "the new Loan refers to the Book"],
+      ["RETURN", "effect", "the Loan row that holds book_id is closed"],
+    ]);
+    const none = queryLink(ont, "member_person")!.effects;
+    expect(none.map((e) => [e.action, e.kind, e.incident])).toEqual([["ADD_BOOK", "none", false], ["BORROW", "none", true], ["RETURN", "none", true]]);
+    expect(none[0]).toMatchObject({ text: "no change", cite: null, scenarios: [] });
+  });
+
+  it("marks an entry of an action that touches neither end as not incident", () => {
+    const ont = patched([act({ creates: ["Branch"], link_effects: { loan_book: { none: "stray" } } })]);
+    expect(queryLink(ont, "loan_book")!.effects.find((e) => e.action === "X")).toMatchObject({ kind: "none", incident: false });
+    expect(queryLink(ont, "loan_book")!.missing).toEqual([]);
+  });
+
+  it("lists the actions that touch an end of the link and have no entry, sorted", () => {
+    const ont = patched([act({ creates: ["Book"] }, "ZZ"), act({ edits: ["Loan.state"] }, "AA"), act({ creates: ["Person"] }, "MM"), { op: "remove", path: "/actionTypes/RETURN/link_effects/loan_book" }]);
+    const r = queryLink(ont, "loan_book")!;
+    expect(r.missing).toEqual(["AA", "RETURN", "ZZ"]);
+    expect(r.effects.map((e) => e.action)).toEqual(["BORROW"]);
+  });
+
+  it("returns null for an unknown link and never throws on a malformed ontology", () => {
+    expect(queryLink(clean(), "nope")).toBeNull();
+    expect(queryLink(clean(), "toString")).toBeNull();
+    for (const ont of [{ linkTypes: 5 }, null, "x", [], { linkTypes: [{ id: "l", from: 1 }], actionTypes: { A: { edits: [3, null], creates: "x", link_effects: 5 }, B: 4 }, objectTypes: { O: 1 } }])
+      expect(() => queryLink(ont, "l")).not.toThrow();
+    expect(queryLink({ linkTypes: [{ id: "l" }], actionTypes: { A: { link_effects: { l: null } } } }, "l")).toMatchObject({ from: null, effects: [], missing: [] });
+  });
+
+  it("agrees with the checker (R6 link_effect_missing and stray) on the toy ontology and on mutated ones", () => {
+    const variants = [
+      clean(),
+      patched([act({ creates: ["Book"] }, "ZZ"), act({ edits: ["Loan.state"], link_effects: { member_person: { none: "x" } } }, "AA"), act({ creates: ["Branch"], link_effects: { loan_book: { none: "x" } } }, "BB")]),
+      patched([{ op: "remove", path: "/actionTypes/RETURN/link_effects/loan_book" }, { op: "remove", path: "/actionTypes/BORROW/link_effects/member_person" }, act({ deletes: ["Person"], edits: ["Nope.p", "Member.open_loans"] }, "CC")]),
+    ];
+    for (const ont of variants) {
+      const r = check(ont, buildLibraryFacts(doc, libraryEvidence(), config));
+      const keys = (kind: string | null) => r.violations.filter((x) => x.rule === "R6" && (kind === null ? x.key.endsWith(":stray") : x.kind === kind)).map((x) => x.key).sort();
+      const missing: string[] = [], stray: string[] = [];
+      for (const l of ont.linkTypes) {
+        const q = queryLink(ont, l.id)!;
+        missing.push(...q.missing.map((a) => `${a}:${l.id}`));
+        stray.push(...q.effects.filter((e) => !e.incident).map((e) => `${e.action}:${l.id}:stray`));
+      }
+      expect(missing.sort()).toEqual(keys("link_effect_missing"));
+      expect(stray.sort()).toEqual(keys(null));
+    }
+    expect(queryLink(variants[1], "loan_book")!.missing).toEqual(["AA", "ZZ"]); // the comparison above is not vacuous
+  });
+});
+
 describe("robustness", () => {
   it("never throws on a malformed ontology", () => {
     for (const ont of [{ actionTypes: 5, objectTypes: [] }, null, "x", [], { actionTypes: { X: { decision: { rows: 3 }, conditions: 7 } }, objectTypes: { O: 1 } }]) {
@@ -498,6 +571,7 @@ describe("robustness", () => {
       expect(() => queryWrites(ont, "O.p")).not.toThrow();
       expect(() => queryReads(ont, "O.p")).not.toThrow();
       expect(() => queryCites(ont, "L1")).not.toThrow();
+      expect(() => queryLink(ont, "L1")).not.toThrow();
     }
     expect(queryAction({ actionTypes: 5, objectTypes: [] }, "X")).toBeNull();
   });
