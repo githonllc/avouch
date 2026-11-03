@@ -107,7 +107,7 @@ The project configuration `avouch.config.json` names the ontology file and the a
 - `ontology`: required, a non-empty string.
 - `adapter`: required, in one of two forms.
   - A string: a file path, relative to the configuration file, with the same meaning as `--adapter`. A path that ends in `.json` is the configuration of the built-in Markdown adapter (a stand-alone file; its `docs` are relative to that file); any other path is an adapter module (`facts(ontologyPath)`). The file is read only when the command uses the adapter. An empty string is an error, and so is a path that is not a file (`<configuration file>: adapter: file not found`). In a query or gate stamp, `check.adapter` is the string as written in the configuration file (as `--adapter` stamps its argument as given).
-  - An object with one key, `markdown`: the configuration of the built-in Markdown adapter, inline (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). Any other key (also `module`) is an unknown key. In a stamp, `check.adapter` is `<configuration file>#adapter`.
+  - An object with one key, `markdown`: the configuration of the built-in Markdown adapter, inline (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). Any other key (also `module`) is an unknown key. In a stamp, `check.adapter` is `<configuration file>#adapter`, where the configuration file is the `--config` argument as given, or `avouch.config.json` when the file was found at the git top level.
 - An error in the file is reported as `<file>: <json path>: <problem>` with exit code 2.
 
 Where the file is:
@@ -168,9 +168,9 @@ Notes:
 
 The stamp tells which specification answered:
 
-- `ontology`: the absolute real path of the file;
+- `ontology`: in git, equal to `git.path`; outside git, the real path of the file relative to the working directory, "/" separated. The stamp holds no absolute path unless you wrote one (`--adapter`, `--config`);
 - `git`: the commit, whether the file has uncommitted changes (`dirty`), and its path in the repository; `null` outside a git repository;
-- `check`: `not_run`, or, with `--check` or `--adapter`, the result of the same check as `avouch check` (`pass` or `fail`, with the counts). `--check` uses the adapter of the project configuration. In the JSON stamp, `adapter` is the module path, or the source of a Markdown configuration (the `--adapter` path, or `<config file>#adapter`). A failed check does not change the exit code.
+- `check`: `not_run`, or, with `--check` or `--adapter`, the result of the same check as `avouch check` (`pass` or `fail`, with the counts). `--check` uses the adapter of the project configuration. In the JSON stamp, `adapter` is the module path, or the source of a Markdown configuration (the `--adapter` path as written, or `<config file>#adapter`, with the `--config` argument as given or `avouch.config.json`). A failed check does not change the exit code.
 
 Exit code 0 means there is a result. 1 means there is no result: the id is not declared, or the list is empty (the envelope is still printed). 2 means invalid arguments, or a file, parsing or adapter error.
 

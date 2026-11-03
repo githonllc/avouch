@@ -6,7 +6,7 @@ import { checkPredicate, derivedPropertyType, isObj, newReads, own, type Expr, t
 
 export type S = string | null;
 export type QueryCite = { doc: string; quote: string };
-export type QueryStamp = { ontology: string; /* absolute realpath */ git: { commit: string; dirty: boolean; path: string /* relative to the repository root, "/" separated */ } | null;
+export type QueryStamp = { ontology: string; /* equal to git.path in git; else the real path relative to the working directory, "/" separated */ git: { commit: string; dirty: boolean; path: string /* relative to the repository root, "/" separated */ } | null;
   check: { status: "not_run" } | { status: "pass" | "fail"; adapter: string; schemaErrors: number; violations: number; waived: number } };
 export type QueryVerb = "list" | "action" | "object" | "result" | "writes" | "reads" | "cites";
 export type QueryEnvelope = { avouchQuery: 1; stamp: QueryStamp; verb: QueryVerb; arg: string; result: unknown /* one of the types below, or null */ };
