@@ -27,6 +27,15 @@ export function parseOptions(args: string[], values: readonly string[], flags: r
   return { pos, opts };
 }
 
+// True when --help or -h is a whole argument that is not the value of an option in `values`.
+export function wantsHelp(args: readonly string[], values: readonly string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--help" || args[i] === "-h") return true;
+    if (values.includes(args[i])) i++;
+  }
+  return false;
+}
+
 // Exactly n positional arguments. A word of the old form (an ontology file as an argument) gets a pointer to -f.
 export function expectPositionals(pos: string[], n: number): void {
   if (pos.length === n) return;
@@ -86,6 +95,10 @@ async function main(args: string[]): Promise<number> {
 
 // Exit 0: one row per case (the command does not judge the rows); 2: a usage, file, parse or shape error (one stderr line).
 export async function runReconcile(args: string[]): Promise<number> {
+  if (wantsHelp(args, ["-f", "--config", "--cases"])) {
+    console.log(RECONCILE_USAGE);
+    return 0;
+  }
   try {
     return await main(args);
   } catch (error) {

@@ -7,7 +7,7 @@ import type { QueryStamp } from "../src/query.js";
 import type { ReconcileRow } from "../src/reconcile.js";
 import { checkStamp, resolveLedger, resolveQueryProject } from "./check.js";
 import { jsonLines, readJsonLines } from "./jsonl.js";
-import { expectPositionals, parseOptions, readOntology } from "./reconcile.js";
+import { expectPositionals, parseOptions, readOntology, wantsHelp } from "./reconcile.js";
 
 export const GATE_USAGE = "usage: avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 export const GATE_DOCS_USAGE = "usage: avouch gate docs [--config <avouch.config.json>] [--json]";
@@ -111,13 +111,26 @@ async function docs(args: string[]): Promise<number> {
 export async function runGate(args: string[]): Promise<number> {
   let usage = `${GATE_USAGE}; ${GATE_DOCS_USAGE}`;
   try {
+    if (args[0] === "--help" || args[0] === "-h") {
+      console.log(GATE_USAGE);
+      console.log(GATE_DOCS_USAGE);
+      return 0;
+    }
     if (args.length === 0) throw new Error("missing gate");
     if (args[0] === "verify") {
       usage = GATE_USAGE;
+      if (wantsHelp(args.slice(1), ["-f", "--rows", "--baseline", "--config", "--adapter"])) {
+        console.log(usage);
+        return 0;
+      }
       return await verify(args.slice(1));
     }
     if (args[0] === "docs") {
       usage = GATE_DOCS_USAGE;
+      if (wantsHelp(args.slice(1), ["--config"])) {
+        console.log(usage);
+        return 0;
+      }
       return await docs(args.slice(1));
     }
     throw new Error(`unknown gate ${args[0]}`);

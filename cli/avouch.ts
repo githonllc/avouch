@@ -2,11 +2,15 @@
 import { resolveProject, runCheck } from "./check.js";
 import { GATE_DOCS_USAGE, GATE_USAGE, runGate } from "./gate.js";
 import { QUERY_USAGE, runQuery } from "./query.js";
-import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile } from "./reconcile.js";
+import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile, wantsHelp } from "./reconcile.js";
 
 const CHECK_USAGE = "usage: avouch check [-f <ontology.yaml>] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 
 async function check(args: string[]): Promise<number> {
+  if (wantsHelp(args, ["-f", "--config", "--adapter"])) {
+    console.log(CHECK_USAGE);
+    return 0;
+  }
   let opts: ReturnType<typeof parseOptions>["opts"];
   try {
     const parsed = parseOptions(args, ["-f", "--config", "--adapter"], []);
@@ -28,17 +32,19 @@ async function check(args: string[]): Promise<number> {
   return ok ? 0 : 1;
 }
 
+const USAGES = [CHECK_USAGE, QUERY_USAGE, RECONCILE_USAGE, GATE_USAGE, GATE_DOCS_USAGE];
+
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
+  if (args[0] === "--help" || args[0] === "-h") {
+    for (const usage of USAGES) console.log(usage);
+    return 0;
+  }
   if (args[0] === "check") return check(args.slice(1));
   if (args[0] === "query") return runQuery(args.slice(1));
   if (args[0] === "reconcile") return runReconcile(args.slice(1));
   if (args[0] === "gate") return runGate(args.slice(1));
-  console.error(CHECK_USAGE);
-  console.error(QUERY_USAGE);
-  console.error(RECONCILE_USAGE);
-  console.error(GATE_USAGE);
-  console.error(GATE_DOCS_USAGE);
+  for (const usage of USAGES) console.error(usage);
   return 2;
 }
 
