@@ -41,7 +41,7 @@ Read in this order:
 | `src/query.ts` | read-only queries over an ontology (`avouch query`) |
 | `src/reconcile.ts` | runtime consistency: `reconcile`, `projectSnapshot` (SPEC section 9) |
 | `src/coverage.ts` | decision-row coverage of reconcile rows, with a baseline (`verifyCoverage`, `avouch gate verify`) |
-| `src/markdown.ts` | built-in adapter for plain Markdown sources (`avouch.json`); see `docs/adapter-guide.md` section 7 |
+| `src/markdown.ts` | built-in adapter for plain Markdown sources (configured in `avouch.config.json`); see `docs/adapter-guide.md` section 7 |
 | `cli/` | command line: `avouch check` (`check.ts`), `avouch query` (`query.ts`), `avouch reconcile` (`reconcile.ts`) and `avouch gate verify` (`gate.ts`) |
 | `tsconfig.build.json` | configuration for the JavaScript and type declaration build |
 | `dist/` | build output; not tracked in version control |
@@ -60,6 +60,7 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 - `test/library.test.ts`: the toy library project runs through the checker. The clean ontology has no violations, and each mutation fails with exactly its expected rule.
 - `test/schema.test.ts`: the JSON Schema accepts the toy ontology and rejects bad shapes.
 - `test/cli.test.ts`: command line results, schema errors, checker violations and adapter errors.
+- `test/config.test.ts`: the project configuration `avouch.config.json`: validation, discovery, precedence, and when it is read.
 - `test/query.test.ts`: the query functions on the toy ontology and on patched variants of it.
 - `test/query-cli.test.ts`: `avouch query`: the JSON envelope, the stamp (git and check), exit codes, text output, and that a query writes no file.
 - `test/coverage.test.ts`: `verifyCoverage` on the toy ontology and on patched variants of it: units, gaps, stale baseline entries, failing reconcile rows, and the shape checks.
@@ -73,24 +74,70 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 Build with `npm run build`, then run:
 
 ```sh
-avouch check [-f <ontology.yaml>] [--adapter <module|config.json>]
+avouch check [-f <ontology.yaml>] [--config <avouch.config.json>] [--adapter <module|config.json>]
 ```
 
-All four commands (`check`, `query`, `reconcile`, `gate verify`) take the ontology file with `-f <file>`. Without `-f`, a command uses `avouch/avouch.ontology.yaml` at the git top level of the working directory, so it also works from a subdirectory. Two errors, each with exit code 2: `no -f, and the working directory is not in a git repository`, and `no -f, and <path> does not exist`.
+All four commands (`check`, `query`, `reconcile`, `gate verify`) take the ontology file with `-f <file>` and the project configuration with `--config <file>`. See "Configuration" below for the ontology file and the adapter that a command uses when it is not given them.
 
 In a source checkout, use `node dist/cli/avouch.js` in place of `avouch`.
 The command runs both the JSON Schema validator and the checker. Exit code 0 means both pass; 1 means there are schema errors or unwaived violations; 2 means invalid arguments or a file, parsing or adapter error.
 
 The adapter module must export a named function `facts(ontologyPath)` that returns `SourceFacts`, or a promise of `SourceFacts`. It receives the absolute ontology path. The facts include the project profile and source lookup functions; see `src/contract.ts` and `docs/adapter-guide.md`. Adapter paths resolve from the current directory. A `.ts` adapter can load directly only on a Node version that supports type stripping, and its syntax must be supported by that runtime.
 
-An `--adapter` path that ends in `.json` is not loaded as a module: it is the configuration of the built-in Markdown adapter (`src/markdown.ts`, `docs/adapter-guide.md` section 7). Without `--adapter`, `avouch check` reads `avouch.json` in the directory of the ontology file; when that file does not exist, the command prints the reason and the usage and exits with 2. `avouch query` does not read `avouch.json`: its check stays `not_run` unless `--adapter` is given, also with a `.json` configuration.
+An `--adapter` path that ends in `.json` is not loaded as a module: it is the configuration of the built-in Markdown adapter (`src/markdown.ts`, `docs/adapter-guide.md` section 7). Without `--adapter`, the adapter is the `adapter` of the project configuration. `avouch check` always runs the check: when there is no adapter, the command prints the reason and the usage and exits with 2. `avouch query` and `avouch gate verify` run it only with `--check` or `--adapter`; otherwise their check stays `not_run`.
+
+## Configuration
+
+The project configuration `avouch.config.json` names the ontology file and the adapter, so that a command needs no `-f` and no `--adapter`. It is strict JSON; an unknown key is an error. Every path in it is relative to the configuration file.
+
+```json
+{
+  "ontology": "avouch/avouch.ontology.yaml",
+  "adapter": { "markdown": { "docs": ["docs/design.md"], "facts": { "storeCatalog": "#stores" }, "profile": {} } }
+}
+```
+
+```json
+{
+  "ontology": "avouch/avouch.ontology.yaml",
+  "adapter": { "module": "test/avouch-adapter.mjs" }
+}
+```
+
+- `ontology`: required, a non-empty string.
+- `adapter`: required, an object with exactly one of `markdown` and `module`. `markdown` is the configuration of the built-in Markdown adapter (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). `module` is the path of an adapter module (`facts(ontologyPath)`, as for `--adapter`).
+- An error in the file is reported as `<file>: <json path>: <problem>` with exit code 2.
+
+Where the file is:
+
+1. `--config <file>`, relative to the working directory. A file that does not exist is an error (`--config <file>: file not found`); there is no fallback.
+2. Else, with `-f`, `avouch.config.json` at the git top level of the directory of the `-f` file. The configuration belongs to the repository of the ontology, so an ontology in another repository (or in a submodule, which has its own top level) does not use the adapter of the current repository. A directory outside any git repository has no configuration.
+3. Else `avouch.config.json` at the git top level of the working directory.
+
+There is no search in parent directories and no hidden file.
+
+What a command uses:
+
+| | Source, in order |
+|---|---|
+| ontology file | `-f`; the `ontology` of the configuration; `avouch/avouch.ontology.yaml` at the git top level |
+| adapter | `--adapter`; the `adapter` of the configuration |
+
+The configuration is read only when the command has no `-f`, or when it must run the check and has no `--adapter`. With `-f` and `--adapter` together, the command reads no configuration and runs no `git`. `avouch check` always runs the check; `avouch query` and `avouch gate verify` run it with `--check` or `--adapter`; `avouch reconcile` never runs it. When the command runs the check without `--adapter` and `-f` is not the ontology of the configuration, the command exits with 2 (`-f <file> is not the ontology in <config> (<ontology>): pass --adapter`), because the adapter of the configuration belongs to the other ontology.
+
+Errors, each with exit code 2:
+
+- `--config <file>: file not found`;
+- `no -f and no --config, and the working directory is not in a git repository (or git is not available)`;
+- `no -f, no avouch.config.json at <top>, and <top>/avouch/avouch.ontology.yaml does not exist`;
+- `no adapter: pass --adapter, or set adapter in <top>/avouch.config.json`. An `avouch.json` next to the ontology is no longer read; if one exists, the message says how to move it into `adapter.markdown`, or to pass it with `--adapter`.
 
 ## Query
 
 `avouch query` answers questions about the specification in an ontology file. It reads the file and changes nothing. It does not read runtime data.
 
 ```sh
-avouch query <verb> <arg> [-f <ontology.yaml>] [--json] [--adapter <module|config.json>]
+avouch query <verb> <arg> [-f <ontology.yaml>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]
 ```
 
 The command takes exactly two positional arguments. The options can be in any position.
@@ -121,7 +168,7 @@ The stamp tells which specification answered:
 
 - `ontology`: the absolute real path of the file;
 - `git`: the commit, whether the file has uncommitted changes (`dirty`), and its path in the repository; `null` outside a git repository;
-- `check`: `not_run`, or, with `--adapter`, the result of the same check as `avouch check` (`pass` or `fail`, with the counts). A failed check does not change the exit code.
+- `check`: `not_run`, or, with `--check` or `--adapter`, the result of the same check as `avouch check` (`pass` or `fail`, with the counts). `--check` uses the adapter of the project configuration. In the JSON stamp, `adapter` is the module path, or the source of a Markdown configuration (the `--adapter` path, or `<config file>#adapter`). A failed check does not change the exit code.
 
 Exit code 0 means there is a result. 1 means there is no result: the id is not declared, or the list is empty (the envelope is still printed). 2 means invalid arguments, or a file, parsing or adapter error.
 
@@ -130,8 +177,8 @@ Exit code 0 means there is a result. 1 means there is no result: the id is not d
 `avouch reconcile` compares the result that the runtime reported with the result of the evaluator and with the scenario expectation (SPEC section 9, Runtime consistency). `avouch gate verify` checks that the reconciled cases cover each decision row. Both commands read files and write no file. They do not run project code: the project's test harness writes the cases.
 
 ```sh
-avouch reconcile [-f <ontology.yaml>] --cases <cases.jsonl>
-avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--adapter <module|config.json>]
+avouch reconcile [-f <ontology.yaml>] [--config <avouch.config.json>] --cases <cases.jsonl>
+avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]
 ```
 
 ### reconcile
@@ -180,7 +227,7 @@ The gate fails (exit code 1) when:
 | `unreasoned` | an `exempt` entry has no reason, or only white space |
 | `stale` | an `uncovered` entry names a unit that does not exist, that has another `when` or `result` (`moved`), that is verified or that is blocked, or repeats an entry; an `exempt` entry names a condition that is not a gap, or repeats an entry |
 | `failed` | a reconcile row names an action that the ontology does not have (`action_unknown`); a reconcile row is a `mismatch`; a `cannot_reconcile` row has the reason `runtime_missing`, `runtime_unmapped`, `expectation_unmapped`, `snapshot_missing` or `evaluator_error`, or the reason `indeterminate` with a detail other than `unspecified` and `permission_unknown` (`why` is the detail for `no_row_matched`, `no_decision_table` and `permission_condition`, and `indeterminate` for another detail or none); a `match` row names a row that the action does not have, or a result that is not the result of that row (`row_unknown`) |
-| `check` | with `--adapter`, the same check as `avouch check` fails |
+| `check` | with `--check` or `--adapter`, the same check as `avouch check` fails |
 
 The reasons `envelope` and `expectation_missing` do not fail the gate, and neither does `indeterminate` with the detail `unspecified` or `permission_unknown`. A replay is not a decision; a case without an expectation states nothing to compare. A case gives `indeterminate` only when it has an expected result that the action can give, so an `indeterminate` case is an expectation that `decide` does not check. It fails the gate unless its detail is one of the two details of a gap that an ontology can declare: `unspecified` is a condition without an expression, which is a gap in `exempt` of the baseline, or a condition that reads a derived property without an expression, which R12 reports as `condition_unspecified`; `permission_unknown` is `permission: unknown`, which R10 reports when it runs. `no_row_matched` means that no row applies and the table has no `otherwise`. `no_decision_table` means that `decide` passed the shape, permission and binding steps of an action without a decision table, so the expected result is wrong. `permission_condition` means that no alternative of the permission passes, and in at least one alternative the caller lacks only conditional keys and `conditional_when` is U or absent: write a `conditional_when` that decides the case, or remove the expectation of the case (it is then `unasserted`).
 

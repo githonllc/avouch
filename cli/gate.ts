@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 import { verifyCoverage, type CoverageBaseline, type CoverageResult } from "../src/coverage.js";
 import type { QueryStamp } from "../src/query.js";
 import type { ReconcileRow } from "../src/reconcile.js";
-import { ontologyFile, runCheck } from "./check.js";
+import { checkStamp, resolveQueryProject } from "./check.js";
 import { readJsonLines } from "./jsonl.js";
 import { expectPositionals, parseOptions, readOntology } from "./reconcile.js";
 
-export const GATE_USAGE = "usage: avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--adapter <module|config.json>]";
+export const GATE_USAGE = "usage: avouch gate verify [-f <ontology.yaml>] --rows <rows.jsonl> [--baseline <baseline.json>] [--json] [--check] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 
 const unitText = (row: number | "otherwise") => (row === "otherwise" ? "otherwise" : `rows.${row}`);
 
@@ -33,13 +33,12 @@ function text(check: QueryStamp["check"], r: CoverageResult, pass: boolean): str
 }
 
 async function verify(args: string[]): Promise<number> {
-  const { pos, opts } = parseOptions(args, ["-f", "--rows", "--baseline", "--adapter"], ["--json"]);
+  const { pos, opts } = parseOptions(args, ["-f", "--rows", "--baseline", "--config", "--adapter"], ["--json", "--check"]);
   expectPositionals(pos, 0);
   const rowsFile = opts.get("--rows");
   if (typeof rowsFile !== "string") throw new Error("--rows is required");
   const baselineFile = opts.get("--baseline") as string | undefined;
-  const adapter = opts.get("--adapter") as string | undefined;
-  const file = ontologyFile(opts.get("-f") as string | undefined);
+  const { file, adapter } = resolveQueryProject(opts);
   const ont = readOntology(file);
   const rows = readJsonLines(rowsFile);
   let baseline: unknown = null;
@@ -58,12 +57,7 @@ async function verify(args: string[]): Promise<number> {
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(`${msg.startsWith("baseline:") ? baselineFile : msg.startsWith("ontology:") ? file : rowsFile}: ${msg}`);
   }
-  let check: QueryStamp["check"] = { status: "not_run" };
-  if (adapter !== undefined) {
-    const { schemaErrors, report } = await runCheck(file, adapter);
-    const pass = schemaErrors.length === 0 && report.violations.length === 0;
-    check = { status: pass ? "pass" : "fail", adapter, schemaErrors: schemaErrors.length, violations: report.violations.length, waived: report.waived.length };
-  }
+  const check = await checkStamp(file, adapter);
   const pass = result.ok && check.status !== "fail";
   process.stdout.write(opts.get("--json") === true ? `${JSON.stringify({ avouchGate: 1, gate: "verify", check, result }, null, 2)}\n` : text(check, result, pass));
   return pass ? 0 : 1;

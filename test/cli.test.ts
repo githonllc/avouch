@@ -50,7 +50,8 @@ describe("command line", () => {
   it("requires the adapter argument", () => {
     const result = run("check", "-f", ontology);
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("usage: avouch check");
+    expect(result.stderr.trimEnd().split("\n")).toHaveLength(1);
+    expect(result.stderr).toContain("no adapter");
   });
 
   describe("built-in Markdown adapter", () => {
@@ -71,28 +72,40 @@ describe("command line", () => {
       return path;
     };
 
-    it("reads the avouch.json next to the ontology when no adapter is given", () => {
-      const result = run("check", "-f", withConfig({ ...fixture, docs: [library] }));
+    // the avouch.json that withConfig wrote next to the ontology
+    const configOf = (ontologyPath: string) => join(dirname(ontologyPath), "avouch.json");
+    const runConfig = (ontologyPath: string) => run("check", "-f", ontologyPath, "--adapter", configOf(ontologyPath));
+
+    it("--adapter <file>.json reads the configuration of the built-in Markdown adapter", () => {
+      const result = runConfig(withConfig({ ...fixture, docs: [library] }));
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.stdout.trim().split("\n").at(-1)).toBe("PASS: 0 schema error(s), 0 violation(s), 1 waived");
     });
 
-    it("without --adapter and without avouch.json: exit 2 and a reason", () => {
+    it("an avouch.json next to the ontology is no longer read: exit 2 and a migration hint", () => {
+      const path = withConfig({ ...fixture, docs: [library] });
+      const result = run("check", "-f", path);
+      expect(result.status).toBe(2);
+      expect(result.stderr.trimEnd().split("\n")).toHaveLength(1);
+      expect(result.stderr).toMatch(/^no adapter: pass --adapter, or set adapter in /);
+      expect(result.stderr).toContain(`${configOf(path)} is no longer read`);
+    });
+
+    it("without --adapter and without a project configuration: exit 2 and a reason", () => {
       const result = run("check", "-f", temporaryFile("ontology.yaml", waived()));
       expect(result.status).toBe(2);
-      expect(result.stderr.split("\n")[0]).toMatch(/^no adapter: no avouch\.json next to /);
-      expect(result.stderr).toContain("usage: avouch check");
+      expect(result.stderr.trimEnd()).toMatch(/^no adapter: pass --adapter, or set adapter in avouch\.config\.json$/);
     });
 
     it("a document that cannot be read: exit 2", () => {
-      const result = run("check", "-f", withConfig({ ...fixture, docs: ["no-such-file.md"] }));
+      const result = runConfig(withConfig({ ...fixture, docs: ["no-such-file.md"] }));
       expect(result.status).toBe(2);
       expect(result.stderr).toContain("docs[0]:");
     });
 
     it("two docs entries that resolve to one file: exit 2", () => {
       const path = withConfig((directory: string) => ({ ...fixture, docs: [library, relative(directory, library)] }));
-      const result = run("check", "-f", path);
+      const result = runConfig(path);
       expect(result.status).toBe(2);
       expect(result.stderr).toContain("docs[1]: duplicate of docs[0]");
     });
@@ -107,7 +120,7 @@ describe("command line", () => {
 
     it("docs entries that name one file by different paths: exit 2", () => {
       for (const [names, link] of [[["a.md", "./sub/../a.md"], false], [["a.md", "b.md"], true]] as const) {
-        const result = run("check", "-f", twoNames([...names], link));
+        const result = runConfig(twoNames([...names], link));
         expect(result.status, names.join()).toBe(2);
         expect(result.stderr).toContain("docs[1]: duplicate of docs[0]");
       }
@@ -116,13 +129,13 @@ describe("command line", () => {
     it("docs entries that differ only in case on a case-insensitive file system: exit 2", (ctx) => {
       const path = twoNames(["a.md", "A.md"]);
       if (!existsSync(join(dirname(path), "A.md"))) ctx.skip();
-      const result = run("check", "-f", path);
+      const result = runConfig(path);
       expect(result.status).toBe(2);
       expect(result.stderr).toContain("docs[1]: duplicate of docs[0]");
     });
 
     it("an unknown configuration key: exit 2", () => {
-      const result = run("check", "-f", withConfig({ ...fixture, docs: [library], extra: true }));
+      const result = runConfig(withConfig({ ...fixture, docs: [library], extra: true }));
       expect(result.status).toBe(2);
       expect(result.stderr).toContain("extra: unknown key");
     });
@@ -141,7 +154,7 @@ describe("command line", () => {
       const git = (cwd: string, ...args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8" });
       const gitAvailable = git(root, "--version").status === 0;
       const lastLine = (stdout: string) => stdout.trim().split("\n").at(-1);
-      // a git repository with avouch/avouch.ontology.yaml and avouch/avouch.json (the clean toy, waived), and a subdirectory
+      // a git repository with avouch/avouch.ontology.yaml and avouch.config.json (the clean toy, waived), and a subdirectory
       const repository = () => {
         const top = mkdtempSync(join(tmpdir(), "avouch-cli-"));
         directories.push(top);
@@ -149,7 +162,7 @@ describe("command line", () => {
         mkdirSync(join(top, "avouch"));
         mkdirSync(join(top, "src/deep"), { recursive: true });
         writeFileSync(join(top, "avouch/avouch.ontology.yaml"), waived());
-        writeFileSync(join(top, "avouch/avouch.json"), JSON.stringify({ ...fixture, docs: [library] }));
+        writeFileSync(join(top, "avouch.config.json"), JSON.stringify({ ontology: "avouch/avouch.ontology.yaml", adapter: { markdown: { ...fixture, docs: [library] } } }));
         return top;
       };
 

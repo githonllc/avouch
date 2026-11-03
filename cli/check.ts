@@ -1,32 +1,155 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { parse } from "yaml";
 import { check } from "../src/checker.js";
 import type { Report, SourceFacts } from "../src/contract.js";
-import { markdownFacts, parseMarkdownConfig, type MarkdownDoc } from "../src/markdown.js";
+import { isObj } from "../src/expr.js";
+import type { QueryStamp } from "../src/query.js";
+import { markdownFacts, parseMarkdownConfig, validateMarkdownConfig, type MarkdownConfig, type MarkdownDoc } from "../src/markdown.js";
 
-/** The configuration of the built-in Markdown adapter that `avouch check` reads next to the ontology when no adapter is given. */
-export const CONFIG_FILE = "avouch.json";
+/** The project configuration file, at the git top level of the project. */
+export const CONFIG_FILE = "avouch.config.json";
 
-/** The ontology file of a command: the value of -f, else avouch/avouch.ontology.yaml at the git top level of the working directory. */
-export function ontologyFile(f: string | undefined): string {
-  if (f !== undefined) return f;
-  const r = spawnSync("git", ["--no-optional-locks", "rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8" });
-  if (r.error !== undefined || r.status !== 0) throw new Error("no -f, and the working directory is not in a git repository (or git is not available)");
-  const file = join(r.stdout.trim(), "avouch", "avouch.ontology.yaml");
-  if (!existsSync(file)) throw new Error(`no -f, and ${file} does not exist`);
-  return file;
+/**
+ * An adapter, ready to run. `label` is the value of `check.adapter` in a query or gate stamp. A Markdown configuration reads
+ * its documents relative to `dir`; `where` is the prefix of an error about it.
+ */
+export type Adapter =
+  | { kind: "markdown"; config: MarkdownConfig; dir: string; where: string; label: string }
+  | { kind: "module"; path: string; label: string };
+
+/** The adapter named by `--adapter`: a `.json` file is the configuration of the built-in Markdown adapter, anything else a module. */
+export function adapterFromArgument(arg: string): Adapter {
+  if (!arg.endsWith(".json")) return { kind: "module", path: resolve(arg), label: arg };
+  const path = resolve(arg);
+  return { kind: "markdown", config: parseMarkdownConfig(readFileSync(path, "utf8"), arg), dir: dirname(path), where: arg, label: arg };
 }
 
-// Built-in Markdown adapter: reads the configuration and its documents (paths relative to the configuration file).
-function markdownAdapter(configFile: string): SourceFacts {
-  const configPath = resolve(configFile);
-  const cfg = parseMarkdownConfig(readFileSync(configPath, "utf8"), configFile);
-  const docError = (i: number, error: unknown) => new Error(`${configFile}: docs[${i}]: ${(error as Error).message}`);
-  const paths = cfg.docs.map((doc) => resolve(dirname(configPath), doc));
+interface ProjectConfig { file: string; ontology: string; adapter: Adapter }
+
+// Reads and validates an avouch.config.json (strict: an unknown key is an error). Throws `<file>: <json path>: <problem>`.
+function loadProjectConfig(file: string): ProjectConfig {
+  const fail = (path: string, problem: string): never => {
+    throw new Error(`${file}: ${path}: ${problem}`);
+  };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(resolve(file), "utf8"));
+  } catch (error) {
+    return fail("(root)", `not valid JSON: ${(error as Error).message}`);
+  }
+  if (!isObj(raw)) return fail("(root)", "must be an object");
+  for (const k of Object.keys(raw)) if (k !== "ontology" && k !== "adapter") fail(k, "unknown key");
+  if (!Object.hasOwn(raw, "ontology")) fail("ontology", "missing");
+  if (typeof raw.ontology !== "string" || raw.ontology === "") fail("ontology", "must be a non-empty string");
+  if (!Object.hasOwn(raw, "adapter")) fail("adapter", "missing");
+  const a = raw.adapter;
+  if (!isObj(a)) return fail("adapter", "must be an object");
+  for (const k of Object.keys(a)) if (k !== "markdown" && k !== "module") fail(`adapter.${k}`, "unknown key");
+  if (Object.hasOwn(a, "markdown") === Object.hasOwn(a, "module")) fail("adapter", 'must have exactly one of "markdown" and "module"');
+  const dir = dirname(resolve(file));
+  const ontology = resolve(dir, raw.ontology);
+  if (Object.hasOwn(a, "module")) {
+    if (typeof a.module !== "string" || a.module === "") fail("adapter.module", "must be a non-empty string");
+    const path = resolve(dir, a.module);
+    return { file, ontology, adapter: { kind: "module", path, label: path } };
+  }
+  if (!isObj(a.markdown)) fail("adapter.markdown", "must be an object");
+  const where = `${file}: adapter.markdown`;
+  return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${file}#adapter` } };
+}
+
+// The git top level of a directory, or null when it is not in a git repository (or git is not available).
+function gitTop(cwd: string): string | null {
+  const r = spawnSync("git", ["--no-optional-locks", "rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" });
+  return r.error !== undefined || r.status !== 0 ? null : r.stdout.trim();
+}
+
+const isFile = (path: string): boolean => {
+  try {
+    return statSync(resolve(path)).isFile();
+  } catch {
+    return false;
+  }
+};
+
+const real = (path: string): string => {
+  try {
+    return realpathSync(resolve(path));
+  } catch {
+    return resolve(path);
+  }
+};
+
+export interface ProjectOptions {
+  /** -f */
+  file?: string;
+  /** --config */
+  config?: string;
+  /** --adapter */
+  adapter?: string;
+  /** true when the command must run the check */
+  check: boolean;
+}
+
+/**
+ * The ontology file of a command and, when it runs the check, the adapter.
+ * Ontology: -f, else `ontology` of the project configuration, else avouch/avouch.ontology.yaml at the git top level.
+ * Adapter: --adapter, else `adapter` of the project configuration.
+ * The project configuration is --config, else avouch.config.json at the git top level of the directory of -f (with -f)
+ * or of the working directory. It is read only when the command has no -f, or must run the check without --adapter.
+ * A named -f or --config that is not a file is an error, whether or not the configuration is read (a stat, nothing more).
+ */
+export function resolveProject(o: ProjectOptions): { file: string; adapter: Adapter | null } {
+  if (o.file !== undefined && !isFile(o.file)) throw new Error(`-f ${o.file}: file not found`);
+  if (o.config !== undefined && !isFile(o.config)) throw new Error(`--config ${o.config}: file not found`);
+  const needAdapterFromConfig = o.check && o.adapter === undefined;
+  const readConfig = o.file === undefined || needAdapterFromConfig;
+  let top: string | null = null;
+  let config: ProjectConfig | null = null;
+  if (readConfig) {
+    let configFile: string | null = null;
+    if (o.config !== undefined) configFile = o.config;
+    else {
+      // with -f, a directory that is not in a git repository has no configuration file
+      top = gitTop(o.file !== undefined ? dirname(resolve(o.file)) : process.cwd());
+      if (top !== null && existsSync(join(top, CONFIG_FILE))) configFile = join(top, CONFIG_FILE);
+    }
+    if (configFile !== null) config = loadProjectConfig(configFile);
+  }
+  let file: string;
+  if (o.file !== undefined) file = o.file;
+  else if (config !== null) {
+    if (!isFile(config.ontology)) throw new Error(`${config.file}: ontology: file not found`);
+    file = config.ontology;
+  } else {
+    // no -f, no --config (a --config always gives a configuration): the git top level is the only place left to look
+    if (top === null) throw new Error("no -f and no --config, and the working directory is not in a git repository (or git is not available)");
+    const dflt = join(top, "avouch", "avouch.ontology.yaml");
+    if (!existsSync(dflt)) throw new Error(`no -f, no ${CONFIG_FILE} at ${top}, and ${dflt} does not exist`);
+    file = dflt;
+  }
+  if (!o.check) return { file, adapter: null };
+  if (o.adapter !== undefined) return { file, adapter: adapterFromArgument(o.adapter) };
+  if (config === null) {
+    const dir = dirname(resolve(file));
+    const where = top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE;
+    const old = existsSync(join(dir, "avouch.json")) ? `; ${join(dir, "avouch.json")} is no longer read: move it to adapter.markdown in ${CONFIG_FILE}, or pass --adapter ${join(dir, "avouch.json")}` : "";
+    throw new Error(`no adapter: pass --adapter, or set adapter in ${where}${old}`);
+  }
+  if (o.file !== undefined && real(o.file) !== real(config.ontology))
+    throw new Error(`-f ${o.file} is not the ontology in ${config.file} (${config.ontology}): pass --adapter`);
+  return { file, adapter: config.adapter };
+}
+
+// Built-in Markdown adapter: reads its documents (paths relative to the configuration file).
+function markdownAdapter(a: Extract<Adapter, { kind: "markdown" }>): SourceFacts {
+  const cfg = a.config;
+  const docError = (i: number, error: unknown) => new Error(`${a.where}: docs[${i}]: ${(error as Error).message}`);
+  const paths = cfg.docs.map((doc) => resolve(a.dir, doc));
   // file identity (device and inode), so a case variant on a case-insensitive file system or a link is a duplicate too
   const ids = paths.map((path, i) => {
     try {
@@ -38,7 +161,7 @@ function markdownAdapter(configFile: string): SourceFacts {
   });
   ids.forEach((id, j) => {
     const i = ids.indexOf(id);
-    if (i !== j) throw new Error(`${configFile}: docs[${j}]: duplicate of docs[${i}]`);
+    if (i !== j) throw new Error(`${a.where}: docs[${j}]: duplicate of docs[${i}]`);
   });
   const docs: MarkdownDoc[] = paths.map((path, i) => {
     try {
@@ -50,18 +173,17 @@ function markdownAdapter(configFile: string): SourceFacts {
   return markdownFacts(docs, cfg);
 }
 
-// Runs the JSON Schema validator and the checker on one ontology file with one adapter: a module that exports `facts`, or a
-// `.json` configuration of the built-in Markdown adapter. adapterFile null: the `avouch.json` next to the ontology.
-// Shared by `avouch check` and `avouch query --adapter`, so both report the same counts.
-export async function runCheck(ontologyFile: string, adapterFile: string | null): Promise<{ schemaErrors: ErrorObject[]; report: Report }> {
+// Runs the JSON Schema validator and the checker on one ontology file with one adapter: a module that exports `facts`, or the
+// configuration of the built-in Markdown adapter. Shared by `avouch check` and the `--check` of `query` and `gate verify`,
+// so all report the same counts.
+export async function runCheck(ontologyFile: string, adapter: Adapter): Promise<{ schemaErrors: ErrorObject[]; report: Report }> {
   const ontologyPath = resolve(ontologyFile);
   const schema = JSON.parse(readFileSync(new URL("../../ontology.schema.json", import.meta.url), "utf8"));
   const ontology: unknown = parse(readFileSync(ontologyPath, "utf8"));
-  const adapter = adapterFile ?? join(dirname(ontologyPath), CONFIG_FILE);
   let facts: SourceFacts;
-  if (adapter.endsWith(".json")) facts = markdownAdapter(adapter);
+  if (adapter.kind === "markdown") facts = markdownAdapter(adapter);
   else {
-    const mod = await import(pathToFileURL(resolve(adapter)).href);
+    const mod = await import(pathToFileURL(adapter.path).href);
     if (typeof mod.facts !== "function") throw new Error("adapter must export a named facts function");
     facts = await mod.facts(ontologyPath);
   }
@@ -70,4 +192,18 @@ export async function runCheck(ontologyFile: string, adapterFile: string | null)
   const schemaErrors = validate.errors ?? [];
   const report = check(ontology, facts);
   return { schemaErrors, report };
+}
+
+/** The `check` of a query or gate stamp: the check run with the adapter, or `not_run` when there is no adapter. */
+export async function checkStamp(ontologyFile: string, adapter: Adapter | null): Promise<QueryStamp["check"]> {
+  if (adapter === null) return { status: "not_run" };
+  const { schemaErrors, report } = await runCheck(ontologyFile, adapter);
+  const pass = schemaErrors.length === 0 && report.violations.length === 0;
+  return { status: pass ? "pass" : "fail", adapter: adapter.label, schemaErrors: schemaErrors.length, violations: report.violations.length, waived: report.waived.length };
+}
+
+/** The project of a query or gate command: the check runs with --check, or with --adapter. */
+export function resolveQueryProject(opts: Map<string, string | true>): { file: string; adapter: Adapter | null } {
+  const adapter = opts.get("--adapter") as string | undefined;
+  return resolveProject({ file: opts.get("-f") as string | undefined, config: opts.get("--config") as string | undefined, adapter, check: opts.get("--check") === true || adapter !== undefined });
 }

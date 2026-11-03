@@ -18,9 +18,9 @@ These rules hold in every step. Each one closes a failure that an agent without 
 
 | Rule | Why |
 |---|---|
-| Facts come only from the package's Markdown adapter (`avouch.json`). Do not write an adapter module, and do not put state machines, triggers, permission rows or catalogs into code. | A hand-written adapter that holds the expected values makes the check agree with itself. A PASS then proves nothing. |
+| Facts come only from the package's Markdown adapter (`adapter.markdown` in `avouch.config.json`). Do not write an adapter module, and do not put state machines, triggers, permission rows or catalogs into code. | A hand-written adapter that holds the expected values makes the check agree with itself. A PASS then proves nothing. |
 | Do not run project code (no `import` of `src/`, no test harness, no database). | Scanning is reading. Running code has side effects and is out of scope. |
-| Cite only the documents listed in `avouch.json` `docs`. Copy each `quote` character for character from the document. | Avouch claims cite design documents. Read the code to understand it and to find conflicts, but do not cite it. |
+| Cite only the documents listed in `avouch.config.json` `adapter.markdown.docs`. Copy each `quote` character for character from the document. | Avouch claims cite design documents. Read the code to understand it and to find conflicts, but do not cite it. |
 | When the documents are silent, do not guess. Write `unknown` or `unspecified`, or leave the item out, and record the gap. | A guessed edge or condition looks like a sourced fact. |
 | Do not disable a rule and do not remove a fact anchor to get a PASS. Record each gap in `knownSourceGaps`, with a `proposed` document fix. | The gap list is the repair list for the human. |
 | If the documents and the code disagree, the ontology follows the documents. Report the conflict with `file:line` on both sides. | You do not decide which side is correct. The owner does. |
@@ -30,13 +30,13 @@ These rules hold in every step. Each one closes a failure that an agent without 
 In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y @githonllc/avouch@0.1.17` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
-avouch 2>&1 | grep -q 'config.json' || echo "STOP: this avouch has no Markdown adapter (avouch.json); update it"
-git ls-files '*.ontology.yaml' 'avouch.json' '**/avouch.json'
+avouch 2>&1 | grep -q -- '--config' || echo "STOP: this avouch has no project configuration (avouch.config.json); update it"
+git ls-files '*.ontology.yaml' 'avouch.config.json' 'avouch.json' '**/avouch.json'
 ```
 
-- No ontology exists: the target is `avouch/avouch.ontology.yaml` and the configuration is `avouch/avouch.json`.
-- An ontology exists **with** an `avouch.json` beside it: use update mode (Step 4).
-- An ontology exists **without** an `avouch.json` beside it, or the project's `AGENTS.md` / `CLAUDE.md` gives the ontology to an owner or another session: stop. Do not write to it. Report what you would change.
+- No ontology exists: the target is `avouch/avouch.ontology.yaml` and the configuration is `avouch.config.json` at the git top level.
+- An ontology exists **with** an `avouch.config.json` at the git top level (or an older `avouch/avouch.json`, see the migration in Step 4): use update mode (Step 4).
+- An ontology exists **without** either file, or the project's `AGENTS.md` / `CLAUDE.md` gives the ontology to an owner or another session: stop. Do not write to it. Report what you would change.
 - The project has code but no design document: stop. Report which documents are missing (objects with field lists, states, actions and their rules). Do not draft from code alone.
 
 ## Step 1: inventory
@@ -45,12 +45,12 @@ git ls-files '*.ontology.yaml' 'avouch.json' '**/avouch.json'
 2. Read the code that holds the business logic: types or schema, migrations, request handlers. For a large repository, dispatch `Explore` subagents per area and ask for `file:line` lists, not summaries.
 3. List the headings of each document. An anchor is the first word of a heading (`## L1 Book` → `L1`) or the full heading text (`## Open a rental` → `Open a rental`). Two sections with the same anchor make it ambiguous. Cite only anchors that are unique.
 
-## Step 2: write `avouch.json` and the ontology
+## Step 2: write `avouch.config.json` and the ontology
 
-`avouch.json` (paths are relative to the file):
+`avouch.config.json` at the git top level (paths are relative to the file):
 
 ```json
-{ "docs": ["../docs/design.md"], "facts": {}, "profile": {} }
+{ "ontology": "avouch/avouch.ontology.yaml", "adapter": { "markdown": { "docs": ["docs/design.md"], "facts": {}, "profile": {} } } }
 ```
 
 Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permissions`) only when a document section already holds that fact in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository). Do not add sections to the documents yourself.
@@ -100,9 +100,10 @@ Write `avouch/doc-patch.md`, and replace the file if an earlier run wrote one. W
 
 ## Step 4: update mode
 
+0. If `avouch/avouch.json` exists and `avouch.config.json` does not (a project from an older version), migrate first: write `avouch.config.json` at the git top level with `ontology` set to the ontology path and `adapter.markdown` set to the content of `avouch/avouch.json`, where each `docs` path is made relative to the git top level (the old paths are relative to `avouch/`); then delete `avouch/avouch.json`. Newer versions no longer read it.
 1. Run the check before you change anything, and keep its output.
 2. Find what changed: `B=$(git log -1 --format=%h -- <yaml>)`, then `git diff $B..HEAD -- <docs>` (the full diff, not `--stat`). Read `git diff --stat $B..HEAD -- <code>` too, for conflicts.
-3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. A new section that holds a fact in the adapter syntax (for example a store catalog) is a new item too: add its anchor to `avouch.json` `facts` (Step 2). The check passing does not mean the table is done; a missing new item fails no rule.
+3. Make a change table with one row per changed document hunk: the hunk's new text, and one outcome — `added <ontology path>`, `re-cited <path>`, `changed <path>`, `deleted <path>`, or `no claim: <reason>`. A new field, state, rule, effect or parameter in a hunk is a new item: add it, with the properties and `edits` it implies. A new section that holds a fact in the adapter syntax (for example a store catalog) is a new item too: add its anchor to `avouch.config.json` `adapter.markdown.facts` (Step 2). The check passing does not mean the table is done; a missing new item fails no rule.
 4. Keep every id. Keep each claim whose cite still passes.
 5. For a failing quote: if the document still states the claim, re-cite it with the new text. If it does not, change the claim. If the document removed the claim, delete it.
 6. Do not delete or rewrite a `knownSourceGaps` entry unless the check reports it as `stale_waiver`.

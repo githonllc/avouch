@@ -76,11 +76,11 @@ npm test
 
 ## 7. The built-in Markdown adapter
 
-A project whose specification is plain Markdown can run `avouch check` without writing an adapter. `src/markdown.ts` is a generic adapter: `parseMarkdownConfig(text, file)` reads a JSON configuration, and `markdownFacts(docs, config)` turns document texts into `SourceFacts`. It reads no file; the command line reads the configuration and the documents.
+A project whose specification is plain Markdown can run `avouch check` without writing an adapter. `src/markdown.ts` is a generic adapter: `parseMarkdownConfig(text, file)` reads a JSON configuration (`validateMarkdownConfig(value, where)` checks an object that is already parsed), and `markdownFacts(docs, config)` turns document texts into `SourceFacts`. It reads no file; the command line reads the configuration and the documents.
 
 ### Configuration
 
-The configuration is a JSON file. `avouch check -f <ontology.yaml>` without `--adapter` reads `avouch.json` in the directory of the ontology file. `--adapter <file>.json` names another configuration; any other `--adapter` value is still loaded as a module. The configuration for the toy library (in the directory of `library.md`) is:
+The configuration is the `adapter.markdown` object of the project configuration `avouch.config.json` (README, "Configuration"); `docs` is relative to that file. `avouch check` without `--adapter` uses it. `--adapter <file>.json` names a stand-alone file with the same content, and `docs` is then relative to that file; any other `--adapter` value is still loaded as a module. The configuration for the toy library (in the directory of `library.md`; as a stand-alone file, or as the value of `adapter.markdown`) is:
 
 ```json
 {
@@ -145,7 +145,7 @@ export const facts = () => ({ ...markdownFacts(docs, cfg), evidence });
 
 ### Query
 
-`avouch query` does not read `avouch.json`: without `--adapter` its check stamp stays `not_run`. `avouch query ... --adapter <file>.json` runs the same check as `avouch check`.
+Without `--check` and without `--adapter`, the check stamp of `avouch query` stays `not_run`. `avouch query ... --check` runs the same check as `avouch check` with the adapter of the project configuration, and `--adapter <file>.json` with that file.
 
 ### The toy library with the generic adapter
 
