@@ -143,6 +143,16 @@ describe("sections", () => {
     expect(f.section("Nothing")).toBe("missing");
   });
 
+  it("a leading section sign falls back to the anchor without it, only when the anchor as written has no heading", () => {
+    const f = md("## 6.4 A\nbody");
+    expect(f.section("§6.4")).toEqual({ title: "6.4 A", text: "## 6.4 A\nbody" });
+    expect(f.section("6.4")).toEqual({ title: "6.4 A", text: "## 6.4 A\nbody" });
+    expect(f.section("§9.9")).toBe("missing");
+    const both = md("## §6.4 A\nx\n## 6.4 B\ny");
+    expect(both.section("§6.4")).toEqual({ title: "§6.4 A", text: "## §6.4 A\nx" });
+    expect(both.section("6.4")).toEqual({ title: "6.4 B", text: "## 6.4 B\ny" });
+  });
+
   it("a section ends before the next heading of the same or a higher level", () => {
     const f = md("## A one\n### B two\nbody\n## C three\n");
     expect(sectionText(f, "A")).toBe("## A one\n### B two\nbody");
@@ -260,6 +270,21 @@ describe("configured facts", () => {
     expect(parseDiags(f)).toEqual([["R2", "markdown_parse", "facts.storeCatalog"], ["R8", "markdown_parse", "facts.eventCatalog"]]);
   });
 
+  it("catalog: ' / ' separates names; a slash without white space is part of a name; any other white space is markdown_parse", () => {
+    const c = (line: string) => md(`## S Stores\n\`\`\`text\n${line}\n\`\`\`\n`, { storeCatalog: "S" });
+    expect(c("a / b").storeCatalog!.value).toEqual(new Set(["a", "b"]));
+    expect(c("a/b // note").storeCatalog!.value).toEqual(new Set(["a/b"]));
+    expect(c("a  /  b").storeCatalog!.value).toEqual(new Set(["a", "b"]));
+    expect(c("a / b").diagnostics).toEqual([]);
+    for (const bad of ["a / b / ", "a /  / b", "a b"]) expect(parseDiags(c(bad))).toEqual([["R2", "markdown_parse", "facts.storeCatalog"]]);
+  });
+
+  it("a configured anchor with a section sign resolves; the fact keeps the anchor as configured", () => {
+    const f = md("## 6.4 Stores\n```text\nbooks\n```\n", { storeCatalog: "§6.4" });
+    expect(f.diagnostics).toEqual([]);
+    expect(f.storeCatalog).toEqual({ value: new Set(["books"]), source: { anchor: "§6.4" } });
+  });
+
   it("catalog: not exactly one text block is markdown_parse", () => {
     const f = md("## S Stores\nno block\n", { storeCatalog: "S" });
     expect(f.storeCatalog!.value).toEqual(new Set());
@@ -299,6 +324,12 @@ describe("configured facts", () => {
     expect(f.permissions!.quoteNamesKey("needs `loan:create`", "loan:create")).toBe(true);
     expect(f.permissions!.quoteNamesKey("needs loan:create", "loan:create")).toBe(false);
     expect(f.config.requiredSource).toEqual({ R10: "P" });
+  });
+
+  it("permissions: row names split on a comma and on the ideographic comma", () => {
+    const f = perm("| Action | Keys |\n|---|---|\n| BORROW、RETURN | `loan:create` |");
+    expect(f.diagnostics).toEqual([]);
+    expect([...f.permissions!.rows.value.keys()]).toEqual(["BORROW", "RETURN"]);
   });
 
   it.each([
