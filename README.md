@@ -100,12 +100,14 @@ The project configuration `avouch.config.json` names the ontology file and the a
 ```json
 {
   "ontology": "avouch/avouch.ontology.yaml",
-  "adapter": { "module": "test/avouch-adapter.mjs" }
+  "adapter": "test/avouch-adapter.mjs"
 }
 ```
 
 - `ontology`: required, a non-empty string.
-- `adapter`: required, an object with exactly one of `markdown` and `module`. `markdown` is the configuration of the built-in Markdown adapter (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). `module` is the path of an adapter module (`facts(ontologyPath)`, as for `--adapter`).
+- `adapter`: required, in one of two forms.
+  - A string: a file path, relative to the configuration file, with the same meaning as `--adapter`. A path that ends in `.json` is the configuration of the built-in Markdown adapter (a stand-alone file; its `docs` are relative to that file); any other path is an adapter module (`facts(ontologyPath)`). The file is read only when the command uses the adapter. An empty string is an error, and so is a path that is not a file (`<configuration file>: adapter: file not found`). In a query or gate stamp, `check.adapter` is the string as written in the configuration file (as `--adapter` stamps its argument as given).
+  - An object with one key, `markdown`: the configuration of the built-in Markdown adapter, inline (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). Any other key (also `module`) is an unknown key. In a stamp, `check.adapter` is `<configuration file>#adapter`.
 - An error in the file is reported as `<file>: <json path>: <problem>` with exit code 2.
 
 Where the file is:
@@ -130,7 +132,7 @@ Errors, each with exit code 2:
 - `--config <file>: file not found`;
 - `no -f and no --config, and the working directory is not in a git repository (or git is not available)`;
 - `no -f, no avouch.config.json at <top>, and <top>/avouch/avouch.ontology.yaml does not exist`;
-- `no adapter: pass --adapter, or set adapter in <top>/avouch.config.json`. An `avouch.json` next to the ontology is no longer read; if one exists, the message says how to move it into `adapter.markdown`, or to pass it with `--adapter`.
+- `no adapter: pass --adapter, or set adapter in <top>/avouch.config.json`. An `avouch.json` next to the ontology is no longer read; if one exists, the message says to set `"adapter"` in `avouch.config.json` to the path of that `avouch.json` (relative to the top level), or to pass it with `--adapter`.
 
 ## Query
 

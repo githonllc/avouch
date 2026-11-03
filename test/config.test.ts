@@ -69,7 +69,7 @@ const markdownProject = () => {
   writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: { markdown: markdown() } });
   return top;
 };
-// A repository with the toy ontology that fails R8, and a project configuration with a module that switches R8 off.
+// A repository with the toy ontology that fails R8, and a project configuration with a module (named by a string) that switches R8 off.
 const lenientProject = () => {
   const top = repository();
   write(join(top, ONTOLOGY), badEvent());
@@ -78,7 +78,7 @@ const lenientProject = () => {
     `import { facts as base } from ${JSON.stringify(pathToFileURL(strictAdapter).href)};\n` +
       `export const facts = (o) => { const f = base(o); return { ...f, config: { ...f.config, rules: { ...f.config.rules, R8: { disabled: "test" } } } }; };\n`,
   );
-  writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: { module: "tools/lenient.mjs" } });
+  writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: "tools/lenient.mjs" });
   return top;
 };
 
@@ -110,18 +110,20 @@ describe("avouch.config.json: validation", () => {
   const cases: [string, unknown, string][] = [
     ["not JSON", "{", "(root): not valid JSON"],
     ["an array", [], "(root): must be an object"],
-    ["an unknown key", { ontology: "o.yaml", adapter: { module: "m.mjs" }, extra: 1 }, "extra: unknown key"],
-    ["no ontology", { adapter: { module: "m.mjs" } }, "ontology: missing"],
-    ["empty ontology", { ontology: "", adapter: { module: "m.mjs" } }, "ontology: must be a non-empty string"],
-    ["ontology not a string", { ontology: 5, adapter: { module: "m.mjs" } }, "ontology: must be a non-empty string"],
+    ["an unknown key", { ontology: "o.yaml", adapter: "m.mjs", extra: 1 }, "extra: unknown key"],
+    ["no ontology", { adapter: "m.mjs" }, "ontology: missing"],
+    ["empty ontology", { ontology: "", adapter: "m.mjs" }, "ontology: must be a non-empty string"],
+    ["ontology not a string", { ontology: 5, adapter: "m.mjs" }, "ontology: must be a non-empty string"],
     ["no adapter", { ontology: "o.yaml" }, "adapter: missing"],
-    ["adapter an array", { ontology: "o.yaml", adapter: [] }, "adapter: must be an object"],
-    ["adapter a string", { ontology: "o.yaml", adapter: "m.mjs" }, "adapter: must be an object"],
-    ["adapter empty", { ontology: "o.yaml", adapter: {} }, 'adapter: must have exactly one of "markdown" and "module"'],
-    ["adapter with both", { ontology: "o.yaml", adapter: { module: "m.mjs", markdown: { docs: ["a.md"] } } }, 'adapter: must have exactly one of "markdown" and "module"'],
-    ["unknown adapter key", { ontology: "o.yaml", adapter: { module: "m.mjs", other: 1 } }, "adapter.other: unknown key"],
-    ["empty module", { ontology: "o.yaml", adapter: { module: "" } }, "adapter.module: must be a non-empty string"],
-    ["module not a string", { ontology: "o.yaml", adapter: { module: ["m.mjs"] } }, "adapter.module: must be a non-empty string"],
+    ["adapter an array", { ontology: "o.yaml", adapter: [] }, "adapter: must be a string or an object"],
+    ["adapter a number", { ontology: "o.yaml", adapter: 5 }, "adapter: must be a string or an object"],
+    ["adapter null", { ontology: "o.yaml", adapter: null }, "adapter: must be a string or an object"],
+    ["adapter a boolean", { ontology: "o.yaml", adapter: true }, "adapter: must be a string or an object"],
+    ["adapter an empty string", { ontology: "o.yaml", adapter: "" }, "adapter: must be a non-empty string"],
+    ["adapter an empty object", { ontology: "o.yaml", adapter: {} }, "adapter.markdown: missing"],
+    ["adapter object with module", { ontology: "o.yaml", adapter: { module: "m.mjs" } }, "adapter.module: unknown key"],
+    ["adapter object with both", { ontology: "o.yaml", adapter: { module: "m.mjs", markdown: { docs: ["a.md"] } } }, "adapter.module: unknown key"],
+    ["unknown adapter key", { ontology: "o.yaml", adapter: { markdown: { docs: ["a.md"] }, other: 1 } }, "adapter.other: unknown key"],
     ["markdown not an object", { ontology: "o.yaml", adapter: { markdown: "x.json" } }, "adapter.markdown: must be an object"],
     ["markdown without docs", { ontology: "o.yaml", adapter: { markdown: {} } }, "adapter.markdown: docs: missing"],
     ["markdown with an unknown key", { ontology: "o.yaml", adapter: { markdown: { docs: ["a.md"], extra: 1 } } }, "adapter.markdown: extra: unknown key"],
@@ -522,8 +524,24 @@ describe.skipIf(!gitAvailable)("the old avouch.json", () => {
       const r = runIn(top, ...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(first(r.stderr), args.join(" ")).toContain(
-        `no adapter: pass --adapter, or set adapter in ${join(top, CONFIG)}; ${old} is no longer read: move it to adapter.markdown in ${CONFIG}, or pass --adapter ${old}`,
+        `no adapter: pass --adapter, or set adapter in ${join(top, CONFIG)}; ${old} is no longer read: set "adapter": "avouch/avouch.json" in ${CONFIG}, or pass --adapter ${old}`,
       );
+    }
+  });
+
+  it("a string adapter that names a missing file or a directory: file not found, only when the adapter is used", () => {
+    for (const name of ["gone.json", "gone.mjs", "dir.json", "dir.mjs"]) {
+      const top = repository();
+      write(join(top, ONTOLOGY), waived());
+      if (name.startsWith("dir")) mkdirSync(join(top, name));
+      writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: name });
+      for (const args of [["check"], ["query", "list", "actions", "--check"], ["gate", "verify", "--rows", write(join(top, "rows.jsonl"), ""), "--check"]]) {
+        const r = runIn(top, ...args);
+        expect(r.status, `${name} ${args.join(" ")}`).toBe(2);
+        expect(first(r.stderr), `${name} ${args.join(" ")}`).toContain(`${join(top, CONFIG)}: adapter: file not found`);
+      }
+      const lazy = runIn(top, "query", "list", "actions");
+      expect(lazy.status, lazy.stderr).toBe(0);
     }
   });
 
@@ -548,11 +566,11 @@ describe.skipIf(!gitAvailable)("--check, --config and the stamp", () => {
     expect(text.stdout).toContain("check: pass (0 schema error(s), 0 violation(s), 1 waived)");
   });
 
-  it("query --check with a module: the stamp holds the path of the module", () => {
+  it("query --check with a module path: the stamp holds the path as written in the configuration", () => {
     const top = lenientProject();
     const r = runIn(top, "query", "list", "actions", "--check", "--json");
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(r.stdout).stamp.check).toMatchObject({ status: "pass", adapter: join(top, "tools/lenient.mjs") });
+    expect(JSON.parse(r.stdout).stamp.check).toMatchObject({ status: "pass", adapter: "tools/lenient.mjs" });
   });
 
   it("query --adapter keeps the argument as the stamp value", () => {
@@ -573,7 +591,7 @@ describe.skipIf(!gitAvailable)("--check, --config and the stamp", () => {
     const ok = runIn(top, "gate", "verify", "--rows", rows, "--check", "--json");
     const env = JSON.parse(ok.stdout);
     expect(env.avouchGate).toBe(1);
-    expect(env.check).toMatchObject({ status: "pass", adapter: join(top, "tools/lenient.mjs") });
+    expect(env.check).toMatchObject({ status: "pass", adapter: "tools/lenient.mjs" });
     const strict = runIn(top, "gate", "verify", "--rows", rows, "--adapter", strictAdapter, "--json");
     expect(JSON.parse(strict.stdout).check.status).toBe("fail");
   });
@@ -616,12 +634,70 @@ describe.skipIf(!gitAvailable)("equivalence of the configuration and the command
       const top = repository();
       write(join(top, ONTOLOGY), ontology);
       // the module is the fixture of this checkout, named by a path relative to the configuration
-      writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: { module: relative(top, strictAdapter) } });
+      writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: relative(top, strictAdapter) });
       const byConfig = runIn(top, "check");
       const byArguments = runIn(top, "check", "-f", join(top, ONTOLOGY), "--adapter", strictAdapter);
       expect(byConfig.status).toBe(byArguments.status);
       expect(byConfig.stdout).toBe(byArguments.stdout);
       expect(lastLine(byConfig.stdout)).toMatch(/^(PASS|FAIL): /);
     }
+  });
+
+  it("a .json string: no arguments gives the output and the stamp of --adapter <the same file>", () => {
+    const top = repository();
+    write(join(top, ONTOLOGY), waived());
+    const file = writeJson(join(top, "legacy/avouch.json"), markdown());
+    writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: "legacy/avouch.json" });
+    const byConfig = runIn(top, "check");
+    const byArguments = runIn(top, "check", "-f", join(top, ONTOLOGY), "--adapter", file);
+    expect(byConfig.status, byConfig.stdout + byConfig.stderr).toBe(0);
+    expect(byConfig.status).toBe(byArguments.status);
+    expect(byConfig.stdout).toBe(byArguments.stdout);
+    const q = JSON.parse(runIn(top, "query", "list", "actions", "--check", "--json").stdout);
+    const qa = JSON.parse(runIn(top, "query", "list", "actions", "--adapter", file, "--json").stdout);
+    expect(q.stamp.check).toEqual({ ...qa.stamp.check, adapter: "legacy/avouch.json" });
+    expect(qa.stamp.check.adapter).toBe(file);
+  });
+
+  it("a .mjs string: no arguments gives the output and the stamp of --adapter <the same file>", () => {
+    const top = lenientProject();
+    const file = join(top, "tools/lenient.mjs");
+    const byConfig = runIn(top, "check");
+    const byArguments = runIn(top, "check", "-f", join(top, ONTOLOGY), "--adapter", file);
+    expect(byConfig.status, byConfig.stdout + byConfig.stderr).toBe(0);
+    expect(byConfig.status).toBe(byArguments.status);
+    expect(byConfig.stdout).toBe(byArguments.stdout);
+    const q = JSON.parse(runIn(top, "query", "list", "actions", "--check", "--json").stdout);
+    expect(q.stamp.check).toMatchObject({ status: "pass", adapter: "tools/lenient.mjs" });
+  });
+
+  it("the path is relative to the configuration file, not to the working directory", () => {
+    const top = lenientProject();
+    // a configuration in conf/, a module in tools/, and a working directory that is neither
+    writeJson(join(top, "conf/x.json"), { ontology: `../${ONTOLOGY}`, adapter: "../tools/lenient.mjs" });
+    const elsewhere = directory();
+    const byConfig = runIn(elsewhere, "check", "--config", join(top, "conf/x.json"));
+    const byArguments = runIn(elsewhere, "check", "-f", join(top, ONTOLOGY), "--adapter", join(top, "tools/lenient.mjs"));
+    expect(byConfig.status, byConfig.stdout + byConfig.stderr).toBe(0);
+    expect(byConfig.status).toBe(byArguments.status);
+    expect(byConfig.stdout).toBe(byArguments.stdout);
+    // the same for a .json file
+    writeJson(join(top, "conf/m.json"), markdown());
+    write(join(top, ONTOLOGY), waived());
+    writeJson(join(top, "conf/y.json"), { ontology: `../${ONTOLOGY}`, adapter: "m.json" });
+    const json = runIn(elsewhere, "check", "--config", join(top, "conf/y.json"));
+    const jsonArguments = runIn(elsewhere, "check", "-f", join(top, ONTOLOGY), "--adapter", join(top, "conf/m.json"));
+    expect(json.status, json.stdout + json.stderr).toBe(0);
+    expect(json.stdout).toBe(jsonArguments.stdout);
+  });
+
+  it("a .json string is read only when the adapter is used", () => {
+    const top = repository();
+    write(join(top, ONTOLOGY), waived());
+    writeJson(join(top, CONFIG), { ontology: ONTOLOGY, adapter: "missing/avouch.json" });
+    const q = runIn(top, "query", "list", "actions", "--json");
+    expect(q.status, q.stderr).toBe(0);
+    expect(JSON.parse(q.stdout).stamp.check).toEqual({ status: "not_run" });
+    expect(runIn(top, "check").status).toBe(2);
   });
 });

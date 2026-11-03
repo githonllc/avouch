@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { parse } from "yaml";
@@ -28,7 +28,9 @@ export function adapterFromArgument(arg: string): Adapter {
   return { kind: "markdown", config: parseMarkdownConfig(readFileSync(path, "utf8"), arg), dir: dirname(path), where: arg, label: arg };
 }
 
-interface ProjectConfig { file: string; ontology: string; adapter: Adapter }
+// `adapter` is an adapter ready to run (the inline Markdown configuration), or a string adapter: the path as written in the file
+// and as resolved against it. The file that the string names is checked and read only when the adapter is used.
+interface ProjectConfig { file: string; ontology: string; adapter: Adapter | { written: string; path: string } }
 
 // Reads and validates an avouch.config.json (strict: an unknown key is an error). Throws `<file>: <json path>: <problem>`.
 function loadProjectConfig(file: string): ProjectConfig {
@@ -47,16 +49,15 @@ function loadProjectConfig(file: string): ProjectConfig {
   if (typeof raw.ontology !== "string" || raw.ontology === "") fail("ontology", "must be a non-empty string");
   if (!Object.hasOwn(raw, "adapter")) fail("adapter", "missing");
   const a = raw.adapter;
-  if (!isObj(a)) return fail("adapter", "must be an object");
-  for (const k of Object.keys(a)) if (k !== "markdown" && k !== "module") fail(`adapter.${k}`, "unknown key");
-  if (Object.hasOwn(a, "markdown") === Object.hasOwn(a, "module")) fail("adapter", 'must have exactly one of "markdown" and "module"');
   const dir = dirname(resolve(file));
   const ontology = resolve(dir, raw.ontology);
-  if (Object.hasOwn(a, "module")) {
-    if (typeof a.module !== "string" || a.module === "") fail("adapter.module", "must be a non-empty string");
-    const path = resolve(dir, a.module);
-    return { file, ontology, adapter: { kind: "module", path, label: path } };
+  if (typeof a === "string") {
+    if (a === "") fail("adapter", "must be a non-empty string");
+    return { file, ontology, adapter: { written: a, path: resolve(dir, a) } };
   }
+  if (!isObj(a)) return fail("adapter", "must be a string or an object");
+  for (const k of Object.keys(a)) if (k !== "markdown") fail(`adapter.${k}`, "unknown key");
+  if (!Object.hasOwn(a, "markdown")) fail("adapter.markdown", "missing");
   if (!isObj(a.markdown)) fail("adapter.markdown", "must be an object");
   const where = `${file}: adapter.markdown`;
   return { file, ontology, adapter: { kind: "markdown", config: validateMarkdownConfig(a.markdown, where), dir, where, label: `${file}#adapter` } };
@@ -137,12 +138,16 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
   if (config === null) {
     const dir = dirname(resolve(file));
     const where = top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE;
-    const old = existsSync(join(dir, "avouch.json")) ? `; ${join(dir, "avouch.json")} is no longer read: move it to adapter.markdown in ${CONFIG_FILE}, or pass --adapter ${join(dir, "avouch.json")}` : "";
+    const rel = top !== null ? relative(top, join(dir, "avouch.json")) : join(dir, "avouch.json");
+    const old = existsSync(join(dir, "avouch.json")) ? `; ${join(dir, "avouch.json")} is no longer read: set "adapter": "${rel}" in ${CONFIG_FILE}, or pass --adapter ${join(dir, "avouch.json")}` : "";
     throw new Error(`no adapter: pass --adapter, or set adapter in ${where}${old}`);
   }
   if (o.file !== undefined && real(o.file) !== real(config.ontology))
     throw new Error(`-f ${o.file} is not the ontology in ${config.file} (${config.ontology}): pass --adapter`);
-  return { file, adapter: config.adapter };
+  if (!("written" in config.adapter)) return { file, adapter: config.adapter };
+  // the stamp holds the string as written, as --adapter stamps its argument as given
+  if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
+  return { file, adapter: { ...adapterFromArgument(config.adapter.path), label: config.adapter.written } };
 }
 
 // Built-in Markdown adapter: reads its documents (paths relative to the configuration file).
