@@ -336,7 +336,9 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
     for (const h of list) for (const a of h.anchors) index.set(a, [...(index.get(a) ?? []), h]);
   }
   const lookup = (anchor: string): Heading | "missing" | "ambiguous" => {
-    const hs = index.get(anchor) ?? [];
+    // an anchor with a leading section sign falls back to the anchor without it, only when no heading has the anchor as written
+    let hs = index.get(anchor) ?? [];
+    if (hs.length === 0 && anchor.startsWith("§")) hs = index.get(anchor.slice(1)) ?? [];
     return hs.length === 0 ? "missing" : hs.length > 1 ? "ambiguous" : hs[0];
   };
   const section = (anchor: string): SectionLookup => {
@@ -363,8 +365,10 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
     for (const line of blocks[0].split("\n")) {
       const t = line.split("//")[0].trim();
       if (t === "") continue;
-      if (/\s/.test(t)) parseError(name, `facts.${name}: catalog line has white space: ${t}`);
-      else set.add(t);
+      // " / " separates names, as in a field list; `a/b` stays one name
+      const parts = t.split(" / ").map((x) => x.trim());
+      if (parts.some((x) => x === "" || /\s/.test(x))) parseError(name, `facts.${name}: catalog line has an empty name or white space in a name: ${t}`);
+      else for (const x of parts) set.add(x);
     }
     return set;
   };
@@ -428,7 +432,7 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
             continue;
           }
           const keys = new Set(codeContents(row[1]));
-          for (const name of row[0].split(",").map((x) => x.trim()).filter((x) => x !== "")) {
+          for (const name of row[0].split(/[,、]/).map((x) => x.trim()).filter((x) => x !== "")) {
             if (rows.has(name)) parseError("permissions", `facts.permissions: row ${name} is listed more than once; the first row is kept`);
             else rows.set(name, { keys, text: row[1] });
           }
