@@ -28,6 +28,19 @@ Read in this order:
 2. `examples/library/`: `library.md`, then `library.ontology.yaml`, then `adapter.ts`, then `profile.ts`
 3. `docs/adapter-guide.md`
 
+## Adopting Avouch
+
+Two steps, in this order.
+
+1. Every project: keep a document review ledger, and run `avouch gate docs` in CI. See "Document review ledger (gate docs)". The gate works with any Markdown style. It guarantees that each changed section of a design document has a recorded review decision. It does not guarantee that the decision is complete: it does not check that a person read the section, that `claims` lists every claim, or that the claimed places say what the section says.
+2. For the structured checks, choose one path. The checks are: the field lists and catalogs of R2, and R3, R5, R6, R8, R9 and R10 (SPEC section 5). Each needs a fact from the project's documents (SPEC section 6). R7 needs execution evidence, which the built-in adapter does not read.
+   - (a) Write the documents to the Markdown convention, `docs/markdown-convention.md`, and use the built-in adapter. `avouch facts` checks the documents without an ontology.
+   - (b) Write your own adapter: `docs/adapter-guide.md` sections 1 to 6. The grammar of the documents is then free.
+
+Avouch does not widen the built-in grammar for one project.
+
+A rule whose fact is not available is switched off in the profile, with a reason: `"rules": {"R8": {"disabled": "<reason>"}}` (in `profile` of the Markdown configuration; `docs/adapter-guide.md` section 5). The checker prints the reason. Without the switch, the rule reports `fact_missing` for the missing fact. The built-in adapter switches R3 and R9 off by itself when their facts are not set, and R7 always (`docs/adapter-guide.md` section 7).
+
 ## Layout
 
 | Path | Content |
@@ -54,7 +67,7 @@ Read in this order:
 
 ## Write an adapter
 
-A project supplies an adapter and a profile. The adapter reads the project's sources and returns `SourceFacts`. The profile sets the rule switches and the project patterns. `docs/adapter-guide.md` explains each fact and walks through the toy library adapter.
+A project supplies an adapter and a profile. The adapter reads the project's sources and returns `SourceFacts`. The profile sets the rule switches and the project patterns. `docs/adapter-guide.md` explains each fact and walks through the toy library adapter. A project that writes its documents to `docs/markdown-convention.md` needs no adapter; see "Adopting Avouch".
 
 ## Tests
 
@@ -290,7 +303,7 @@ Inside a Claude Code session, the same two steps are `/plugin marketplace add gi
 
 The plugin has two skills and one hook. The skills:
 - `cli` (`/avouch:cli`): checks an ontology and runs `avouch query`.
-- `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document. When most objects have no documented field list, it also writes `avouch/doc-patch.md`: field lists, foreign keys and store names derived from the code, for a human to review and merge into the documents. It never drafts states, permissions or rules from code.
+- `scan` (`/avouch:scan [project-dir]`): drafts or updates a project's ontology from its design documents, and records the review decision of each document section in the ledger (`avouch gate docs` must pass). It uses the adapter that the project has configured and never writes an adapter. The result is a candidate. `avouch check` must exit 0, and each source gap is listed with a proposed fix to the document. When most objects have no documented field list, it also writes `avouch/doc-patch.md`: field lists, foreign keys and store names derived from the code, for a human to review and merge into the documents. It never drafts states, permissions or rules from code.
 
 The plugin also has a hook (`hooks/hooks.json`, script `hooks/ontology-read-guard.mjs`, Node 22 or later). Before a Bash or Grep call, it blocks a text read of an ontology (`*.ontology.yaml`, `*.ontology.yml`, or a directory named `ontology` that holds an `*.ontology.yaml` file) with tools such as `grep`, `rg`, `sed`, `cat`, `head`, `python` or `yq`, and tells Claude to use `avouch query`. The reason: text output mixes YAML comments and neighbouring entries with the ontology content, and a comment looks like ontology semantics, but the checker never reads comments. `avouch query` gives the structured permission, conditions, decision rows, effects and citations, with the commit and the check status. The hook allows `avouch` itself, `git`, the Read and Edit tools, searches that do not name the ontology, and a write such as `cat > <file>.ontology.yaml`. A script runtime (`node`, `deno`, `bun`, `python`, `ruby`, `perl`) is blocked only for inline code (`-e`, `-c`, stdin), not for a script file. The hook also allows the locate form `grep -n -- <anchor> <file>.ontology.yaml | cut -d: -f1` that finds the lines to edit; the grep must print line numbers (`-n`). The hook is a reminder, not a guarantee: it matches command text, so a recursive search of a parent directory, a shell variable or `bash -c` is not seen, and the Read tool also shows comments. It does nothing in a clone of this repository, where the test fixtures need the raw text. The hook is part of the plugin: to turn it off, disable or uninstall the plugin.
 
