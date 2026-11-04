@@ -31,7 +31,7 @@ export function adapterFromArgument(arg: string): Adapter {
 // `adapter` is an adapter ready to run (the inline Markdown configuration), or a string adapter: the path as written in the file
 // and as resolved against it. The file that the string names is checked and read only when the adapter is used.
 // `ledger`: the optional `ledger` key of `avouch gate docs`, validated, with its paths as written.
-interface ProjectConfig { file: string; ontology: string; adapter: Adapter | { written: string; path: string }; ledger: { file?: string; docs?: string[] } | null }
+interface ProjectConfig { file: string; ontology: string | null; adapter: Adapter | { written: string; path: string }; ledger: { file?: string; docs?: string[] } | null }
 
 // Reads and validates an avouch.config.json (strict: an unknown key is an error). Throws `<file>: <json path>: <problem>`.
 // `label` names the file in the stamp: the --config argument as given, or CONFIG_FILE when the file was found at the git top.
@@ -47,12 +47,12 @@ function loadProjectConfig(file: string, label: string): ProjectConfig {
   }
   if (!isObj(raw)) return fail("(root)", "must be an object");
   for (const k of Object.keys(raw)) if (k !== "ontology" && k !== "adapter" && k !== "ledger") fail(k, "unknown key");
-  if (!Object.hasOwn(raw, "ontology")) fail("ontology", "missing");
-  if (typeof raw.ontology !== "string" || raw.ontology === "") fail("ontology", "must be a non-empty string");
+  // `ontology` is optional here; a command that needs it fails in resolveProject or resolveLedger
+  if (Object.hasOwn(raw, "ontology") && (typeof raw.ontology !== "string" || raw.ontology === "")) fail("ontology", "must be a non-empty string");
   if (!Object.hasOwn(raw, "adapter")) fail("adapter", "missing");
   const a = raw.adapter;
   const dir = dirname(resolve(file));
-  const ontology = resolve(dir, raw.ontology);
+  const ontology = typeof raw.ontology === "string" ? resolve(dir, raw.ontology) : null;
   let ledger: ProjectConfig["ledger"] = null;
   if (Object.hasOwn(raw, "ledger")) {
     const l = raw.ledger;
@@ -108,6 +108,15 @@ const real = (path: string): string => {
   }
 };
 
+// The project configuration: `configArg` (--config), else avouch.config.json at the git top level of `startDir` (a directory
+// that is not in a git repository has none). `top` is the git top level when it was looked up.
+function findProjectConfig(configArg: string | undefined, startDir: string): { config: ProjectConfig | null; top: string | null } {
+  if (configArg !== undefined) return { config: loadProjectConfig(configArg, configArg), top: null };
+  const top = gitTop(startDir);
+  const file = top !== null && existsSync(join(top, CONFIG_FILE)) ? join(top, CONFIG_FILE) : null;
+  return { config: file !== null ? loadProjectConfig(file, CONFIG_FILE) : null, top };
+}
+
 export interface ProjectOptions {
   /** -f */
   file?: string;
@@ -134,22 +143,11 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
   const readConfig = o.file === undefined || needAdapterFromConfig;
   let top: string | null = null;
   let config: ProjectConfig | null = null;
-  if (readConfig) {
-    let configFile: string | null = null;
-    let label = CONFIG_FILE;
-    if (o.config !== undefined) {
-      configFile = o.config;
-      label = o.config;
-    } else {
-      // with -f, a directory that is not in a git repository has no configuration file
-      top = gitTop(o.file !== undefined ? dirname(resolve(o.file)) : process.cwd());
-      if (top !== null && existsSync(join(top, CONFIG_FILE))) configFile = join(top, CONFIG_FILE);
-    }
-    if (configFile !== null) config = loadProjectConfig(configFile, label);
-  }
+  if (readConfig) ({ config, top } = findProjectConfig(o.config, o.file !== undefined ? dirname(resolve(o.file)) : process.cwd()));
   let file: string;
   if (o.file !== undefined) file = o.file;
   else if (config !== null) {
+    if (config.ontology === null) throw new Error(`${config.file}: ontology: missing`);
     if (!isFile(config.ontology)) throw new Error(`${config.file}: ontology: file not found`);
     file = config.ontology;
   } else {
@@ -168,7 +166,8 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
     const old = existsSync(join(dir, "avouch.json")) ? `; ${join(dir, "avouch.json")} is no longer read: set "adapter": "${rel}" in ${CONFIG_FILE}, or pass --adapter ${join(dir, "avouch.json")}` : "";
     throw new Error(`no adapter: pass --adapter, or set adapter in ${where}${old}`);
   }
-  if (o.file !== undefined && real(o.file) !== real(config.ontology))
+  // a configuration without `ontology` has nothing to differ from -f
+  if (o.file !== undefined && config.ontology !== null && real(o.file) !== real(config.ontology))
     throw new Error(`-f ${o.file} is not the ontology in ${config.file} (${config.ontology}): pass --adapter`);
   if (!("written" in config.adapter)) return { file, adapter: config.adapter };
   // the stamp holds the string as written, as --adapter stamps its argument as given
@@ -197,6 +196,8 @@ export function resolveLedger(configOption: string | undefined): LedgerProject {
     if (!existsSync(configFile)) throw new Error(`no --config, and no ${CONFIG_FILE} at ${top}`);
   }
   const c = loadProjectConfig(configFile, label);
+  if (c.ontology === null) throw new Error(`${configFile}: ontology: missing`);
+  const ontology = c.ontology;
   const dir = dirname(resolve(configFile));
   let base = dir;
   let docs: string[];
@@ -209,7 +210,7 @@ export function resolveLedger(configOption: string | undefined): LedgerProject {
     base = dirname(c.adapter.path);
   }
   const rel = docs.map((d) => relative(dir, resolve(base, d)).split(sep).join("/"));
-  // file identity (device and inode), as in markdownAdapter: a case variant on a case-insensitive file system or a link is the same document
+  // file identity (device and inode), as in readDocs: a case variant on a case-insensitive file system or a link is the same document
   const ids = rel.map((d) => {
     try {
       const st = statSync(resolve(dir, d));
@@ -221,12 +222,12 @@ export function resolveLedger(configOption: string | undefined): LedgerProject {
   ids.forEach((id, j) => {
     if (ids.indexOf(id) !== j) throw new Error(`${configFile}: ledger: document ${rel[j]} is named twice`);
   });
-  if (!isFile(c.ontology)) throw new Error(`${configFile}: ontology: file not found`);
-  return { config: configFile, dir, ledger: resolve(dir, c.ledger?.file ?? "avouch.ledger.jsonl"), ontology: c.ontology, docs: rel };
+  if (!isFile(ontology)) throw new Error(`${configFile}: ontology: file not found`);
+  return { config: configFile, dir, ledger: resolve(dir, c.ledger?.file ?? "avouch.ledger.jsonl"), ontology, docs: rel };
 }
 
-// Built-in Markdown adapter: reads its documents (paths relative to the configuration file).
-function markdownAdapter(a: Extract<Adapter, { kind: "markdown" }>): SourceFacts {
+// Reads the documents of a Markdown configuration (paths relative to the configuration file).
+export function readDocs(a: Extract<Adapter, { kind: "markdown" }>): MarkdownDoc[] {
   const cfg = a.config;
   const docError = (i: number, error: unknown) => new Error(`${a.where}: docs[${i}]: ${(error as Error).message}`);
   const paths = cfg.docs.map((doc) => resolve(a.dir, doc));
@@ -243,14 +244,36 @@ function markdownAdapter(a: Extract<Adapter, { kind: "markdown" }>): SourceFacts
     const i = ids.indexOf(id);
     if (i !== j) throw new Error(`${a.where}: docs[${j}]: duplicate of docs[${i}]`);
   });
-  const docs: MarkdownDoc[] = paths.map((path, i) => {
+  return paths.map((path, i) => {
     try {
       return { path: cfg.docs[i], text: readFileSync(path, "utf8") };
     } catch (error) {
       throw docError(i, error);
     }
   });
-  return markdownFacts(docs, cfg);
+}
+
+// Built-in Markdown adapter: reads its documents.
+const markdownAdapter = (a: Extract<Adapter, { kind: "markdown" }>): SourceFacts => markdownFacts(readDocs(a), a.config);
+
+/**
+ * The Markdown configuration of `avouch facts`: --adapter, else the `adapter` of the project configuration (--config, else
+ * avouch.config.json at the git top level of the working directory). Reads no ontology. A module adapter is an error.
+ */
+export function resolveMarkdownAdapter(o: { config?: string; adapter?: string }): Extract<Adapter, { kind: "markdown" }> {
+  if (o.config !== undefined && !isFile(o.config)) throw new Error(`--config ${o.config}: file not found`);
+  let adapter: Adapter;
+  if (o.adapter !== undefined) adapter = adapterFromArgument(o.adapter);
+  else {
+    const { config, top } = findProjectConfig(o.config, process.cwd());
+    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}`);
+    if ("written" in config.adapter) {
+      if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
+      adapter = { ...adapterFromArgument(config.adapter.path), label: config.adapter.written };
+    } else adapter = config.adapter;
+  }
+  if (adapter.kind !== "markdown") throw new Error("facts: the adapter must be a Markdown configuration");
+  return adapter;
 }
 
 // Runs the JSON Schema validator and the checker on one ontology file with one adapter: a module that exports `facts`, or the

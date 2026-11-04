@@ -1,5 +1,5 @@
 // Built-in adapter for plain Markdown sources: document text in, SourceFacts out. It reads no file (the command line reads
-// the configuration and the documents). The parse conventions are fixed here; docs/adapter-guide.md section 7 states them.
+// the configuration and the documents). The parse conventions are fixed here; docs/markdown-convention.md states them.
 import { IDENT, RULES, type Diagnostic, type Fact, type FormatConfig, type PermissionRow, type RuleId, type RuleSwitch, type SectionLookup, type SourceFacts, type StateMachineFact } from "./contract.js";
 
 export interface MarkdownDoc { path: string; text: string }
@@ -135,22 +135,22 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
  * Which lines are inside a ``` fence (opening and closing lines included), and the closed fenced blocks (info string and
  * body lines). A fence opens on a line that, after at most three leading spaces, starts with n >= 3 backticks; it closes
  * only on a line of >= n backticks (after at most three leading spaces) followed by nothing but white space.
- * `open`: the text ends inside a fence.
+ * `start`: the index of the opening line. `open`: the text ends inside a fence.
  */
-function fences(lines: string[]): { inFence: boolean[]; open: boolean; blocks: { info: string; body: string[] }[] } {
+function fences(lines: string[]): { inFence: boolean[]; open: boolean; blocks: { info: string; body: string[]; start: number }[] } {
   const inFence: boolean[] = [];
-  const blocks: { info: string; body: string[] }[] = [];
-  let n = 0, info = "", body: string[] = [];
-  for (const line of lines) {
+  const blocks: { info: string; body: string[]; start: number }[] = [];
+  let n = 0, info = "", body: string[] = [], start = 0;
+  for (const [i, line] of lines.entries()) {
     if (n === 0) {
       const m = /^ {0,3}(`{3,})(.*)$/.exec(line);
-      if (m) [n, info, body] = [m[1].length, m[2].trim(), []];
+      if (m) [n, info, body, start] = [m[1].length, m[2].trim(), [], i];
       inFence.push(m !== null);
     } else {
       const m = /^ {0,3}(`{3,})\s*$/.exec(line);
       if (m && m[1].length >= n) {
         n = 0;
-        blocks.push({ info, body });
+        blocks.push({ info, body, start });
       } else body.push(line);
       inFence.push(true);
     }
@@ -163,12 +163,13 @@ const END = /^<!-- END GENERATED: ([A-Za-z0-9._-]+) -->$/;
 
 /**
  * The text without its generated blocks (marker lines included), and `breaks`: the indexes of the kept lines that follow a
- * removed block (a pipe table does not run across one). Throws on a malformed, nested, mismatched or unclosed marker.
+ * removed block (a pipe table does not run across one), and `origin`: the index in the given text of each kept line. Throws on a malformed, nested, mismatched or unclosed marker.
  */
-function withoutGenerated(text: string): { text: string; breaks: Set<number> } {
+function withoutGenerated(text: string): { text: string; breaks: Set<number>; origin: number[] } {
   const lines = text.split("\n");
   const { inFence } = fences(lines);
   const kept: string[] = [];
+  const origin: number[] = [];
   const breaks = new Set<number>();
   let open: string | null = null, removed = false;
   lines.forEach((line, i) => {
@@ -189,12 +190,13 @@ function withoutGenerated(text: string): { text: string; breaks: Set<number> } {
     if (removed) breaks.add(kept.length);
     removed = false;
     kept.push(line);
+    origin.push(i);
   });
   if (open !== null) throw new Error(`generated block ${open} is not closed`);
-  return { text: kept.join("\n"), breaks };
+  return { text: kept.join("\n"), breaks, origin };
 }
 
-interface Heading { title: string; text: string; anchors: string[]; breaks: Set<number> } // breaks: relative to the heading line
+interface Heading { title: string; text: string; anchors: string[]; breaks: Set<number>; line: number } // breaks: relative to the heading line
 
 /** The ATX heading lines outside fences: line index (from 0), level and title as written. `open`: the text ends inside a fence. */
 export function atxHeadings(lines: string[]): { heads: { line: number; level: number; title: string }[]; open: boolean } {
@@ -222,7 +224,7 @@ function headings(text: string, breaks: Set<number>): { list: Heading[]; fenceOp
     const short = t.split(/\s+/)[0].replace(/\.$/, "");
     const full = t.replace(/\s+#+$/, "").trim();
     const own = new Set([...breaks].filter((b) => b > h.line && b < end).map((b) => b - h.line));
-    return { title: h.title, text: lines.slice(h.line, end).join("\n"), anchors: [...new Set([short, full])].filter((a) => a !== ""), breaks: own };
+    return { title: h.title, text: lines.slice(h.line, end).join("\n"), anchors: [...new Set([short, full])].filter((a) => a !== ""), breaks: own, line: h.line };
   });
   return { list, fenceOpen: open };
 }
@@ -344,7 +346,7 @@ const TRANSITION = new RegExp(`^(${NAME}(?: / ${NAME})*) (?:→|->) (${NAME}(?: 
 /** The first line of a mermaid body that is not empty and not a `%%` comment, trimmed ("" when there is none). */
 const firstMermaidLine = (body: string[]): string => body.map((l) => l.trim()).find((l) => l !== "" && !l.startsWith("%%")) ?? "";
 
-/** The state machine of one diagram body (see docs/adapter-guide.md section 7), or null after one `err` call for each line outside the grammar. */
+/** The state machine of one diagram body (see docs/markdown-convention.md), or null after one `err` call for each line outside the grammar. */
 function stateMachine(body: string[], err: (msg: string) => void): StateMachineFact | null {
   const nodes: string[] = [], initial: string[] = [], edges: string[] = [];
   const add = (list: string[], x: string) => void (list.includes(x) || list.push(x));
@@ -387,19 +389,74 @@ function stateMachine(body: string[], err: (msg: string) => void): StateMachineF
 
 // ------------------------------------------------------------------------------------------ facts
 
+/** The text that the adapter reads: no BOM, LF line ends, generated blocks removed (when they are malformed, none is removed and `error` is the message). */
+function prepared(d: MarkdownDoc): { text: string; breaks: Set<number>; origin: number[]; error: string | null } {
+  const text = d.text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  try {
+    return { ...withoutGenerated(text), error: null };
+  } catch (error) {
+    return { text, breaks: new Set(), origin: text.split("\n").map((_, i) => i), error: (error as Error).message };
+  }
+}
+
+/** The fields of a field-list block: `- name`, `- a / b?`, with an optional trailing `// comment`. The first line (the object type) and any other line are not fields. */
+function fieldLines(lines: string[]): Map<string, { nullable: boolean }> {
+  const fields = new Map<string, { nullable: boolean }>();
+  for (const line of lines) {
+    const m = /^- (.+?)(?:\s*\/\/.*)?$/.exec(line);
+    if (m)
+      for (const part of m[1].split(" / ")) {
+        const t = part.trim();
+        const name = t.replace(/\?$/, "");
+        fields.set(name, { nullable: t.endsWith("?") || (fields.get(name)?.nullable ?? false) });
+      }
+  }
+  return fields;
+}
+
+/** A top-level `text` code block of a document, as `avouch facts` reports it. */
+export interface TextBlock {
+  doc: string;
+  /** the short anchor of the innermost section that holds the block, or "" before the first heading */
+  anchor: string;
+  /** the first line of the block, trimmed (the object type of a field list) */
+  first: string;
+  /** line (1-based, in the document as written) of the opening fence */
+  line: number;
+  fields: Map<string, { nullable: boolean }>;
+  /** lines after the first that are not empty, not a `- ` line and not only a `//` comment */
+  strays: { line: number; text: string }[];
+}
+
+/** The top-level `text` code blocks of the documents, in the text that the adapter reads (generated blocks removed). */
+export function markdownTextBlocks(docs: MarkdownDoc[]): TextBlock[] {
+  const out: TextBlock[] = [];
+  for (const d of docs) {
+    const { text, breaks, origin } = prepared(d);
+    const lines = text.split("\n");
+    const { list } = headings(text, breaks);
+    for (const b of fences(lines).blocks) {
+      if (b.info !== "text") continue;
+      const heading = list.filter((h) => h.line < b.start).at(-1);
+      const strays: TextBlock["strays"] = [];
+      b.body.forEach((l, i) => {
+        const t = l.trim();
+        if (i > 0 && t !== "" && !l.startsWith("- ") && !t.startsWith("//")) strays.push({ line: origin[b.start + 1 + i] + 1, text: t });
+      });
+      out.push({ doc: d.path, anchor: heading?.anchors[0] ?? "", first: (b.body[0] ?? "").trim(), line: origin[b.start] + 1, fields: fieldLines(b.body), strays });
+    }
+  }
+  return out;
+}
+
 /** Facts from plain Markdown documents. Optional facts are present exactly when their anchor is configured. */
 export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): SourceFacts {
   const diagnostics: Diagnostic[] = [];
   const texts: string[] = [];
   const index = new Map<string, Heading[]>();
   for (const d of docs) {
-    let text = d.text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-    let breaks = new Set<number>();
-    try {
-      ({ text, breaks } = withoutGenerated(text));
-    } catch (error) {
-      diagnostics.push({ rule: "R2", kind: "markdown_generated_blocks", key: `doc:${d.path}`, msg: `${d.path}: ${(error as Error).message}` });
-    }
+    const { text, breaks, error } = prepared(d);
+    if (error !== null) diagnostics.push({ rule: "R2", kind: "markdown_generated_blocks", key: `doc:${d.path}`, msg: `${d.path}: ${error}` });
     texts.push(text);
     const { list, fenceOpen } = headings(text, breaks);
     if (fenceOpen) diagnostics.push({ rule: "R2", kind: "markdown_fence", key: `doc:${d.path}`, msg: `${d.path}: a fence is not closed at the end of the document` });
@@ -454,17 +511,7 @@ export function markdownFacts(docs: MarkdownDoc[], config: MarkdownConfig): Sour
       if (typeof h === "string") return null;
       const blocks = textBlocks(h.text).filter((b) => b.split("\n")[0].trim() === objectType);
       if (blocks.length !== 1) return null;
-      const fields = new Map<string, { nullable: boolean }>();
-      for (const line of blocks[0].split("\n")) {
-        const m = /^- (.+?)(?:\s*\/\/.*)?$/.exec(line);
-        if (m)
-          for (const part of m[1].split(" / ")) {
-            const t = part.trim();
-            const name = t.replace(/\?$/, "");
-            fields.set(name, { nullable: t.endsWith("?") || (fields.get(name)?.nullable ?? false) });
-          }
-      }
-      return f(anchor, fields);
+      return f(anchor, fieldLines(blocks[0].split("\n")));
     },
   };
 
