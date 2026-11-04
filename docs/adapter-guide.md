@@ -45,6 +45,16 @@ The toy adapter writes these facts as literals to keep the example small. A real
 
 `examples/library/evidence.ts` supplies the execution evidence: for each evidence id, a list of invocation records (SPEC section 4). Each record has a harness-generated id, the outcome, a snapshot reference, the evaluation inputs and, when committed, the net change per store row by row (keyed by a stable row identity) and the events written. The checker derives the changed stores and the committed count from the records. Always set the record id: a record without one is keyed by its list position, and that key is not stable for waivers. Do not reuse a row identity within one invocation (SPEC section 4).
 
+### Writing your own adapter
+
+A project that does not write its documents to the Markdown convention (`docs/markdown-convention.md`) writes its own adapter. Follow these rules:
+
+- Derive every fact from the source text. Parse it at run time, so that a change in a source document shows as a violation.
+- Put no expected value in the adapter code: no state, edge, trigger, key, event, scenario or catalog name. A value in code is a value that the check cannot compare with the documents. The toy adapter uses literals only to keep the example small (see above).
+- Take no fact from text generated from the ontology (SPEC section 4). Remove generated text before you extract any fact.
+
+Not guaranteed: the checker cannot check these rules. It sees the facts that the adapter returns, not how the adapter made them. Review the adapter in the pull request, as you review the ledger.
+
 ## 4. Rules that need no project facts
 
 R1, R4 and R11 never report `fact_missing` (SPEC section 6). R4 and R11 read only the ontology. R1 reads the ontology and the profile; when an action names `evidence`, R1 also needs the `evidence` fact to resolve it.
