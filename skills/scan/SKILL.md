@@ -53,7 +53,7 @@ git ls-files '*.ontology.yaml' 'avouch.config.json' 'avouch.json' '**/avouch.jso
 { "ontology": "avouch/avouch.ontology.yaml", "adapter": { "markdown": { "docs": ["docs/design.md"], "facts": {}, "profile": {} } } }
 ```
 
-Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permissions`, `scenarios`, `stateMachines`, `transitionTriggers`) only when a document section already holds that fact in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository). R3 runs only when `facts.stateMachines` and `facts.transitionTriggers` are both set, and you may set them only when the documents already hold a state diagram and a transition table in the adapter syntax. Do not add sections to the documents yourself.
+Add a `facts` anchor (`storeCatalog`, `eventCatalog`, `contextMembers`, `permissions`, `scenarios`, `stateMachines`, `transitionTriggers`) only when a document section already holds that fact in the adapter syntax (`docs/markdown-convention.md` of the Avouch repository). R3 runs only when `facts.stateMachines` and `facts.transitionTriggers` are both set, and you may set them only when the documents already hold a state diagram and a transition table in the adapter syntax. Do not add sections to the documents yourself.
 
 Write the ontology in the shape of `examples/library/library.ontology.yaml` of the Avouch repository. Read `SPEC.md` sections 2 and 9 of the Avouch repository for the keys and expressions. Model only what a document states:
 
@@ -93,7 +93,7 @@ Do this step after Step 3 when at least half of the object types have a `knownSo
 Write `avouch/doc-patch.md`, and replace the file if an earlier run wrote one. When this step does not apply, delete an earlier `avouch/doc-patch.md`. Do not edit the documents: a human reviews the patch and merges what is intended design. Do not add the patched fields to the ontology until a document holds them; the `code:` lines belong to the patch, never to the ontology.
 
 - First line: `<!-- Derived from code at <git short sha>; unreviewed. Merge only the fields that are intended design, then run /avouch:scan again. -->`
-- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/adapter-guide.md` section 7 of the Avouch repository): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
+- One section per `field_list_missing` object: the target document and heading (the object's `doc`), then a `text` block in the adapter syntax (`docs/markdown-convention.md` of the Avouch repository): the object name on the first line, then one `- <field>` line per column, with a trailing `?` for a nullable column. After the block, one line `code: <file:line>` for each place the fields come from.
 - When no document lists the store names, add to the patch one `Store Catalog` section with a `text` block of the table names, one per line.
 - Structure only: fields, foreign keys and store names. Do not draft states, transitions, permissions, conditions or decision orders from the code, even when the code has them. List them in the report (item 6) with the code `file:line`. A reviewer tends to accept drafted behavior as written, and the check would then confirm the code's own bugs.
 - When the documents and the code name a field differently, use the document's name and put the code name on the `code:` line.

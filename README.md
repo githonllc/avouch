@@ -87,6 +87,14 @@ The adapter module must export a named function `facts(ontologyPath)` that retur
 
 An `--adapter` path that ends in `.json` is not loaded as a module: it is the configuration of the built-in Markdown adapter (`src/markdown.ts`, `docs/adapter-guide.md` section 7). Without `--adapter`, the adapter is the `adapter` of the project configuration. `avouch check` always runs the check: when there is no adapter, the command prints the reason and the usage and exits with 2. `avouch query` and `avouch gate verify` run it only with `--check` or `--adapter`; otherwise their check stays `not_run`.
 
+### facts
+
+```sh
+avouch facts [--config <avouch.config.json>] [--adapter <config.json>] [--json] [--inventory <file.json>]
+```
+
+`avouch facts` checks design documents against the built-in Markdown adapter, without an ontology. It reads the documents of a Markdown configuration (`--adapter <config.json>`, else the `adapter` of the project configuration; a module adapter is an error) and prints what the adapter read: one `FACT <name> <anchor>: <summary>` line for each fact (`FACT <name>: not configured` for a fact without an anchor), one `FIELDS <section>#<first line>: <n> field(s)` line for each top-level `text` code block, a `WARN` line for a line in such a block that is not a field line (a warning only), and a `DIAG <rule> <kind> <key>: <msg>` line for each diagnostic of the adapter. The last line is `OK: 0 diagnostic(s)` or `FAIL: <n> diagnostic(s)`. `--json` prints one object `{"facts", "fields", "warnings", "diagnostics"}` instead. `--inventory <file.json>` compares the facts and fields with an inventory file `{"conventionVersion": 1, "facts": {...}, "fields": {...}, "prose": [...]}` (`conventionVersion` is the version of the Markdown convention, `docs/markdown-convention.md`) (the shapes of `--json`; `prose` is ignored) and prints each difference as `DIFF <path>: inventory <x>, document <y>`. Exit code 0 means no diagnostic and no difference; 1 means a diagnostic or a difference; 2 means invalid arguments or a configuration or file error.
+
 ## Configuration
 
 The project configuration `avouch.config.json` names the ontology file and the adapter, so that a command needs no `-f` and no `--adapter`. It is strict JSON; an unknown key is an error. Every path in it is relative to the configuration file.
@@ -105,7 +113,7 @@ The project configuration `avouch.config.json` names the ontology file and the a
 }
 ```
 
-- `ontology`: required, a non-empty string.
+- `ontology`: optional; when present, a non-empty string. A command that needs the ontology file (`check`, `query`, `reconcile`, `gate verify`) and has no `-f` fails with `<configuration file>: ontology: missing`. `avouch facts` needs no ontology, and `avouch check -f <file>` with a configuration that has no `ontology` uses the adapter of the configuration (there is no ontology to compare with `-f`).
 - `adapter`: required, in one of two forms.
   - A string: a file path, relative to the configuration file, with the same meaning as `--adapter`. A path that ends in `.json` is the configuration of the built-in Markdown adapter (a stand-alone file; its `docs` are relative to that file); any other path is an adapter module (`facts(ontologyPath)`). The file is read only when the command uses the adapter. An empty string is an error, and so is a path that is not a file (`<configuration file>: adapter: file not found`). In a query or gate stamp, `check.adapter` is the string as written in the configuration file (as `--adapter` stamps its argument as given).
   - An object with one key, `markdown`: the configuration of the built-in Markdown adapter, inline (`docs`, `facts`, `profile`; `docs/adapter-guide.md` section 7). Any other key (also `module`) is an unknown key. In a stamp, `check.adapter` is `<configuration file>#adapter`, where the configuration file is the `--config` argument as given, or `avouch.config.json` when the file was found at the git top level.

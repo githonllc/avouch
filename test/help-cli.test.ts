@@ -25,11 +25,12 @@ const COMMANDS: [string[], string[]][] = [
   [["gate"], [all[3], all[4]]],
   [["gate", "verify"], [all[3]]],
   [["gate", "docs"], [all[4]]],
+  [["facts"], [all[5]]],
 ];
 
 describe("avouch --help", () => {
   it("no command and an unknown command keep the usage on stderr with exit 2", () => {
-    expect(all).toHaveLength(5);
+    expect(all).toHaveLength(6);
     for (const args of [[], ["frobnicate"], ["frobnicate", "--help"]]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
@@ -62,6 +63,7 @@ describe("avouch --help", () => {
       ["reconcile", "--cases", "c.jsonl", "-h"],
       ["gate", "verify", "--rows", "r.jsonl", "--baseline", "b.json", "--help"],
       ["gate", "docs", "--json", "-h"],
+      ["facts", "--json", "--help"],
     ]) {
       const r = run(...args);
       expect(r.status, `${args.join(" ")}: ${r.stderr}`).toBe(0);
@@ -78,6 +80,7 @@ describe("avouch --help", () => {
       ["reconcile", "--cases", "-h"],
       ["gate", "verify", "--rows", "--help"],
       ["gate", "docs", "--config", "-h"],
+      ["facts", "--adapter", "--help"],
     ]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).not.toBe(0);
