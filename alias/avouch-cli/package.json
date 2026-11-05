@@ -1,0 +1,27 @@
+{
+  "name": "avouch-cli",
+  "version": "0.1.0",
+  "description": "Forwards to the avouch CLI. Use `npx -y avouch` instead.",
+  "license": "Apache-2.0",
+  "author": "Githon LLC",
+  "homepage": "https://avouch.dev/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/githonllc/avouch.git",
+    "directory": "alias/avouch-cli"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "avouch-cli": "avouch-cli.js"
+  },
+  "files": [
+    "avouch-cli.js",
+    "README.md"
+  ],
+  "dependencies": {
+    "avouch": "*"
+  }
+}
