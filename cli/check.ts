@@ -14,6 +14,8 @@ import { markdownFacts, parseMarkdownConfig, validateMarkdownConfig, type Markdo
 export const CONFIG_FILE = "avouch.config.json";
 
 // The next step when a repository has no Avouch project yet (no configuration and no default ontology).
+// The next step of `avouch facts` without an adapter: the smallest configuration of the built-in Markdown adapter needs no code.
+export const FACTS_HINT = `the smallest one is {"adapter": {"markdown": {"docs": ["docs/design.md"]}}}; for the grammar see https://github.com/githonllc/avouch/blob/main/docs/markdown-convention.md, for documents in another form see https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md`;
 export const SETUP_HINT = `to set up a project, run \`npx -y @githonllc/avouch init\`, then /avouch:scan in Claude Code (it drafts ${CONFIG_FILE} and a first ontology)`;
 
 /**
@@ -269,7 +271,7 @@ export function resolveMarkdownAdapter(o: { config?: string; adapter?: string })
   if (o.adapter !== undefined) adapter = adapterFromArgument(o.adapter);
   else {
     const { config, top } = findProjectConfig(o.config, process.cwd());
-    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}; ${SETUP_HINT}`);
+    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}; ${FACTS_HINT}`);
     if ("written" in config.adapter) {
       if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
       adapter = { ...adapterFromArgument(config.adapter.path), label: config.adapter.written };

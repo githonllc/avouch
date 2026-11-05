@@ -258,12 +258,22 @@ describe.skipIf(!gitAvailable)("errors", () => {
 
   it("no configuration: the error names the next step (init, then /avouch:scan), on one line", () => {
     const top = repository();
-    for (const args of [["check"], ["query", "list", "actions"], ["gate", "docs"], ["facts"]]) {
+    for (const args of [["check"], ["query", "list", "actions"], ["gate", "docs"]]) {
       const r = runIn(top, ...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(r.stderr.trimEnd().split("\n"), args.join(" ")).toHaveLength(1);
       expect(r.stderr, args.join(" ")).toContain("run `npx -y @githonllc/avouch init`, then /avouch:scan in Claude Code");
     }
+  });
+
+  it("facts without an adapter: the error shows the smallest Markdown configuration and the two guides, on one line", () => {
+    const top = repository();
+    const r = runIn(top, "facts");
+    expect(r.status).toBe(2);
+    expect(r.stderr.trimEnd().split("\n")).toHaveLength(1);
+    expect(r.stderr).toContain('{"adapter": {"markdown": {"docs": ["docs/design.md"]}}}');
+    expect(r.stderr).toContain("docs/markdown-convention.md");
+    expect(r.stderr).toContain("docs/adapter-guide.md");
   });
 
   it("no -f and no --config, outside git", (ctx) => {
