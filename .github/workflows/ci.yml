@@ -33,4 +33,6 @@ jobs:
         run: |
           v=$(node -p 'require("./package.json").version')
           test "$(node -p 'require("./.claude-plugin/plugin.json").version')" = "$v"
-          ! grep -rhoE '@githonllc/avouch@[0-9][^` ]*' skills | grep -vx "@githonllc/avouch@$v"
+          ! grep -rhoE 'npx -y avouch@[0-9][^` ]*' skills | grep -vx "npx -y avouch@$v"
+      - name: no old npm package name in skills, templates, cli and hooks
+        run: "! grep -rn '@githonllc/avouch' skills templates cli hooks/*.mjs | grep -v 'old name'"

@@ -31,4 +31,5 @@ jobs:
         run: node scripts/scan-private.mjs
       - run: npm pkg delete private
       - run: npm pack --dry-run
-      - run: npm publish --access public
+      # The old unrelated avouch 1.0.x versions are higher than 0.x, so npm 11 refuses to move `latest` without an explicit --tag.
+      - run: npm publish --access public --tag latest

@@ -12,19 +12,19 @@ Read this when `avouch check` or `avouch facts` reports `no adapter`, or when `/
    { "adapter": { "markdown": { "docs": ["docs/design.md"] } } }
    ```
 
-   Then run `npx -y @githonllc/avouch facts`. Exit code 0 means the adapter reads the documents. Rules that need a structured fact (a state machine, a permission table, a catalog) need sections in the grammar of `docs/markdown-convention.md`, and a `facts` anchor for each (section 7). Without them, those rules report `fact_missing`: disable each one with a reason (`"rules": {"R8": {"disabled": "<reason>"}}` in `profile`), or rewrite the section to the convention.
+   Then run `npx -y avouch facts`. Exit code 0 means the adapter reads the documents. Rules that need a structured fact (a state machine, a permission table, a catalog) need sections in the grammar of `docs/markdown-convention.md`, and a `facts` anchor for each (section 7). Without them, those rules report `fact_missing`: disable each one with a reason (`"rules": {"R8": {"disabled": "<reason>"}}` in `profile`), or rewrite the section to the convention.
 
 2. The documents are in another form, or you need structured facts from Markdown that does not follow the convention: write an adapter module. Do this in a new session, not in the session that writes or edits the ontology. Give the new session this prompt:
 
    ```text
    Write an Avouch adapter module for this repository.
    Read first: https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md (sections 2, 3 and "Writing your own adapter"),
-   src/contract.ts (the SourceFacts interface) and examples/library/adapter.ts of the @githonllc/avouch package.
+   src/contract.ts (the SourceFacts interface) and examples/library/adapter.ts of the avouch package.
    Inputs: the design documents only. Do not read the ontology (*.ontology.yaml) and do not run avouch query.
    Output: avouch/adapter.mjs, which exports facts(ontologyPath) and returns SourceFacts. Parse the documents at run time.
    Put no expected value (state, edge, trigger, key, event, scenario or catalog name) in the code.
    Set "adapter": "avouch/adapter.mjs" in avouch.config.json. Add a test that runs facts() on the real documents.
-   Done when the test passes and `npx -y @githonllc/avouch check` no longer reports "no adapter".
+   Done when the test passes and `npx -y avouch check` no longer reports "no adapter".
    Report each document form that the adapter does not read.
    ```
 

@@ -27,8 +27,8 @@
 //   The hook is a reminder, not a guarantee: it matches command text, so a recursive search of a
 //   parent directory, a shell variable or `bash -c` is not seen.
 //   The whole rule is off when the project is the Avouch repository itself (the git top level
-//   of the working directory has package.json with "name": "@githonllc/avouch"): its fixtures
-//   need the raw text.
+//   of the working directory has package.json with "name": "avouch", or "@githonllc/avouch" (old name, older
+//   checkouts)): its fixtures need the raw text.
 //
 // Exit code 2 blocks the call; stderr is the reason that Claude sees.
 // Any parse or internal error exits 0 (fail open).
@@ -121,7 +121,7 @@ function inAvouchRepo(cwd) {
     const r = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 3000 });
     if (r.status !== 0) return false;
     const pkg = JSON.parse(readFileSync(join(r.stdout.trim(), "package.json"), "utf8"));
-    return pkg.name === "@githonllc/avouch";
+    return pkg.name === "avouch" || pkg.name === "@githonllc/avouch"; // old name
   } catch {
     return false;
   }
@@ -254,7 +254,7 @@ function pluginVersion() {
 }
 
 function reason(what) {
-  const avouch = `npx -y @githonllc/avouch@${pluginVersion()}`;
+  const avouch = `npx -y avouch@${pluginVersion()}`;
   return `Blocked: do not read an Avouch ontology with text tools (${what}). Use avouch query:
 
   ${avouch} query action <ACTION_ID> -f <file>.ontology.yaml
@@ -264,8 +264,7 @@ function reason(what) {
   ${avouch} query cites <anchor> -f <file>.ontology.yaml
   ${avouch} query list actions -f <file>.ontology.yaml
 
-A project-local node_modules/.bin/avouch works too. Never run the unscoped \`npx avouch\`:
-an unrelated npm package with that name exists.
+A project-local node_modules/.bin/avouch works too.
 
 Why: grep, sed and cat print YAML comments and neighbouring entries together with the ontology
 content. A comment looks like ontology semantics, but the checker never reads comments. query
