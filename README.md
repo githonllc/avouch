@@ -322,17 +322,17 @@ The skills run the CLI with `npx -y avouch@<version>`, pinned to the version of 
 
 ## Publishing
 
-The npm package is `avouch`, and its command is `avouch`. Versions 0.1.0 to 0.1.21 were published as `@githonllc/avouch`, which is deprecated. A library user changes imports from `@githonllc/avouch` to `avouch`. Versions 1.0.1 to 1.0.7 of `avouch` are an unrelated earlier package from 2020 by another author. The name was transferred to Githon LLC in 2026. Those versions sort higher than 0.x, so `release.yml` publishes with `--tag latest`.
+The npm package is `avouch`, and its command is `avouch`. Versions 0.1.0 to 0.1.21 were published only as `@githonllc/avouch`. From 0.1.22, each release publishes the same files as `avouch` and as `@githonllc/avouch`; the docs use `avouch`. The name `avouch` was transferred to Githon LLC in 2026, and the earlier, unrelated versions 1.0.0 to 1.0.7 were unpublished.
 
 `package.json` has `"private": true` in the repository, so an accidental `npm publish` from a working copy is refused. The release workflow removes that line only in its own checkout.
 
 A release needs the explicit approval of the project owner. Releases are published by the GitHub Actions workflow `.github/workflows/release.yml` through npm trusted publishing: no npm token is stored, and npm adds provenance. Do these steps in this sequence:
 
 1. Set the new `0.x` version in `package.json`, `.claude-plugin/plugin.json` and the `npx -y avouch@<version>` pins in `skills/*/SKILL.md`, merge it to `main`, and wait for CI to pass. Check the file list that the CI step `npm pack --dry-run` prints.
-2. Tag the merge commit `v<version>` (the same version as `package.json`) and push the tag. The workflow checks that the tag matches the version, runs `npm ci`, the type check and the tests, removes `"private"`, and publishes with `--access public --tag latest`.
+2. Tag the merge commit `v<version>` (the same version as `package.json`) and push the tag. The workflow checks that the tag matches the version, runs `npm ci`, the type check and the tests, removes `"private"`, and publishes as `avouch` and then as `@githonllc/avouch`, with `--access public --tag latest`. A name that already has the version is skipped, so a re-run of a failed release publishes only the missing name.
 3. The job waits in the `npm` environment until the owner approves it in GitHub. The owner's approval is the release approval.
 4. Make sure that the release works:
-   - `npm view avouch version` shows the new version (a new version can take a few minutes to become available);
+   - `npm view avouch version` and `npm view @githonllc/avouch version` show the new version (a new version can take a few minutes to become available);
    - in an empty directory, `npx -y avouch@<version>` (no arguments) prints the usage lines and exits with code 2.
 
 Version 0.1.0 was published by hand, because npm accepts a trusted publisher only for a package that exists.
