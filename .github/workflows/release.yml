@@ -31,5 +31,14 @@ jobs:
         run: node scripts/scan-private.mjs
       - run: npm pkg delete private
       - run: npm pack --dry-run
-      # The old unrelated avouch 1.0.x versions are higher than 0.x, so npm 11 refuses to move `latest` without an explicit --tag.
-      - run: npm publish --access public --tag latest
+      # Each release publishes the same files under two names: avouch, and the earlier name @githonllc/avouch.
+      # A name that already has this version is skipped, so a re-run publishes only the missing name.
+      # Each name needs its own trusted publisher on npmjs.com.
+      - name: publish as avouch and @githonllc/avouch
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          for name in avouch @githonllc/avouch; do
+            if npm view "$name@$v" version >/dev/null 2>&1; then echo "$name@$v exists, skipped"; continue; fi
+            npm pkg set name="$name"
+            npm publish --access public --tag latest
+          done
