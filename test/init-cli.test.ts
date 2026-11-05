@@ -19,13 +19,15 @@ const directory = (prefix: string) => {
   directories.push(d);
   return d;
 };
-// A PATH directory with git and, when given, a fake `claude` that records its arguments to `log` and exits with `code`.
-const bin = (claude?: { log: string; code: number }) => {
+// A PATH directory with git and, when given, a fake `claude` and a fake `codex` that record their arguments to `log` and exit with `code`.
+type Fake = { log: string; code: number };
+const bin = (claude?: Fake, codex?: Fake) => {
   const d = directory("avouch-init-bin-");
   symlinkSync(gitPath, join(d, "git"));
-  if (claude !== undefined) {
-    writeFileSync(join(d, "claude"), `#!/bin/sh\nfor a in "$@"; do printf '[%s]' "$a" >> '${claude.log}'; done\necho >> '${claude.log}'\nexit ${claude.code}\n`);
-    chmodSync(join(d, "claude"), 0o755);
+  for (const [name, fake] of [["claude", claude], ["codex", codex]] as const) {
+    if (fake === undefined) continue;
+    writeFileSync(join(d, name), `#!/bin/sh\nfor a in "$@"; do printf '[%s]' "$a" >> '${fake.log}'; done\necho >> '${fake.log}'\nexit ${fake.code}\n`);
+    chmodSync(join(d, name), 0o755);
   }
   return d;
 };
@@ -220,6 +222,65 @@ describe("avouch init", () => {
     expect(read(d, "AGENTS.md")).toBe(`# A\n\n${wrapped}`);
   });
 
+  it("--plugin with claude and codex on PATH runs the two commands of claude, then the two of codex", () => {
+    const d = repository();
+    const logs = directory("avouch-init-log-");
+    const claude = { log: join(logs, "claude"), code: 0 };
+    const codex = { log: join(logs, "codex"), code: 0 };
+    const r = run(d, ["--print", "--plugin"], bin(claude, codex));
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(claude.log, "utf8")).toBe("[plugin][marketplace][add][githonllc/avouch]\n[plugin][install][avouch@avouch]\n");
+    expect(readFileSync(codex.log, "utf8")).toBe("[plugin][marketplace][add][githonllc/avouch]\n[plugin][add][avouch@avouch]\n");
+    expect(r.stdout.indexOf("Running: claude plugin install avouch@avouch")).toBeLessThan(r.stdout.indexOf("Running: codex plugin marketplace add githonllc/avouch"));
+    expect(r.stdout).toContain("Step 1: the Avouch plugin for Claude Code and Codex");
+    expect(r.stdout).toContain("In Codex, the hook runs only after you approve it: approve the avouch hook when Codex asks.");
+  });
+
+  it("only codex on PATH: runs codex and prints the claude commands", () => {
+    const d = repository();
+    const codex = { log: join(directory("avouch-init-log-"), "argv"), code: 0 };
+    const r = run(d, ["--print", "--plugin"], bin(undefined, codex));
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(codex.log, "utf8")).toBe("[plugin][marketplace][add][githonllc/avouch]\n[plugin][add][avouch@avouch]\n");
+    expect(r.stdout).toContain("No `claude` executable is on PATH. To install the plugin, run:");
+    expect(r.stdout).toContain("claude plugin install avouch@avouch");
+    expect(r.stdout).toContain("In Codex, the hook runs only after you approve it");
+  });
+
+  it("neither on PATH: prints the commands of both, exit 0", () => {
+    const d = repository();
+    const r = run(d, ["--print", "--plugin"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("No `claude` executable is on PATH. To install the plugin, run:");
+    expect(r.stdout).toContain("No `codex` executable is on PATH. To install the plugin for Codex, run:");
+    expect(r.stdout).toContain("  codex plugin marketplace add githonllc/avouch");
+    expect(r.stdout).toContain("  codex plugin add avouch@avouch");
+    expect(r.stdout).toContain("In Codex, the hook runs only after you approve it");
+  });
+
+  it("--dry-run --plugin lists the commands of both and runs none", () => {
+    const d = repository();
+    const logs = directory("avouch-init-log-");
+    const claude = { log: join(logs, "claude"), code: 0 };
+    const codex = { log: join(logs, "codex"), code: 0 };
+    const r = run(d, ["--print", "--plugin", "--dry-run"], bin(claude, codex));
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("  claude plugin install avouch@avouch");
+    expect(r.stdout).toContain("  codex plugin marketplace add githonllc/avouch");
+    expect(r.stdout).toContain("  codex plugin add avouch@avouch");
+    expect(existsSync(claude.log)).toBe(false);
+    expect(existsSync(codex.log)).toBe(false);
+  });
+
+  it("a failing codex: exit 1", () => {
+    const d = repository();
+    const logs = directory("avouch-init-log-");
+    const r = run(d, ["--print", "--plugin"], bin({ log: join(logs, "claude"), code: 0 }, { log: join(logs, "codex"), code: 4 }));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("FAIL: codex plugin add avouch@avouch: exit 4");
+    expect(r.stderr).not.toContain("FAIL: claude");
+  });
+
   it("the template is pure ASCII, so its bytes are the same in latin1 and UTF-8", () => {
     expect(/^[\x00-\x7f]*$/.test(template)).toBe(true);
   });
@@ -339,5 +400,7 @@ describe("avouch init", () => {
       expect(pluginSpawn(args, platform)).toEqual({ command: "claude", args, options: { stdio: "inherit" } });
     }
     expect(pluginSpawn(args, "win32")).toEqual({ command: "claude plugin install avouch@avouch", args: [], options: { stdio: "inherit", shell: true } });
+    expect(pluginSpawn(["plugin", "add", "avouch@avouch"], "win32", "codex")).toEqual({ command: "codex plugin add avouch@avouch", args: [], options: { stdio: "inherit", shell: true } });
+    expect(pluginSpawn(args, "linux", "codex")).toEqual({ command: "codex", args, options: { stdio: "inherit" } });
   });
 });
