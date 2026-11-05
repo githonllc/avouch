@@ -86,7 +86,7 @@ A project supplies an adapter and a profile. The adapter reads the project's sou
 
 ## Command line
 
-Build with `npm run build`, then run it. `avouch --help` (or `-h`) prints the usage lines of all commands; `avouch <command> --help` prints the usage of one command. Both exit with 0 and need no files, configuration or git. For example:
+Build with `npm run build`, then run it. `avouch --help` (or `-h`) prints an overview: the commands, each with a short description, and the options `-h` and `-v`. `avouch <command> --help` prints the usage of one command. `avouch --version` (or `-v`) prints the version. All three exit with 0 and need no files, configuration or git. `avouch` with no arguments prints the overview on stderr and exits with 2; an unknown command prints an error and exits with 2. For example:
 
 ```sh
 avouch check [-f <ontology.yaml>] [--config <avouch.config.json>] [--adapter <module|config.json>]
@@ -335,7 +335,8 @@ A release needs the explicit approval of the project owner. Releases are publish
 3. The job waits in the `npm` environment until the owner approves it in GitHub. The owner's approval is the release approval.
 4. Make sure that the release works:
    - `npm view avouch version` and `npm view @githonllc/avouch version` show the new version (a new version can take a few minutes to become available);
-   - in an empty directory, `npx -y avouch@<version>` (no arguments) prints the usage lines and exits with code 2.
+   - in an empty directory, `npx -y avouch@<version>` (no arguments) prints the help and exits with code 2;
+   - `npx -y avouch@<version> --version` prints the version.
 
 Version 0.1.0 was published by hand, because npm accepts a trusted publisher only for a package that exists.
 

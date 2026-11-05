@@ -690,11 +690,13 @@ describe.skipIf(!gitAvailable)("--check, --config and the stamp", () => {
     expect(missing.status).toBe(2);
   });
 
-  it("the usage lines name --config, and --check for query and gate", () => {
-    const r = runIn(root, "frobnicate");
-    expect(r.status).toBe(2);
-    const lines = r.stderr.trim().split("\n");
-    expect(lines).toHaveLength(7);
+  it("the usage of each command names --config, and --check for query and gate", () => {
+    // the usage of each command, in the order check, query, reconcile, gate verify, gate docs, facts, init
+    const lines = [["check"], ["query"], ["reconcile"], ["gate", "verify"], ["gate", "docs"], ["facts"], ["init"]].map((cmd) => {
+      const r = runIn(root, ...cmd, "--help");
+      expect(r.status, cmd.join(" ")).toBe(0);
+      return r.stdout.trim();
+    });
     // init (the last line) reads no project configuration
     for (const line of lines.slice(0, 6)) expect(line).toContain("--config <avouch.config.json>");
     expect(lines[1]).toContain("[--check]");

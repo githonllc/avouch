@@ -156,7 +156,7 @@ describe("avouch facts", () => {
     expect(r.stderr).toContain("usage: avouch facts [--config <avouch.config.json>] [--adapter <config.json>] [--json] [--inventory <file.json>]");
     const none = run();
     expect(none.status).toBe(2);
-    expect(none.stderr).toContain("usage: avouch facts ");
+    expect(none.stderr).toMatch(/^  facts {2,}\S/m);
   });
 });
 

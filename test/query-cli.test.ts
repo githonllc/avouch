@@ -312,10 +312,16 @@ describe("avouch query", () => {
     expect(lines).toContain("        - [L6] BORROW by anyone other than that Member is REJECTED.");
   });
 
-  it("dispatches subcommands and keeps the check usage", () => {
+  it("dispatches subcommands and keeps the help of check and query", () => {
     const none = spawnSync(process.execPath, ["dist/cli/avouch.js"], { cwd: root, encoding: "utf8" });
     expect(none.status).toBe(2);
-    expect(none.stderr).toContain("usage: avouch check");
-    expect(none.stderr).toContain("usage: avouch query");
+    expect(none.stderr).toContain("usage: avouch <command> [options]");
+    expect(none.stderr).toMatch(/^  check {2,}\S/m);
+    expect(none.stderr).toMatch(/^  query {2,}\S/m);
+    for (const cmd of ["check", "query"]) {
+      const r = spawnSync(process.execPath, ["dist/cli/avouch.js", cmd, "--help"], { cwd: root, encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`usage: avouch ${cmd}`);
+    }
   });
 });

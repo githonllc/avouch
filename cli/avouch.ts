@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { resolveProject, runCheck } from "./check.js";
-import { FACTS_USAGE, runFacts } from "./facts.js";
-import { INIT_USAGE, runInit } from "./init.js";
-import { GATE_DOCS_USAGE, GATE_USAGE, runGate } from "./gate.js";
-import { QUERY_USAGE, runQuery } from "./query.js";
-import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile, wantsHelp } from "./reconcile.js";
+import { runFacts } from "./facts.js";
+import { runInit } from "./init.js";
+import { runGate } from "./gate.js";
+import { runQuery } from "./query.js";
+import { expectPositionals, parseOptions, runReconcile, wantsHelp } from "./reconcile.js";
 
 const CHECK_USAGE = "usage: avouch check [-f <ontology.yaml>] [--config <avouch.config.json>] [--adapter <module|config.json>]";
 
@@ -34,12 +35,35 @@ async function check(args: string[]): Promise<number> {
   return ok ? 0 : 1;
 }
 
-const USAGES = [CHECK_USAGE, QUERY_USAGE, RECONCILE_USAGE, GATE_USAGE, GATE_DOCS_USAGE, FACTS_USAGE, INIT_USAGE];
+const HELP = `usage: avouch <command> [options]
+
+Check and query an Avouch ontology: a spec whose every claim cites its source.
+
+Commands:
+  init          Set up a repository: Claude Code plugin, agent instructions
+  check         Check an ontology against the schema, rules and documents
+  query         Read a rule: an action, object, property or citation
+  facts         Show what the Markdown adapter reads from design documents
+  gate docs     Require a recorded review decision for each document change
+  gate verify   Require a verified case for each decision row
+  reconcile     Compare runtime results with the evaluator and expectations
+
+Options:
+  -h, --help     Show this help, or the help of a command
+  -v, --version  Show the version
+
+Run "avouch <command> --help" for the options of a command.
+Docs: https://avouch.dev
+`;
 
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
   if (args[0] === "--help" || args[0] === "-h") {
-    for (const usage of USAGES) console.log(usage);
+    process.stdout.write(HELP);
+    return 0;
+  }
+  if (args[0] === "--version" || args[0] === "-v") {
+    console.log(JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version);
     return 0;
   }
   if (args[0] === "check") return check(args.slice(1));
@@ -48,7 +72,8 @@ async function main(): Promise<number> {
   if (args[0] === "gate") return runGate(args.slice(1));
   if (args[0] === "facts") return runFacts(args.slice(1));
   if (args[0] === "init") return runInit(args.slice(1));
-  for (const usage of USAGES) console.error(usage);
+  if (args.length > 0) console.error(`avouch: unknown command "${args[0]}"\nRun "avouch --help" for the commands.`);
+  else process.stderr.write(HELP);
   return 2;
 }
 
