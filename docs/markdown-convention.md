@@ -632,4 +632,4 @@ All diagnostics are rule R3, kind `markdown_parse`, key `facts.transitionTrigger
 
 | Convention version | Package version | Change |
 |---|---|---|
-| 1 | 0.1.21 (planned) | First published form. The grammar is the one that `src/markdown.ts` reads. |
+| 1 | 0.1.21 | First published form. The grammar is the one that `src/markdown.ts` reads. |
