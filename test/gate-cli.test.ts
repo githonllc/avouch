@@ -198,9 +198,10 @@ describe("avouch gate verify", () => {
 });
 
 describe("avouch without a known command", () => {
-  it("prints the five usages and exits with 2", () => {
+  it("prints the help and exits with 2", () => {
     const r = avouch();
     expect(r.status).toBe(2);
-    for (const usage of ["usage: avouch check", "usage: avouch query", "usage: avouch reconcile", "usage: avouch gate verify", "usage: avouch gate docs"]) expect(r.stderr).toContain(usage);
+    expect(r.stderr).toContain("usage: avouch <command> [options]");
+    for (const name of ["check", "query", "reconcile", "gate verify", "gate docs"]) expect(r.stderr).toMatch(new RegExp(`^  ${name} {2,}\\S`, "m"));
   });
 });
