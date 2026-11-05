@@ -256,6 +256,16 @@ describe.skipIf(!gitAvailable)("errors", () => {
     }
   });
 
+  it("no configuration: the error names the next step (init, then /avouch:scan), on one line", () => {
+    const top = repository();
+    for (const args of [["check"], ["query", "list", "actions"], ["gate", "docs"], ["facts"]]) {
+      const r = runIn(top, ...args);
+      expect(r.status, args.join(" ")).toBe(2);
+      expect(r.stderr.trimEnd().split("\n"), args.join(" ")).toHaveLength(1);
+      expect(r.stderr, args.join(" ")).toContain("run `npx -y @githonllc/avouch init`, then /avouch:scan in Claude Code");
+    }
+  });
+
   it("no -f and no --config, outside git", (ctx) => {
     if (!outsideGit) ctx.skip();
     for (const args of [["check"], ["query", "list", "actions"], ["reconcile", "--cases", "x.jsonl"], ["gate", "verify", "--rows", "x.jsonl"]]) {
