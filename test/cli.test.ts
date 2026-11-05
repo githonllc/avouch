@@ -94,7 +94,7 @@ describe("command line", () => {
     it("without --adapter and without a project configuration: exit 2 and a reason", () => {
       const result = run("check", "-f", temporaryFile("ontology.yaml", waived()));
       expect(result.status).toBe(2);
-      expect(result.stderr.trimEnd()).toMatch(/^no adapter: pass --adapter, or set adapter in avouch\.config\.json$/);
+      expect(result.stderr.trimEnd()).toMatch(/^no adapter: pass --adapter, or set adapter in avouch\.config\.json; next step: https:\/\/github\.com\/githonllc\/avouch\/blob\/main\/docs\/adapter-guide\.md#for-ai-agents /);
     });
 
     it("a document that cannot be read: exit 2", () => {

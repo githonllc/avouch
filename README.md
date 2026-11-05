@@ -36,7 +36,7 @@ Start with step 0, then do the two steps, in this order.
 1. Every project: keep a document review ledger, and run `avouch gate docs` in CI. See "Document review ledger (gate docs)". The gate works with any Markdown style. It guarantees that each changed section of a design document has a recorded review decision. It does not guarantee that the decision is complete: it does not check that a person read the section, that `claims` lists every claim, or that the claimed places say what the section says.
 2. For the structured checks, choose one path. The checks are: the field lists and catalogs of R2, and R3, R5, R6, R8, R9 and R10 (SPEC section 5). Each needs a fact from the project's documents (SPEC section 6). R7 needs execution evidence, which the built-in adapter does not read.
    - (a) Write the documents to the Markdown convention, `docs/markdown-convention.md`, and use the built-in adapter. `avouch facts` checks the documents without an ontology.
-   - (b) Write your own adapter: `docs/adapter-guide.md` sections 1 to 6. The grammar of the documents is then free.
+   - (b) Write your own adapter: `docs/adapter-guide.md` sections 1 to 6. The grammar of the documents is then free. An AI agent writes it in a new session, not in the session that writes the ontology, with the prompt in "For AI agents" of that guide.
 
 Avouch does not widen the built-in grammar for one project.
 
@@ -163,8 +163,8 @@ Errors, each with exit code 2:
 
 - `--config <file>: file not found`;
 - `no -f and no --config, and the working directory is not in a git repository (or git is not available)`;
-- `no -f, no avouch.config.json at <top>, and <top>/avouch/avouch.ontology.yaml does not exist`;
-- `no adapter: pass --adapter, or set adapter in <top>/avouch.config.json`. An `avouch.json` next to the ontology is no longer read; if one exists, the message says to set `"adapter"` in `avouch.config.json` to the path of that `avouch.json` (relative to the top level), or to pass it with `--adapter`.
+- `no -f, no avouch.config.json at <top>, and <top>/avouch/avouch.ontology.yaml does not exist; to set up a project, run …`: the message ends with the next step, `init` and then `/avouch:scan` (`gate docs` without a configuration ends the same way);
+- `no adapter: pass --adapter, or set adapter in <top>/avouch.config.json; next step: …`. The next step is a link to "For AI agents" in `docs/adapter-guide.md` (`facts` without an adapter ends the same way). An `avouch.json` next to the ontology is no longer read; if one exists, the message says to set `"adapter"` in `avouch.config.json` to the path of that `avouch.json` (relative to the top level), or to pass it with `--adapter`.
 
 ## Query
 

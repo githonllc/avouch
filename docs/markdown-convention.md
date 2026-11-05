@@ -3,7 +3,7 @@
 This document is the grammar of the built-in Markdown adapter (`src/markdown.ts`). The adapter reads facts only in the form that this document describes. A project has two ways to use Avouch with Markdown documents:
 
 1. Write the documents to this convention. Then `avouch check` runs the built-in adapter, with a JSON configuration (`docs/adapter-guide.md` section 7).
-2. Write an own adapter. Then the grammar of the documents is free. See `docs/adapter-guide.md` sections 1 to 6.
+2. Write an own adapter. Then the grammar of the documents is free. See `docs/adapter-guide.md` sections 1 to 6; an AI agent uses the prompt in "For AI agents" of that guide.
 
 An AI that reformats documents can use this document as the target form. Write each fact as one block, as the templates in sections 3 to 10 show.
 

@@ -14,6 +14,8 @@ import { markdownFacts, parseMarkdownConfig, validateMarkdownConfig, type Markdo
 export const CONFIG_FILE = "avouch.config.json";
 
 // The next step when a repository has no Avouch project yet (no configuration and no default ontology).
+// The next step when a command needs an adapter and none is set: the guide section for agents.
+export const ADAPTER_HINT = "next step: https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md#for-ai-agents (Markdown documents need only {\"adapter\": {\"markdown\": {\"docs\": [...]}}} in avouch.config.json; other documents need an adapter module)";
 export const SETUP_HINT = `to set up a project, run \`npx -y @githonllc/avouch init\`, then /avouch:scan in Claude Code (it drafts ${CONFIG_FILE} and a first ontology)`;
 
 /**
@@ -167,7 +169,7 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
     const where = top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE;
     const rel = top !== null ? relative(top, join(dir, "avouch.json")) : join(dir, "avouch.json");
     const old = existsSync(join(dir, "avouch.json")) ? `; ${join(dir, "avouch.json")} is no longer read: set "adapter": "${rel}" in ${CONFIG_FILE}, or pass --adapter ${join(dir, "avouch.json")}` : "";
-    throw new Error(`no adapter: pass --adapter, or set adapter in ${where}${old}`);
+    throw new Error(`no adapter: pass --adapter, or set adapter in ${where}${old}; ${ADAPTER_HINT}`);
   }
   // a configuration without `ontology` has nothing to differ from -f
   if (o.file !== undefined && config.ontology !== null && real(o.file) !== real(config.ontology))
@@ -269,7 +271,7 @@ export function resolveMarkdownAdapter(o: { config?: string; adapter?: string })
   if (o.adapter !== undefined) adapter = adapterFromArgument(o.adapter);
   else {
     const { config, top } = findProjectConfig(o.config, process.cwd());
-    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}; ${SETUP_HINT}`);
+    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}; ${ADAPTER_HINT}`);
     if ("written" in config.adapter) {
       if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
       adapter = { ...adapterFromArgument(config.adapter.path), label: config.adapter.written };

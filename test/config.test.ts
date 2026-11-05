@@ -21,6 +21,8 @@ const runIn = (cwd: string, ...args: string[]) => spawnSync(process.execPath, [c
 const runWithoutGit = (cwd: string, ...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8", env: { ...process.env, PATH: cwd } });
 const git = (cwd: string, ...args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8" });
 const gitAvailable = git(root, "--version").status === 0;
+
+const ADAPTER_HINT = "next step: https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md#for-ai-agents (Markdown documents need only {\"adapter\": {\"markdown\": {\"docs\": [...]}}} in avouch.config.json; other documents need an adapter module)";
 // A resolution error is exactly one stderr line (no usage line): the whole stderr is that line.
 const first = (stderr: string) => {
   const lines = stderr.trimEnd().split("\n");
@@ -219,7 +221,7 @@ describe.skipIf(!gitAvailable)("discovery", () => {
     const ontology = write(join(d, "o.yaml"), waived());
     const r = runIn(here, "check", "-f", ontology);
     expect(r.status).toBe(2);
-    expect(first(r.stderr)).toBe("no adapter: pass --adapter, or set adapter in avouch.config.json");
+    expect(first(r.stderr)).toBe(`no adapter: pass --adapter, or set adapter in avouch.config.json; ${ADAPTER_HINT}`);
     expect(r.stderr).not.toContain("git repository");
   });
 
@@ -233,7 +235,7 @@ describe.skipIf(!gitAvailable)("discovery", () => {
     const ontology = write(join(inner, "o.yaml"), waived());
     const r = runIn(inner, "check", "-f", ontology);
     expect(r.status).toBe(2);
-    expect(first(r.stderr)).toBe(`no adapter: pass --adapter, or set adapter in ${join(inner, CONFIG)}`);
+    expect(first(r.stderr)).toBe(`no adapter: pass --adapter, or set adapter in ${join(inner, CONFIG)}; ${ADAPTER_HINT}`);
   });
 
   it("no configuration of a subdirectory is read: only the git top level counts", () => {
@@ -242,7 +244,7 @@ describe.skipIf(!gitAvailable)("discovery", () => {
     writeJson(join(top, "sub", CONFIG), { ontology: `../${ONTOLOGY}`, adapter: { markdown: markdown() } });
     const r = runIn(join(top, "sub"), "check");
     expect(r.status).toBe(2);
-    expect(first(r.stderr)).toBe(`no adapter: pass --adapter, or set adapter in ${join(top, CONFIG)}`);
+    expect(first(r.stderr)).toBe(`no adapter: pass --adapter, or set adapter in ${join(top, CONFIG)}; ${ADAPTER_HINT}`);
   });
 });
 
@@ -258,11 +260,22 @@ describe.skipIf(!gitAvailable)("errors", () => {
 
   it("no configuration: the error names the next step (init, then /avouch:scan), on one line", () => {
     const top = repository();
-    for (const args of [["check"], ["query", "list", "actions"], ["gate", "docs"], ["facts"]]) {
+    for (const args of [["check"], ["query", "list", "actions"], ["gate", "docs"]]) {
       const r = runIn(top, ...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(r.stderr.trimEnd().split("\n"), args.join(" ")).toHaveLength(1);
       expect(r.stderr, args.join(" ")).toContain("run `npx -y @githonllc/avouch init`, then /avouch:scan in Claude Code");
+    }
+  });
+
+  it("no adapter: check -f and facts name the guide section for agents, on one line", () => {
+    const top = repository();
+    writeFileSync(join(top, "o.ontology.yaml"), "x: 1\n");
+    for (const args of [["check", "-f", "o.ontology.yaml"], ["facts"]]) {
+      const r = runIn(top, ...args);
+      expect(r.status, args.join(" ")).toBe(2);
+      expect(r.stderr.trimEnd().split("\n"), args.join(" ")).toHaveLength(1);
+      expect(r.stderr, args.join(" ")).toContain("next step: https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md#for-ai-agents");
     }
   });
 
