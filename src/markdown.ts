@@ -137,7 +137,7 @@ export function validateMarkdownConfig(value: unknown, where: string): MarkdownC
  * only on a line of >= n backticks (after at most three leading spaces) followed by nothing but white space.
  * `start`: the index of the opening line. `open`: the text ends inside a fence.
  */
-function fences(lines: string[]): { inFence: boolean[]; open: boolean; blocks: { info: string; body: string[]; start: number }[] } {
+export function fences(lines: string[]): { inFence: boolean[]; open: boolean; blocks: { info: string; body: string[]; start: number }[] } {
   const inFence: boolean[] = [];
   const blocks: { info: string; body: string[]; start: number }[] = [];
   let n = 0, info = "", body: string[] = [], start = 0;

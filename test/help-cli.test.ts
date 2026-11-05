@@ -26,11 +26,12 @@ const COMMANDS: [string[], string[]][] = [
   [["gate", "verify"], [all[3]]],
   [["gate", "docs"], [all[4]]],
   [["facts"], [all[5]]],
+  [["init"], [all[6]]],
 ];
 
 describe("avouch --help", () => {
   it("no command and an unknown command keep the usage on stderr with exit 2", () => {
-    expect(all).toHaveLength(6);
+    expect(all).toHaveLength(7);
     for (const args of [[], ["frobnicate"], ["frobnicate", "--help"]]) {
       const r = run(...args);
       expect(r.status, args.join(" ")).toBe(2);
@@ -64,6 +65,7 @@ describe("avouch --help", () => {
       ["gate", "verify", "--rows", "r.jsonl", "--baseline", "b.json", "--help"],
       ["gate", "docs", "--json", "-h"],
       ["facts", "--json", "--help"],
+      ["init", "--append", "-h"],
     ]) {
       const r = run(...args);
       expect(r.status, `${args.join(" ")}: ${r.stderr}`).toBe(0);

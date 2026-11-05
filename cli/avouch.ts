@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolveProject, runCheck } from "./check.js";
 import { FACTS_USAGE, runFacts } from "./facts.js";
+import { INIT_USAGE, runInit } from "./init.js";
 import { GATE_DOCS_USAGE, GATE_USAGE, runGate } from "./gate.js";
 import { QUERY_USAGE, runQuery } from "./query.js";
 import { expectPositionals, parseOptions, RECONCILE_USAGE, runReconcile, wantsHelp } from "./reconcile.js";
@@ -33,7 +34,7 @@ async function check(args: string[]): Promise<number> {
   return ok ? 0 : 1;
 }
 
-const USAGES = [CHECK_USAGE, QUERY_USAGE, RECONCILE_USAGE, GATE_USAGE, GATE_DOCS_USAGE, FACTS_USAGE];
+const USAGES = [CHECK_USAGE, QUERY_USAGE, RECONCILE_USAGE, GATE_USAGE, GATE_DOCS_USAGE, FACTS_USAGE, INIT_USAGE];
 
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
@@ -46,6 +47,7 @@ async function main(): Promise<number> {
   if (args[0] === "reconcile") return runReconcile(args.slice(1));
   if (args[0] === "gate") return runGate(args.slice(1));
   if (args[0] === "facts") return runFacts(args.slice(1));
+  if (args[0] === "init") return runInit(args.slice(1));
   for (const usage of USAGES) console.error(usage);
   return 2;
 }
