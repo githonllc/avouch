@@ -9,16 +9,18 @@ import { expectPositionals, parseOptions, wantsHelp } from "./reconcile.js";
 export const INIT_USAGE = "usage: avouch init [--append | --print] [--plugin | --no-plugin] [--dry-run]";
 
 const FLAGS = ["--append", "--print", "--plugin", "--no-plugin", "--dry-run"];
-const PLUGIN_COMMANDS = [
-  ["plugin", "marketplace", "add", "githonllc/avouch"],
-  ["plugin", "install", "avouch@avouch"],
+// The hosts of the plugin, in the order that init handles them, and the commands that install it into each.
+const HOSTS = [
+  { name: "claude", label: "Claude Code", suffix: "", commands: [["plugin", "marketplace", "add", "githonllc/avouch"], ["plugin", "install", "avouch@avouch"]] },
+  { name: "codex", label: "Codex", suffix: " for Codex", commands: [["plugin", "marketplace", "add", "githonllc/avouch"], ["plugin", "add", "avouch@avouch"]] },
 ];
+const CODEX_HOOK_NOTE = "In Codex, the hook runs only after you approve it: approve the avouch hook when Codex asks.";
 const BEGIN = "<!-- BEGIN avouch -->";
 const END = "<!-- END avouch -->";
 const TARGETS = ["AGENTS.md", "CLAUDE.md"];
 
 const isTty = (): boolean => process.stdin.isTTY === true && process.stdout.isTTY === true;
-const commandLine = (args: string[]): string => `claude ${args.join(" ")}`;
+const commandLine = (host: string, args: string[]): string => `${host} ${args.join(" ")}`;
 
 /**
  * Yes/no questions on one readline interface, made at the first question. Lines that arrive before a question is asked
@@ -59,21 +61,21 @@ let asker = createAsker(process.stdin, process.stdout);
 const ask = (question: string): Promise<boolean> => asker.ask(question);
 
 /**
- * How to run `claude` with fixed arguments. On Windows `claude` is usually `claude.cmd`, which only a shell can run; the
- * arguments are constants, so the command line is safe for the shell. Elsewhere no shell.
+ * How to run a host (`claude` or `codex`) with fixed arguments. On Windows the host is usually `<host>.cmd`, which only a shell
+ * can run; the arguments are constants, so the command line is safe for the shell. Elsewhere no shell.
  */
-export function pluginSpawn(args: string[], platform: NodeJS.Platform = process.platform): { command: string; args: string[]; options: SpawnSyncOptions } {
+export function pluginSpawn(args: string[], platform: NodeJS.Platform = process.platform, host = "claude"): { command: string; args: string[]; options: SpawnSyncOptions } {
   return platform === "win32"
-    ? { command: commandLine(args), args: [], options: { stdio: "inherit", shell: true } }
-    : { command: "claude", args, options: { stdio: "inherit" } };
+    ? { command: commandLine(host, args), args: [], options: { stdio: "inherit", shell: true } }
+    : { command: host, args, options: { stdio: "inherit" } };
 }
 
-// True when an executable file named `claude` is in a PATH directory.
-function claudeOnPath(): boolean {
+// True when an executable file named `name` is in a PATH directory.
+function onPath(name: string): boolean {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (dir === "") continue;
-    for (const name of process.platform === "win32" ? ["claude.exe", "claude.cmd", "claude"] : ["claude"]) {
-      const path = join(dir, name);
+    for (const file of process.platform === "win32" ? [`${name}.exe`, `${name}.cmd`, name] : [name]) {
+      const path = join(dir, file);
       try {
         if (!statSync(path).isFile()) continue;
         accessSync(path, constants.X_OK);
@@ -137,25 +139,20 @@ function printBlock(): void {
   console.log("-----8<----- end of the Avouch agent instructions -----8<-----");
 }
 
-/** Step 1: the Claude Code plugin. Returns false when a plugin command failed. */
-async function plugin(opts: Map<string, string | true>, dryRun: boolean): Promise<boolean> {
-  console.log("Step 1: the Avouch plugin for Claude Code (a hook that blocks text reads of an ontology, and the skills /avouch:scan and /avouch:cli).");
-  if (opts.has("--no-plugin")) {
-    console.log("Skipped (--no-plugin).");
-    return true;
-  }
+/** Step 1, one host: install the plugin or print the commands. Returns false when a plugin command failed. */
+async function pluginFor(host: (typeof HOSTS)[number], opts: Map<string, string | true>, dryRun: boolean): Promise<boolean> {
   const printCommands = (why: string) => {
-    console.log(`${why} To install the plugin, run:`);
-    for (const c of PLUGIN_COMMANDS) console.log(`  ${commandLine(c)}`);
+    console.log(`${why} To install the plugin${host.suffix}, run:`);
+    for (const c of host.commands) console.log(`  ${commandLine(host.name, c)}`);
   };
-  if (!claudeOnPath()) {
-    printCommands("No `claude` executable is on PATH.");
+  if (!onPath(host.name)) {
+    printCommands(`No \`${host.name}\` executable is on PATH.`);
     return true;
   }
   if (dryRun) {
     if (opts.has("--plugin")) {
       console.log("Dry run. These commands would run:");
-      for (const c of PLUGIN_COMMANDS) console.log(`  ${commandLine(c)}`);
+      for (const c of host.commands) console.log(`  ${commandLine(host.name, c)}`);
     } else printCommands(`Dry run. Without --plugin, init would ${isTty() ? "ask before it runs these commands" : "only print these commands"}.`);
     return true;
   }
@@ -165,7 +162,7 @@ async function plugin(opts: Map<string, string | true>, dryRun: boolean): Promis
       printCommands("No terminal, so init does not run the commands.");
       return true;
     }
-    run = await ask("Install the Avouch plugin for Claude Code (user scope)?");
+    run = await ask(`Install the Avouch plugin for ${host.label} (user scope)?`);
     if (!run) {
       printCommands("Not installed.");
       return true;
@@ -173,14 +170,30 @@ async function plugin(opts: Map<string, string | true>, dryRun: boolean): Promis
   }
   let ok = true;
   // Both commands run even when the first fails: adding a marketplace that is already added can fail while the install still works.
-  for (const c of PLUGIN_COMMANDS) {
-    console.log(`Running: ${commandLine(c)}`);
-    const s = pluginSpawn(c);
+  for (const c of host.commands) {
+    console.log(`Running: ${commandLine(host.name, c)}`);
+    const s = pluginSpawn(c, process.platform, host.name);
     const r = spawnSync(s.command, s.args, s.options);
     if (r.error !== undefined || r.status !== 0) {
       ok = false;
-      console.error(`FAIL: ${commandLine(c)}: ${r.error !== undefined ? r.error.message : r.status !== null ? `exit ${r.status}` : `signal ${r.signal}`}`);
+      console.error(`FAIL: ${commandLine(host.name, c)}: ${r.error !== undefined ? r.error.message : r.status !== null ? `exit ${r.status}` : `signal ${r.signal}`}`);
     }
+  }
+  return ok;
+}
+
+/** Step 1: the plugin for Claude Code and Codex. Returns false when a plugin command failed. */
+async function plugin(opts: Map<string, string | true>, dryRun: boolean): Promise<boolean> {
+  console.log("Step 1: the Avouch plugin for Claude Code and Codex (a hook that blocks text reads of an ontology, and the skills avouch:scan and avouch:cli).");
+  if (opts.has("--no-plugin")) {
+    console.log("Skipped (--no-plugin).");
+    return true;
+  }
+  let ok = true;
+  for (const host of HOSTS) {
+    const hostOk = await pluginFor(host, opts, dryRun);
+    ok = hostOk && ok;
+    if (host.name === "codex" && hostOk) console.log(CODEX_HOOK_NOTE);
   }
   return ok;
 }

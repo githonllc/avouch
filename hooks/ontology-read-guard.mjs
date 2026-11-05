@@ -278,7 +278,7 @@ To edit the ontology (query output has no line numbers):
   1. Use avouch query to find the entry to change and what it means.
   2. Get line numbers only (the one allowed grep form; it prints no content):
        grep -n -- '<entry id or anchor>' <file>.ontology.yaml | cut -d: -f1
-  3. Read that range with the Read tool (offset/limit), then change it with Edit.
+  3. Open that line range in your editor tool (in Claude Code: Read with offset/limit, then Edit) and change it.
   4. Run \`${avouch} check -f <file>.ontology.yaml\`.
 `;
 }

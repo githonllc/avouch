@@ -40,7 +40,7 @@ const HELP = `usage: avouch <command> [options]
 Check and query an Avouch ontology: a spec whose every claim cites its source.
 
 Commands:
-  init          Set up a repository: Claude Code plugin, agent instructions
+  init          Set up a repository: agent plugin, agent instructions
   check         Check an ontology against the schema, rules and documents
   query         Read a rule: an action, object, property or citation
   facts         Show what the Markdown adapter reads from design documents
