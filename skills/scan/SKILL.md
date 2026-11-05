@@ -33,7 +33,7 @@ These rules hold in every step. Each one closes a failure that an agent without 
 In every command of this skill, `avouch` stands for `node "$AVOUCH_CLI"` when `AVOUCH_CLI` is set (a built `dist/cli/avouch.js`), and otherwise for `npx -y avouch@0.1.22` (the npm package; this version matches the plugin). Shell state does not persist between commands, so write the full form in each command.
 
 ```sh
-avouch 2>&1 | grep -q -- '--config' || echo "STOP: this avouch has no project configuration (avouch.config.json); update it"
+avouch check --help 2>&1 | grep -q -- '--config' || echo "STOP: this avouch has no project configuration (avouch.config.json); update it"
 git ls-files '*.ontology.yaml' 'avouch.config.json' 'avouch.json' '**/avouch.json' 'avouch.ledger.jsonl'
 git status --porcelain > "${TMPDIR:-/tmp}/scan-status-before.txt"   # the guard of the ground rules
 ```
