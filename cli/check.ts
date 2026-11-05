@@ -16,7 +16,7 @@ export const CONFIG_FILE = "avouch.config.json";
 // The next step when a repository has no Avouch project yet (no configuration and no default ontology).
 // The next step when a command needs an adapter and none is set: the guide section for agents.
 export const ADAPTER_HINT = "next step: https://github.com/githonllc/avouch/blob/main/docs/adapter-guide.md#for-ai-agents (Markdown documents need only {\"adapter\": {\"markdown\": {\"docs\": [...]}}} in avouch.config.json; other documents need an adapter module)";
-export const SETUP_HINT = `to set up a project, run \`npx -y @githonllc/avouch init\`, then /avouch:scan in Claude Code (it drafts ${CONFIG_FILE} and a first ontology)`;
+export const SETUP_HINT = `to set up a project, run \`npx -y avouch init\`, then /avouch:scan in Claude Code (it drafts ${CONFIG_FILE} and a first ontology)`;
 
 /**
  * An adapter, ready to run. `label` is the value of `check.adapter` in a query or gate stamp. A Markdown configuration reads

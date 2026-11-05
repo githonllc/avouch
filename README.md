@@ -32,7 +32,7 @@ Read in this order:
 
 Start with step 0, then do the two steps, in this order.
 
-0. At the top level of the git repository, run `npx -y @githonllc/avouch init`. It installs the Claude Code plugin (see "Claude Code plugin") and adds the Avouch instructions for coding agents. The instructions tell an agent to read the rules with `avouch query`, not with a text tool, and to run `avouch check` and `avouch gate docs` after a change. There are two modes: `--append` adds the instructions to `AGENTS.md` and `CLAUDE.md`, if they exist; `--print` writes them to the terminal, and you add them yourself. Without a flag, `init` asks in a terminal and prints otherwise. `--dry-run` shows what would change and writes nothing. Then run `/avouch:scan` in Claude Code, which drafts `avouch.config.json`, a first ontology and the document review ledger. See "init" in "Command line".
+0. At the top level of the git repository, run `npx -y avouch init`. It installs the Claude Code plugin (see "Claude Code plugin") and adds the Avouch instructions for coding agents. The instructions tell an agent to read the rules with `avouch query`, not with a text tool, and to run `avouch check` and `avouch gate docs` after a change. There are two modes: `--append` adds the instructions to `AGENTS.md` and `CLAUDE.md`, if they exist; `--print` writes them to the terminal, and you add them yourself. Without a flag, `init` asks in a terminal and prints otherwise. `--dry-run` shows what would change and writes nothing. Then run `/avouch:scan` in Claude Code, which drafts `avouch.config.json`, a first ontology and the document review ledger. See "init" in "Command line".
 1. Every project: keep a document review ledger, and run `avouch gate docs` in CI. See "Document review ledger (gate docs)". The gate works with any Markdown style. It guarantees that each changed section of a design document has a recorded review decision. It does not guarantee that the decision is complete: it does not check that a person read the section, that `claims` lists every claim, or that the claimed places say what the section says.
 2. For the structured checks, choose one path. The checks are: the field lists and catalogs of R2, and R3, R5, R6, R8, R9 and R10 (SPEC section 5). Each needs a fact from the project's documents (SPEC section 6). R7 needs execution evidence, which the built-in adapter does not read.
    - (a) Write the documents to the Markdown convention, `docs/markdown-convention.md`, and use the built-in adapter. `avouch facts` checks the documents without an ontology.
@@ -318,20 +318,22 @@ The plugin also has a hook (`hooks/hooks.json`, script `hooks/ontology-read-guar
 
 Before 0.1.3 the two skills were named `avouch-cli` and `aquery-scan`.
 
-The skills run the CLI with `npx -y @githonllc/avouch@<version>`, pinned to the version of this repository. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git (`npx -y github:githonllc/avouch`). `skills/scan/fixture/` is the test project for the skill.
+The skills run the CLI with `npx -y avouch@<version>`, pinned to the version of this repository. Set `AVOUCH_CLI` to a built `dist/cli/avouch.js` to use a local build instead. The `prepare` script builds `dist/` when npm installs the package from git (`npx -y github:githonllc/avouch`). `skills/scan/fixture/` is the test project for the skill.
 
 ## Publishing
 
-The npm package is `@githonllc/avouch`, and its command is `avouch`. `package.json` has `"private": true` in the repository, so an accidental `npm publish` from a working copy is refused. The release workflow removes that line only in its own checkout.
+The npm package is `avouch`, and its command is `avouch`. Versions 0.1.0 to 0.1.21 were published as `@githonllc/avouch`, which is deprecated. A library user changes imports from `@githonllc/avouch` to `avouch`. Versions 1.0.1 to 1.0.7 of `avouch` are an unrelated earlier package from 2020 by another author. The name was transferred to Githon LLC in 2026. Those versions sort higher than 0.x, so `release.yml` publishes with `--tag latest`.
+
+`package.json` has `"private": true` in the repository, so an accidental `npm publish` from a working copy is refused. The release workflow removes that line only in its own checkout.
 
 A release needs the explicit approval of the project owner. Releases are published by the GitHub Actions workflow `.github/workflows/release.yml` through npm trusted publishing: no npm token is stored, and npm adds provenance. Do these steps in this sequence:
 
-1. Set the new `0.x` version in `package.json`, `.claude-plugin/plugin.json` and the `npx -y @githonllc/avouch@<version>` pins in `skills/*/SKILL.md`, merge it to `main`, and wait for CI to pass. Check the file list that the CI step `npm pack --dry-run` prints.
-2. Tag the merge commit `v<version>` (the same version as `package.json`) and push the tag. The workflow checks that the tag matches the version, runs `npm ci`, the type check and the tests, removes `"private"`, and publishes with `--access public`.
+1. Set the new `0.x` version in `package.json`, `.claude-plugin/plugin.json` and the `npx -y avouch@<version>` pins in `skills/*/SKILL.md`, merge it to `main`, and wait for CI to pass. Check the file list that the CI step `npm pack --dry-run` prints.
+2. Tag the merge commit `v<version>` (the same version as `package.json`) and push the tag. The workflow checks that the tag matches the version, runs `npm ci`, the type check and the tests, removes `"private"`, and publishes with `--access public --tag latest`.
 3. The job waits in the `npm` environment until the owner approves it in GitHub. The owner's approval is the release approval.
 4. Make sure that the release works:
-   - `npm view @githonllc/avouch version` shows the new version (a new version can take a few minutes to become available);
-   - in an empty directory, `npx -y @githonllc/avouch@<version>` (no arguments) prints the usage lines and exits with code 2.
+   - `npm view avouch version` shows the new version (a new version can take a few minutes to become available);
+   - in an empty directory, `npx -y avouch@<version>` (no arguments) prints the usage lines and exits with code 2.
 
 Version 0.1.0 was published by hand, because npm accepts a trusted publisher only for a package that exists.
 

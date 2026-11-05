@@ -264,7 +264,7 @@ describe.skipIf(!gitAvailable)("errors", () => {
       const r = runIn(top, ...args);
       expect(r.status, args.join(" ")).toBe(2);
       expect(r.stderr.trimEnd().split("\n"), args.join(" ")).toHaveLength(1);
-      expect(r.stderr, args.join(" ")).toContain("run `npx -y @githonllc/avouch init`, then /avouch:scan in Claude Code");
+      expect(r.stderr, args.join(" ")).toContain("run `npx -y avouch init`, then /avouch:scan in Claude Code");
     }
   });
 

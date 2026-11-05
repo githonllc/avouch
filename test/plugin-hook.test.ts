@@ -89,7 +89,7 @@ describe("plugin hook: ontology read guard", () => {
   });
 
   it.each<[string, string, string?]>([
-    ["avouch query", `npx -y @githonllc/avouch@${version} query action ADD_BOOK ${file}`],
+    ["avouch query", `npx -y avouch@${version} query action ADD_BOOK ${file}`],
     ["a local avouch bin", `node_modules/.bin/avouch query action ADD_BOOK ${file}`],
     ["avouch through node", `node dist/cli/avouch.js query list actions ${file}`],
     ["avouch through node and AVOUCH_CLI", `node "$AVOUCH_CLI" check ${file}`],
@@ -138,11 +138,11 @@ describe("plugin hook: ontology read guard", () => {
 
   it("names the plugin version in the query forms", () => {
     const r = bash(`grep -n member ${file}`);
-    expect(r.stderr).toContain(`npx -y @githonllc/avouch@${version} query action <ACTION_ID> -f <file>.ontology.yaml`);
+    expect(r.stderr).toContain(`npx -y avouch@${version} query action <ACTION_ID> -f <file>.ontology.yaml`);
     for (const verb of ["object", "writes", "reads", "cites", "list"]) expect(r.stderr).toContain(`query ${verb} `);
     expect(r.stderr).toContain("check -f <file>.ontology.yaml");
     expect(r.stderr).toContain("grep -n -- '<entry id or anchor>' <file>.ontology.yaml | cut -d: -f1");
-    expect(bash(`grep -n member ${file}`, outside, { CLAUDE_PLUGIN_ROOT: root }).stderr).toContain(`@githonllc/avouch@${version} `);
+    expect(bash(`grep -n member ${file}`, outside, { CLAUDE_PLUGIN_ROOT: root }).stderr).toContain(`avouch@${version} `);
   });
 
   it("hooks.json registers the script for Bash and Grep", () => {
