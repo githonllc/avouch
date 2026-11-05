@@ -13,6 +13,9 @@ import { markdownFacts, parseMarkdownConfig, validateMarkdownConfig, type Markdo
 /** The project configuration file, at the git top level of the project. */
 export const CONFIG_FILE = "avouch.config.json";
 
+// The next step when a repository has no Avouch project yet (no configuration and no default ontology).
+export const SETUP_HINT = `to set up a project, run \`npx -y @githonllc/avouch init\`, then /avouch:scan in Claude Code (it drafts ${CONFIG_FILE} and a first ontology)`;
+
 /**
  * An adapter, ready to run. `label` is the value of `check.adapter` in a query or gate stamp. A Markdown configuration reads
  * its documents relative to `dir`; `where` is the prefix of an error about it.
@@ -154,7 +157,7 @@ export function resolveProject(o: ProjectOptions): { file: string; adapter: Adap
     // no -f, no --config (a --config always gives a configuration): the git top level is the only place left to look
     if (top === null) throw new Error("no -f and no --config, and the working directory is not in a git repository (or git is not available)");
     const dflt = join(top, "avouch", "avouch.ontology.yaml");
-    if (!existsSync(dflt)) throw new Error(`no -f, no ${CONFIG_FILE} at ${top}, and ${dflt} does not exist`);
+    if (!existsSync(dflt)) throw new Error(`no -f, no ${CONFIG_FILE} at ${top}, and ${dflt} does not exist; ${SETUP_HINT}`);
     file = dflt;
   }
   if (!o.check) return { file, adapter: null };
@@ -193,7 +196,7 @@ export function resolveLedger(configOption: string | undefined): LedgerProject {
     const top = gitTop(process.cwd());
     if (top === null) throw new Error("no --config, and the working directory is not in a git repository (or git is not available)");
     configFile = join(top, CONFIG_FILE);
-    if (!existsSync(configFile)) throw new Error(`no --config, and no ${CONFIG_FILE} at ${top}`);
+    if (!existsSync(configFile)) throw new Error(`no --config, and no ${CONFIG_FILE} at ${top}; ${SETUP_HINT}`);
   }
   const c = loadProjectConfig(configFile, label);
   if (c.ontology === null) throw new Error(`${configFile}: ontology: missing`);
@@ -266,7 +269,7 @@ export function resolveMarkdownAdapter(o: { config?: string; adapter?: string })
   if (o.adapter !== undefined) adapter = adapterFromArgument(o.adapter);
   else {
     const { config, top } = findProjectConfig(o.config, process.cwd());
-    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}`);
+    if (config === null) throw new Error(`facts: no adapter: pass --adapter, or set adapter in ${top !== null ? join(top, CONFIG_FILE) : CONFIG_FILE}; ${SETUP_HINT}`);
     if ("written" in config.adapter) {
       if (!isFile(config.adapter.path)) throw new Error(`${config.file}: adapter: file not found`);
       adapter = { ...adapterFromArgument(config.adapter.path), label: config.adapter.written };
