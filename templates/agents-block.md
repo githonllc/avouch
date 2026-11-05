@@ -2,7 +2,7 @@
 
 The business rules of this project are in an Avouch ontology (`*.ontology.yaml`, see `avouch.config.json`). Each rule cites a section of the design documents.
 
-- The commands below use `npx -y @githonllc/avouch`. If the project pins `@githonllc/avouch` as a dependency, run that version instead (`npx avouch` in the directory that installs it), so that you use the version CI uses.
+- The commands below use `npx -y @githonllc/avouch`. If the project pins `@githonllc/avouch` as a dependency, run that version instead: `<dir>/node_modules/.bin/avouch`, where `<dir>` has the `package.json` that pins it. If that file is missing, run the project's install step first. Do not run `npx avouch`: `avouch` without the scope is a different npm package.
 - Before you implement or change business logic (the permission, conditions, effects or state machine of an action; the writers and readers of a property), read the rule with `npx -y @githonllc/avouch query`. Run `npx -y @githonllc/avouch query --help` for the questions it answers.
 - Do not read the ontology file with grep, cat, sed or a script. Comments and neighbouring entries in the text look like rules, but the checker does not read them.
 - If the rule is `unspecified` or is in `knownSourceGaps`, the documents do not decide it. Do not invent the behavior: tell your user, and say so in the pull request.
