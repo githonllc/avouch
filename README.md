@@ -331,7 +331,7 @@ The skills run the CLI with `npx -y avouch@<version>`, pinned to the version of 
 
 ## Publishing
 
-The npm package is `avouch`, and its command is `avouch`. Versions 0.1.0 to 0.1.21 were published only as `@githonllc/avouch`. From 0.1.22, each release publishes the same files as `avouch` and as `@githonllc/avouch`; the docs use `avouch`. The name `avouch` was transferred to Githon LLC in 2026, and the earlier, unrelated versions 1.0.0 to 1.0.7 were unpublished. The two packages declare the same command `avouch`, so a project installs one of them, not both.
+The npm package is `avouch`, and its command is `avouch`. Versions 0.1.0 to 0.1.21 were published only as `@githonllc/avouch`. Version 0.1.22 was published only as `avouch`. From 0.1.23, each release publishes the same files as `avouch` and as `@githonllc/avouch`; the docs use `avouch`. The name `avouch` was transferred to Githon LLC in 2026, and the earlier, unrelated versions 1.0.0 to 1.0.7 were unpublished. The two packages declare the same command `avouch`, so a project installs one of them, not both.
 
 `avouch-cli` is a separate package in `alias/avouch-cli/`. It only forwards to `avouch`, so that `npx -y avouch-cli` does not run a stranger's package. It is published by hand and depends on `"avouch": "*"`. It needs a new version only when the forwarding code changes.
 
