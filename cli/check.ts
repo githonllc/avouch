@@ -87,7 +87,7 @@ function loadProjectConfig(file: string, label: string): ProjectConfig {
 }
 
 // The git top level of a directory, or null when it is not in a git repository (or git is not available).
-function gitTop(cwd: string): string | null {
+export function gitTop(cwd: string): string | null {
   const r = spawnSync("git", ["--no-optional-locks", "rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" });
   return r.error !== undefined || r.status !== 0 ? null : r.stdout.trim();
 }

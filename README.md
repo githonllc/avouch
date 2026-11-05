@@ -30,8 +30,9 @@ Read in this order:
 
 ## Adopting Avouch
 
-Two steps, in this order.
+Start with step 0, then do the two steps, in this order.
 
+0. At the top level of the git repository, run `npx -y @githonllc/avouch init`. It installs the Claude Code plugin (see "Claude Code plugin") and adds the Avouch instructions for coding agents. The instructions tell an agent to read the rules with `avouch query`, not with a text tool, and to run `avouch check` and `avouch gate docs` after a change. There are two modes: `--append` adds the instructions to `AGENTS.md` and `CLAUDE.md`, if they exist; `--print` writes them to the terminal, and you add them yourself. Without a flag, `init` asks in a terminal and prints otherwise. `--dry-run` shows what would change and writes nothing. Then run `/avouch:scan` in Claude Code, which drafts `avouch.config.json`, a first ontology and the document review ledger. See "init" in "Command line".
 1. Every project: keep a document review ledger, and run `avouch gate docs` in CI. See "Document review ledger (gate docs)". The gate works with any Markdown style. It guarantees that each changed section of a design document has a recorded review decision. It does not guarantee that the decision is complete: it does not check that a person read the section, that `claims` lists every claim, or that the claimed places say what the section says.
 2. For the structured checks, choose one path. The checks are: the field lists and catalogs of R2, and R3, R5, R6, R8, R9 and R10 (SPEC section 5). Each needs a fact from the project's documents (SPEC section 6). R7 needs execution evidence, which the built-in adapter does not read.
    - (a) Write the documents to the Markdown convention, `docs/markdown-convention.md`, and use the built-in adapter. `avouch facts` checks the documents without an ontology.
@@ -99,6 +100,14 @@ The command runs both the JSON Schema validator and the checker. Exit code 0 mea
 The adapter module must export a named function `facts(ontologyPath)` that returns `SourceFacts`, or a promise of `SourceFacts`. It receives the absolute ontology path. The facts include the project profile and source lookup functions; see `src/contract.ts` and `docs/adapter-guide.md`. Adapter paths resolve from the current directory. A `.ts` adapter can load directly only on a Node version that supports type stripping, and its syntax must be supported by that runtime.
 
 An `--adapter` path that ends in `.json` is not loaded as a module: it is the configuration of the built-in Markdown adapter (`src/markdown.ts`, `docs/adapter-guide.md` section 7). Without `--adapter`, the adapter is the `adapter` of the project configuration. `avouch check` always runs the check: when there is no adapter, the command prints the reason and the usage and exits with 2. `avouch query` and `avouch gate verify` run it only with `--check` or `--adapter`; otherwise their check stays `not_run`.
+
+### init
+
+```sh
+avouch init [--append | --print] [--plugin | --no-plugin] [--dry-run]
+```
+
+`avouch init` prepares a project for Avouch. Run it inside a git repository; it works on the git top level. Step 1 is the Claude Code plugin: with `--plugin`, it runs `claude plugin marketplace add githonllc/avouch` and `claude plugin install avouch@avouch` (it does not check if the plugin is already installed, and runs both commands again on each run). Without a flag, it asks in a terminal and only prints the two commands otherwise. When `claude` is not on `PATH`, it prints the two commands. `--no-plugin` skips the step. Step 2 is the instructions for coding agents (`templates/agents-block.md`). `--append` adds them, between the lines `<!-- BEGIN avouch -->` and `<!-- END avouch -->`, to `AGENTS.md` and `CLAUDE.md` at the top level. It never creates a file: when neither file exists, it prints the instructions. It replaces an earlier block in place, keeps all other bytes and the line endings (CRLF or LF) of the file, and a second run changes nothing. A file that does not have exactly one BEGIN line and then one END line is an error, and the file is not changed. It skips `CLAUDE.md` when the file has the line `@AGENTS.md` and `AGENTS.md` exists. `--print` writes the instructions to stdout. Without a flag, it asks in a terminal and prints otherwise. `--dry-run` runs no command and writes no file; it prints the commands and, for each file, `append`, `replace` or `unchanged`. Step 3 tells you to run `/avouch:scan` in Claude Code. Exit code 0 means done (also a print and a dry run); 1 means a plugin command failed or a file could not be changed; 2 means invalid arguments or no git repository.
 
 ### facts
 

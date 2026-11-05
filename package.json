@@ -34,7 +34,8 @@
     "vocab.ttl",
     "SPEC.md",
     "docs/",
-    "NOTICE"
+    "NOTICE",
+    "templates/"
   ],
   "scripts": {
     "test": "vitest run",
