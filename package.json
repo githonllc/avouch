@@ -2,7 +2,10 @@
   "name": "avouch",
   "version": "0.1.22",
   "private": true,
+  "description": "Avouch: an ontology spec whose every claim cites its source, with a checker and a CLI.",
   "license": "Apache-2.0",
+  "author": "Githon LLC",
+  "keywords": ["avouch", "ontology", "specification", "design-docs", "ai-agents", "claude-code", "checker", "cli"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/githonllc/avouch.git"
