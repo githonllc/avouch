@@ -202,43 +202,41 @@ async function plugin(opts: Map<string, string | true>, dryRun: boolean): Promis
 async function instructions(top: string, opts: Map<string, string | true>, dryRun: boolean): Promise<boolean> {
   console.log("Step 2: the Avouch instructions for coding agents (AGENTS.md, CLAUDE.md).");
   const exists = (name: string) => existsSync(join(top, name)) && statSync(join(top, name)).isFile();
+  // AGENTS.md is always a target and is created when it is missing (Codex reads only AGENTS.md); CLAUDE.md is never created.
   const files: string[] = [];
   for (const name of TARGETS) {
-    if (!exists(name)) continue;
-    if (name === "CLAUDE.md" && exists("AGENTS.md") && readFileSync(join(top, name), "utf8").split(/\r?\n/).some((l) => l.trim() === "@AGENTS.md")) {
+    if (name === "CLAUDE.md" && !exists(name)) continue;
+    if (name === "CLAUDE.md" && readFileSync(join(top, name), "utf8").split(/\r?\n/).some((l) => l.trim() === "@AGENTS.md")) {
       console.log("CLAUDE.md is skipped: it has the line `@AGENTS.md`, so it imports the instructions from AGENTS.md.");
       continue;
     }
     files.push(name);
   }
+  const label = (name: string) => (exists(name) ? name : `${name} (new file)`);
   let append = opts.has("--append");
-  if (!append && !opts.has("--print") && files.length > 0) {
+  if (!append && !opts.has("--print")) {
     if (dryRun) {
       console.log("Dry run without --append or --print: this is the plan for --append (init asks in a terminal and prints otherwise).");
       append = true;
     }
-    else if (isTty()) append = await ask(`Append the Avouch instructions to ${files.join(", ")}?`);
+    else if (isTty()) append = await ask(`Append the Avouch instructions to ${files.map(label).join(", ")}?`);
   }
   if (!append) {
-    printBlock();
-    return true;
-  }
-  if (files.length === 0) {
-    console.log(`No file to append to: AGENTS.md and CLAUDE.md do not exist at ${top}, and init never creates a file.`);
     printBlock();
     return true;
   }
   let ok = true;
   for (const name of files) {
     const path = join(top, name);
-    const plan = planFile(name, readFileSync(path));
+    const created = !exists(name);
+    const plan = planFile(name, created ? Buffer.alloc(0) : readFileSync(path));
     if ("error" in plan) {
       ok = false;
       console.error(`FAIL: ${plan.error}`);
       continue;
     }
     if (dryRun) {
-      console.log(`Dry run: ${name}: ${plan.action === "unchanged" ? "unchanged" : `would ${plan.action === "append" ? "append the block" : "replace the block"}`}`);
+      console.log(`Dry run: ${name}: ${created ? "would create the file with the block" : plan.action === "unchanged" ? "unchanged" : `would ${plan.action === "append" ? "append the block" : "replace the block"}`}`);
       continue;
     }
     if (plan.action === "unchanged") {
@@ -247,7 +245,7 @@ async function instructions(top: string, opts: Map<string, string | true>, dryRu
     }
     try {
       writeFileSync(path, plan.bytes);
-      console.log(`${name}: ${plan.action === "append" ? "appended the block" : "replaced the block"}`);
+      console.log(`${name}: ${created ? "created the file with the block" : plan.action === "append" ? "appended the block" : "replaced the block"}`);
     } catch (error) {
       ok = false;
       console.error(`FAIL: ${name}: ${(error as Error).message}`);
