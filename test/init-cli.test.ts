@@ -93,14 +93,26 @@ describe("avouch init", () => {
     expect(read(d, "AGENTS.md")).toBe("# A\n");
   });
 
-  it("--append with no AGENTS.md or CLAUDE.md: falls back to print and creates no file", () => {
+  it("--append with no AGENTS.md or CLAUDE.md: creates AGENTS.md with the block, not CLAUDE.md; a second run changes nothing", () => {
     const d = repository();
     const r = run(d, ["--append", "--no-plugin"]);
     expect(r.status, r.stderr).toBe(0);
-    expect(r.stdout).toContain("never creates a file");
+    expect(r.stdout).toContain("AGENTS.md: created the file with the block");
+    expect(read(d, "AGENTS.md")).toBe(wrapped);
+    expect(existsSync(join(d, "CLAUDE.md"))).toBe(false);
+    const again = run(d, ["--append", "--no-plugin"]);
+    expect(again.status, again.stderr).toBe(0);
+    expect(again.stdout).toContain("AGENTS.md: unchanged");
+    expect(read(d, "AGENTS.md")).toBe(wrapped);
+    expect(existsSync(join(d, "CLAUDE.md"))).toBe(false);
+  });
+
+  it("no TTY, no mode flag, no AGENTS.md: prints and creates no file", () => {
+    const d = repository();
+    const r = run(d, ["--no-plugin"]);
+    expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain(wrapped);
     expect(existsSync(join(d, "AGENTS.md"))).toBe(false);
-    expect(existsSync(join(d, "CLAUDE.md"))).toBe(false);
   });
 
   it("--append to AGENTS.md: the content is unchanged, the block is appended, a second run changes no byte", () => {
@@ -155,12 +167,36 @@ describe("avouch init", () => {
     expect(read(d, "AGENTS.md")).toBe(`# A\n\n${wrapped}`);
   });
 
-  it("CLAUDE.md alone: appended", () => {
+  it("CLAUDE.md alone: the block is appended to it and AGENTS.md is created; a second run changes nothing", () => {
+    const d = repository({ "CLAUDE.md": "# C\n" });
+    const r = run(d, ["--append", "--no-plugin"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(read(d, "CLAUDE.md")).toBe(`# C\n\n${wrapped}`);
+    expect(read(d, "AGENTS.md")).toBe(wrapped);
+    const again = run(d, ["--append", "--no-plugin"]);
+    expect(again.status, again.stderr).toBe(0);
+    expect(read(d, "CLAUDE.md")).toBe(`# C\n\n${wrapped}`);
+    expect(read(d, "AGENTS.md")).toBe(wrapped);
+  });
+
+  it("CLAUDE.md alone with the line @AGENTS.md: AGENTS.md is created and CLAUDE.md is skipped", () => {
     const d = repository({ "CLAUDE.md": "@AGENTS.md\n" });
     const r = run(d, ["--append", "--no-plugin"]);
     expect(r.status, r.stderr).toBe(0);
-    expect(read(d, "CLAUDE.md")).toBe(`@AGENTS.md\n\n${wrapped}`);
+    expect(r.stdout).toContain("CLAUDE.md is skipped");
+    expect(read(d, "CLAUDE.md")).toBe("@AGENTS.md\n");
+    expect(read(d, "AGENTS.md")).toBe(wrapped);
+  });
+
+  it("--dry-run with no AGENTS.md: says create, writes nothing", () => {
+    const d = repository({ "CLAUDE.md": "# C\n" });
+    const r = run(d, ["--dry-run", "--no-plugin"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("Dry run: AGENTS.md: would create the file with the block");
+    expect(r.stdout).toContain("Dry run: CLAUDE.md: would append the block");
     expect(existsSync(join(d, "AGENTS.md"))).toBe(false);
+    expect(read(d, "CLAUDE.md")).toBe("# C\n");
+    expect(git(d, "status", "--porcelain").stdout).toBe("");
   });
 
   it("--dry-run writes nothing and says what would change", () => {
