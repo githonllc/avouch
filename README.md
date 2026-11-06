@@ -30,17 +30,30 @@ Read in this order:
 
 ## Adopting Avouch
 
-Start with step 0, then do the two steps, in this order.
+Start with step 0, then do the three steps, in this order.
 
 0. At the top level of the git repository, run `npx -y avouch init`. It installs the plugin for Claude Code and for Codex (see "Claude Code and Codex plugin") and adds the Avouch instructions for coding agents. The instructions tell an agent to read the rules with `avouch query`, not with a text tool, and to run `avouch check` and `avouch gate docs` after a change. There are two modes: `--append` adds the instructions to `AGENTS.md` (it creates the file when it is missing) and to `CLAUDE.md` if it exists; `--print` writes them to the terminal, and you add them yourself. Without a flag, `init` asks in a terminal and prints otherwise. `--dry-run` shows what would change and writes nothing. Then run `/avouch:scan` in Claude Code (`$avouch:scan` in Codex), which drafts `avouch.config.json`, a first ontology and the document review ledger. See "init" in "Command line".
 1. Every project: keep a document review ledger, and run `avouch gate docs` in CI. See "Document review ledger (gate docs)". The gate works with any Markdown style. It guarantees that each changed section of a design document has a recorded review decision. It does not guarantee that the decision is complete: it does not check that a person read the section, that `claims` lists every claim, or that the claimed places say what the section says.
 2. For the structured checks, choose one path. The checks are: the field lists and catalogs of R2, and R3, R5, R6, R8, R9 and R10 (SPEC section 5). Each needs a fact from the project's documents (SPEC section 6). R7 needs execution evidence, which the built-in adapter does not read.
    - (a) Write the documents to the Markdown convention, `docs/markdown-convention.md`, and use the built-in adapter. `avouch facts` checks the documents without an ontology.
-   - (b) Write your own adapter: `docs/adapter-guide.md` sections 1 to 6. The grammar of the documents is then free. An AI agent writes it in a new session, not in the session that writes the ontology, with the prompt in "For AI agents" of that guide.
+   - (b) Write your own adapter: `docs/adapter-guide.md` sections 1 to 6 and 8. The grammar of the documents is then free. An AI agent writes it in a new session, not in the session that writes the ontology, with the prompt in "For AI agents" of that guide.
+3. Runtime consistency: compare the runtime with the documents. See "Runtime consistency on the command line".
+   - The project's own test harness records one `RuntimeCase` (SPEC section 9) for each command test: the action, the inputs (`bindings`, `actor`, `scope`, `now`), the `snapshot` that the decision reads, the result that the runtime reported (`reported`), and the expected result (`expected`).
+   - Take the expected result from the text of the documents. Never take it from what the code does: then the test compares the code with itself.
+   - Run `avouch reconcile`, then `avouch gate verify` with a baseline. Make the baseline with a script, from the output of `avouch gate verify --json`; do not edit it by hand. People write only the `reason` of each `exempt` entry.
+   - Do not put a known difference between the code and the documents in the baseline. Keep it as a separate test that asserts the full current behavior, and remove the test when the difference is fixed.
+   - Any language can do this: write the cases as JSONL and run the two commands. A TypeScript harness can instead call `reconcile(ontology, cases)` and `verifyCoverage(ontology, rows, baseline)` from the package root in the same process. Both paths give the same result (without `--check`). You do not need TypeScript.
 
 Avouch does not widen the built-in grammar for one project.
 
 A rule whose fact is not available is switched off in the profile, with a reason: `"rules": {"R8": {"disabled": "<reason>"}}` (in `profile` of the Markdown configuration; `docs/adapter-guide.md` section 5). The checker prints the reason. Without the switch, the rule reports `fact_missing` for the missing fact. The built-in adapter switches R3 and R9 off by itself when their facts are not set, and R7 always (`docs/adapter-guide.md` section 7).
+
+Dependency boundary:
+
+- Pin an exact version of `avouch` in a test or development package, and run its local bin (for example `npm exec avouch` in that package). Step 0 runs `npx` once; the gate runs the pinned version. In a repository without a root `package.json`, `npx avouch` gets the newest version, not the pinned one.
+- Production code does not import `avouch`. When production code needs data from the ontology (for example a registry of command permissions), generate files from the ontology, and add a test that fails when a generated file is stale.
+- Upgrade `avouch` in its own pull request, and run the full gate in it.
+- `avouch check` with an adapter checks the ontology against the documents only. It is one part of the project's gate, not the whole gate. The `check` stamp of `avouch query` is `not_run` unless you give `--check` or `--adapter` (see "Query").
 
 ## Layout
 
