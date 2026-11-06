@@ -185,3 +185,14 @@ Without `--check` and without `--adapter`, the check stamp of `avouch query` sta
 - the generic adapter also reports R6 `fact_missing facts.evidence`.
 
 The R3 and R9 findings are the same, because the configuration sets `facts.stateMachines`, `facts.transitionTriggers` and `facts.scenarios`. So the generic adapter does not catch three mutations: `lib-r6-none-but-written`, `lib-r7-effect-unwitnessed` and `lib-r7-undeclared-store`. It catches the other 25, `lib-r3-transition-binding`, `lib-r6-link-sweep-missing` and `lib-r9-unknown-scenario` included. With the evidence ids kept, the clean toy fails with three violations: R1 for each of the two evidence ids, and R6 `fact_missing`.
+
+## 8. Test your adapter with mutations
+
+A clean PASS can prove nothing. An adapter that returns too few facts, or a rule that never fires, also gives PASS. A mutation test shows that each check can fail.
+
+- For each rule that you turn on, keep a few mutated copies of the ontology or of the documents. Each copy changes one thing, and must fail with exactly its expected rule: that rule, and no other rule.
+- Pin the result in a snapshot, so that a change in the adapter or in Avouch that changes a finding shows in the diff.
+- Give each waiver (`knownSourceGaps`: `conflict` and `proposed`) and each disabled rule (`{ disabled: "<reason>" }`) a reason.
+- Where the documents decide, track that no `unknown` or `unspecified` is left in the ontology: for example `permission: unknown` (R10 `permission_unknown`) or a condition without an expression (R12 `condition_unspecified`). Do not waive these when the text gives the answer; write the value. `avouch query list gaps` lists the waivers.
+
+The model is the toy library: each file in `examples/library/mutations/` is a JSON-pointer patch of the ontology (`src/patch.ts`) with `expect: R<n>`, and `test/library.test.ts` checks that the clean ontology passes and that each mutation fails with exactly its expected rule. Mutations of the documents follow the same pattern: change one source text, run the adapter, and expect one rule.
