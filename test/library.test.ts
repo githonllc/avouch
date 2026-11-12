@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import doc from "../examples/library/library.md?raw";
 import ontologyText from "../examples/library/library.ontology.yaml?raw";
-import { check } from "../src/checker";
+import schema from "../ontology.schema.json";
+import { check, NAME_MAPS } from "../src/checker";
 import { RULES, type FormatConfig, type Invocation } from "../src/contract";
 import { applyPatch } from "../src/patch";
 import { buildLibraryFacts, withoutGenerated } from "../examples/library/adapter";
@@ -488,6 +489,58 @@ describe("toy library project", () => {
         expect(r1(o)).toContainEqual(["linkTypes.__proto__", "__proto__ is a reserved name"]);
       });
     });
+  });
+
+  describe("walkCites does not take a name in a name-keyed map for a cite field", () => {
+    it("NAME_MAPS equals the schema fields whose value is a map keyed by names", () => {
+      type S = Record<string, any>;
+      const defs = (schema as S).$defs as S;
+      const deref = (n: S | undefined) => { // a $ref chain, with a cycle guard
+        const seen = new Set<string>();
+        while (n?.$ref && !seen.has(n.$ref)) { seen.add(n.$ref); n = defs[String(n.$ref).replace("#/$defs/", "")]; }
+        return n;
+      };
+      const found = new Set<string>(), seen = new Set<object>();
+      const walk = (n: S | undefined) => {
+        if (!n || typeof n !== "object" || seen.has(n)) return;
+        seen.add(n);
+        if (n.$ref) walk(defs[String(n.$ref).replace("#/$defs/", "")]);
+        for (const [k, p] of Object.entries((n.properties ?? {}) as S)) {
+          const r = deref(p);
+          if (r?.type === "object" && typeof r.additionalProperties === "object" && r.additionalProperties !== null && !r.properties) found.add(k);
+          walk(p);
+        }
+        for (const k of ["items", "additionalProperties", "then", "else"]) walk(n[k]);
+        for (const k of ["oneOf", "anyOf", "allOf"]) for (const m of (n[k] ?? []) as S[]) walk(m);
+      };
+      walk(schema as S);
+      expect([...found].sort()).toEqual([...NAME_MAPS].sort());
+    });
+
+    // Each case adds an entry named `cite` (a copy of a valid entry) to a name-keyed map; `at` is the walker path of the cite inside it.
+    const B = ont.actionTypes.BORROW;
+    const copy = (e: any, quote?: string) => ({ ...structuredClone(e), cite: { ...e.cite, ...(quote === undefined ? {} : { quote }) } });
+    const cases: [string, string, (quote?: string) => unknown, string][] = [
+      ["an action parameter", "/actionTypes/BORROW/parameters/cite", (q) => copy(B.parameters.book_id, q), ".actionTypes.BORROW.parameters.cite.cite"],
+      ["an object property", "/objectTypes/Book/properties/cite", (q) => copy(ont.objectTypes.Book.properties.title, q), ".objectTypes.Book.properties.cite.cite"],
+      ["a disposition", "/dispositions/cite", (q) => copy(ont.dispositions.BORROWED, q), ".dispositions.cite.cite"],
+      ["a transition bind entry", "/stateMachines/Book/transitions/0/bind", (q) => ({ cite: copy(B.parameters.book_id, q) }), ".stateMachines.Book.transitions[0].bind.cite.cite"],
+      ["a link_effects entry", "/actionTypes/BORROW/link_effects/cite", (q) => copy(B.link_effects.loan_book, q), ".actionTypes.BORROW.link_effects.cite.cite"],
+    ];
+    // Walker keys start with "."; the other rules' keys do not.
+    const walkerKeys = (o: unknown) => check(o, facts()).violations.filter((x) => x.key.startsWith(".")).map((x) => `${x.rule} ${x.key}`);
+    for (const [what, path, entry, at] of cases) {
+      const withCite = (quote?: string) => {
+        const ops: any[] = [{ op: "add", path, value: entry(quote) }];
+        if (what === "a link_effects entry") // an effect needs a link type of that id
+          ops.unshift({ op: "add", path: "/linkTypes/-", value: { ...ont.linkTypes[0], id: "cite" } });
+        return applyPatch(ont, ops);
+      };
+      it(`${what} named cite: its cite is checked, the name is not`, () => {
+        expect(walkerKeys(withCite())).toEqual([]);
+        expect(walkerKeys(withCite("a sentence that is not in the document"))).toEqual([`R2 ${at}`]);
+      });
+    }
   });
 
   describe("generated blocks are dropped before any fact is extracted", () => {

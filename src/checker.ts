@@ -7,6 +7,12 @@ import { analyzeConditions, asReads, parseScope, quoteHasLiteral, quotesOf, stag
 
 export { IDENT };
 
+// The schema fields whose value is a map keyed by names, not by fields: a key of such a map is a user name, even when it reads `cite`.
+export const NAME_MAPS: ReadonlySet<string> = new Set([
+  "contexts", "outOfScopeObjectTypes", "dispositions", "objectTypes", "properties", "non_link_fields", "stateMachines",
+  "bind", "derivedProperties", "actionTypes", "parameters", "edit_cites", "link_effects",
+]);
+
 const CLASSES = ["canonical", "derived", "policy", "opaque", "unknown"];
 const CARDINALITY = /^(1|N):(1|N|M)$/;
 
@@ -352,14 +358,14 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     for (const [cid, c] of Object.entries(commands))
       if (isObj(c) && c.idempotencyKey === undefined) v("R1", cid, "the profile requires an idempotencyKey declaration, but the action declares none", "idempotency_undeclared");
   // ------------------------------------------------------------------------------------------ R2
-  const walkCites = (x: Any, path: string) => {
-    if (Array.isArray(x)) x.forEach((y, i) => walkCites(y, `${path}[${i}]`));
+  const walkCites = (x: Any, path: string, names = false) => {
+    if (Array.isArray(x)) x.forEach((y, i) => walkCites(y, `${path}[${i}]`)); // an array is never a name map
     else if (isObj(x))
       for (const [k, y] of Object.entries(x)) {
-        if (k === "cite") {
+        if (k === "cite" && !names) {
           const s = section(isObj(y) ? y.doc : undefined, "R2", `${path}.cite`);
           if (s && !(isStr(y.quote) && s.text.includes(y.quote))) v("R2", `${path}.cite`, `quote not found verbatim in ${y.doc}: ${y.quote}`);
-        } else walkCites(y, `${path}.${k}`);
+        } else walkCites(y, `${path}.${k}`, !names && NAME_MAPS.has(k)); // the value of a name is an entry, not a map of names
       }
   };
   walkCites({ objectTypes: objects, stateMachines, linkTypes: links, actionTypes: commands, permission_rows_not_commands: nonCmdRows, derivedProperties: derived, scope: ont.scope, dispositions: ont.dispositions }, "");
