@@ -564,6 +564,16 @@ describe("toy library project", () => {
       it(`throws on the malformed marker ${m}`, () => expect(() => strip(["a", m])).toThrow(/malformed/));
   });
 
+  describe("record parameter types", () => {
+    const triples = (r: ReturnType<typeof check>) => r.violations.map((x) => [x.rule, x.kind, x.key]);
+    const param = (optional: unknown) => ({ op: "add" as const, path: "/actionTypes/BORROW/parameters/picks", value: { type: { set: { record: { book: { ref: "Book" }, note: "string" }, optional } }, cite: { doc: "L6", quote: "BORROW takes member_id" } } });
+    it("optional names fields of the record, without repeats", () => {
+      expect(triples(check(applyPatch(ont, [param(["note"])]), facts()))).not.toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.picks"]);
+      for (const bad of [["other"], ["note", "note"], "note"])
+        expect(triples(check(applyPatch(ont, [param(bad)]), facts()))).toContainEqual(["R1", "generic", "actionTypes.BORROW.parameters.picks"]);
+    });
+  });
+
   describe("parameter values", () => {
     const triples = (r: ReturnType<typeof check>) => r.violations.map((x) => [x.rule, x.kind, x.key]);
     const quote = { doc: "L3", quote: "RETURN records the return_condition of the Loan: GOOD or DAMAGED." };

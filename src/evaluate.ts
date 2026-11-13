@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPermissionWhen, checkPredicate, fitsType, isPureLink, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPermissionWhen, checkPredicate, fitsType, hasRecord, isObj, isPureLink, misfit, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. A foreign-key via and the scope field are a string or null. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
@@ -11,7 +11,9 @@ export interface Snapshot {
   links?: Record<string, readonly Row[]>;
 }
 export type Actor = { id: string; keys: readonly string[]; kind: string };
-export type Bindings = Readonly<Record<string, Value | undefined>>;
+// A parameter value: a Value, or for a record parameter a JSON object (a record) or an array of them.
+export type Input = Value | { readonly [field: string]: Input } | readonly Input[];
+export type Bindings = Readonly<Record<string, Input | undefined>>;
 export interface Env {
   action: string;
   snapshot: Snapshot;
@@ -22,8 +24,9 @@ export interface Env {
 }
 
 export type DecideResult =
-  | { layer: "invocation"; result: "INVALID_BINDING"; param: string; reason: "missing" | "unknown_param" | "type" | "not_found" }
-  | { layer: "invocation"; result: "SCOPE_DENIED"; param: string }
+  // path: only for a failure inside a record parameter, the place of the failing value (for example `stops[1].task_ids[0]`)
+  | { layer: "invocation"; result: "INVALID_BINDING"; param: string; reason: "missing" | "unknown_param" | "type" | "not_found"; path?: string }
+  | { layer: "invocation"; result: "SCOPE_DENIED"; param: string; path?: string }
   | { layer: "invocation"; result: "PERMISSION_DENIED" }
   | { layer: "domain"; result: string; class: DispositionClass; row: number | "otherwise"; next?: unknown }
   | { layer: "indeterminate"; reason: "unspecified"; row: number; condition: string; derived?: string }
@@ -140,10 +143,18 @@ class Session {
 
 // A frame: the visible names. `action` is undefined inside a derived expression (parameters are not visible there).
 // `input`: a permission conditional_when, before binding: a parameter reads as given, never as an object binding.
-type Frame = { action: string | undefined; vars: Record<string, ObjVar>; input?: true };
+// vals: the quantifier variables that are not object bindings (a record or a scalar element), with their types.
+type Frame = { action: string | undefined; vars: Record<string, ObjVar>; vals?: Record<string, { type: Type; v: unknown }>; input?: true };
 
 const paramType = (ont: Stage1Ontology, action: string | undefined, name: string): Type | undefined =>
   action === undefined ? undefined : own(ont.actionTypes[action]?.parameters, name)?.type;
+
+// The object of a bound id; binding has resolved every id, so an id that is not visible throws.
+function objOf(s: Session, type: string, id: unknown, what: string): ObjVar {
+  const row = s.byId(type).get(id as string);
+  if (row === undefined) throw new Error(`binding ${what} = ${String(id)} is not a visible ${type}`);
+  return { type, row };
+}
 
 function objVar(s: Session, f: Frame, name: string): ObjVar | undefined {
   if (Object.hasOwn(f.vars, name)) return f.vars[name];
@@ -152,32 +163,11 @@ function objVar(s: Session, f: Frame, name: string): ObjVar | undefined {
   if (t === undefined || typeof t === "string" || !("ref" in t)) return undefined;
   const v = own(s.env.bindings, name);
   if (v === null || v === undefined) return { type: t.ref, row: null };
-  const row = s.byId(t.ref).get(v as string);
-  if (row === undefined) throw new Error(`binding ${name} = ${String(v)} is not a visible ${t.ref}`);
-  return { type: t.ref, row };
+  return objOf(s, t.ref, v, name);
 }
 
-function readRef(s: Session, f: Frame, path: string): Value {
-  const parts = path.split(".");
-  if (parts.length > 2 || parts.some((p) => p === "")) throw new Error(`ref ${path}: at most one dot`);
-  const [head, prop] = parts;
-  if (head === "now") {
-    if (prop !== undefined) throw new Error("now has no properties");
-    return s.env.now;
-  }
-  if (head === "actor") {
-    if (prop === "id") return s.env.actor.id;
-    if (prop === "keys") return s.env.actor.keys;
-    if (prop === "kind") return s.env.actor.kind;
-    throw new Error(`actor.${prop ?? ""} is not readable; use actor.id, actor.keys or actor.kind`);
-  }
-  const o = objVar(s, f, head);
-  if (prop === undefined) {
-    if (o !== undefined) return o.row === null ? null : (o.row.id as string);
-    if (f.action === undefined) throw new Error(`${head} is not visible in a derived property expression`);
-    return own(s.env.bindings, head) ?? null;
-  }
-  if (o === undefined) throw new Error(`${head} is not an object binding`);
+// A property of an object binding.
+function readProp(s: Session, o: ObjVar, prop: string): Value {
   if (o.row === null) return null;
   const v = field(o.row, prop, `${o.type} row ${String(o.row.id)}`);
   // A non-null value must fit the declared type; otherwise the snapshot is malformed.
@@ -185,6 +175,78 @@ function readRef(s: Session, f: Frame, path: string): Value {
   if (v !== null && t !== undefined && !fitsType(v, t))
     throw new Error(`snapshot ${o.type} row ${String(o.row.id)}: ${prop} = ${JSON.stringify(v)} does not fit its declared type`);
   return v;
+}
+
+// What a path reads: an object binding, or a value with its declared type (undefined when the path gives null before
+// its end). A path is a head, then record fields, then at most one property of an object.
+type Read = { o: ObjVar } | { t: Type | undefined; v: unknown };
+
+function walk(s: Session, f: Frame, path: string): Read {
+  const parts = path.split(".");
+  if (parts.some((p) => p === "")) throw new Error(`ref ${path}: an empty segment`);
+  const [head, ...rest] = parts;
+  if (head === "now") {
+    if (rest.length > 0) throw new Error("now has no properties");
+    return { t: "timestamp", v: s.env.now };
+  }
+  if (head === "actor") {
+    if (rest.length > 1) throw new Error(`ref ${path}: at most one dot`);
+    const prop = rest[0];
+    if (prop === "id") return { t: "id", v: s.env.actor.id };
+    if (prop === "keys") return { t: { set: "string" }, v: s.env.actor.keys };
+    if (prop === "kind") return { t: "enum", v: s.env.actor.kind };
+    throw new Error(`actor.${prop ?? ""} is not readable; use actor.id, actor.keys or actor.kind`);
+  }
+  let cur: Read;
+  const val = f.vals !== undefined && Object.hasOwn(f.vals, head) ? f.vals[head] : undefined;
+  const o = val === undefined ? objVar(s, f, head) : undefined;
+  if (val !== undefined) cur = { t: val.type, v: val.v };
+  else if (o !== undefined) cur = { o };
+  else {
+    if (f.action === undefined) throw new Error(`${head} is not visible in a derived property expression`);
+    cur = { t: paramType(s.ont, f.action, head), v: own(s.env.bindings, head) ?? null };
+  }
+  for (const [i, seg] of rest.entries()) {
+    let obj: ObjVar;
+    if ("o" in cur) obj = cur.o;
+    else {
+      const t = cur.t;
+      if (cur.v === null) return { t: undefined, v: null };
+      if (t !== undefined && typeof t !== "string" && "record" in t) {
+        if (!isObj(cur.v)) throw new Error(`binding ${parts.slice(0, i + 1).join(".")} is not a record`);
+        cur = { t: own(t.record, seg), v: own(cur.v, seg) ?? null };
+        continue;
+      }
+      if (t === undefined || typeof t === "string" || !("ref" in t) || f.input === true)
+        throw new Error(i === 0 ? `${head} is not an object binding` : `ref ${path}: ${parts.slice(0, i + 1).join(".")} is not a record or an object binding`);
+      obj = objOf(s, t.ref, cur.v, parts.slice(0, i + 1).join("."));
+    }
+    if (i !== rest.length - 1) throw new Error(`ref ${path}: at most one dot after an object binding`);
+    return { t: own(s.ont.objectTypes[obj.type]?.properties, seg)?.type, v: readProp(s, obj, seg) };
+  }
+  return cur;
+}
+
+function readRef(s: Session, f: Frame, path: string): Value {
+  const r = walk(s, f, path);
+  if ("o" in r) return r.o.row === null ? null : (r.o.row.id as string);
+  return r.v as Value;
+}
+
+// The frames of the elements of a quantifier domain: a navigation, or a {ref} path of a set (null is the empty set).
+function domain(s: Session, f: Frame, q: Quantifier): Frame[] {
+  if (!("ref" in q.in)) return navigate(s, f, q.in).map((el) => ({ ...f, vars: { ...f.vars, [q.as]: el } }));
+  const path = q.in.ref;
+  const r = walk(s, f, path);
+  if ("o" in r || r.v === null) return [];
+  const t = r.t;
+  if (t === undefined || typeof t === "string" || !("set" in t) || !Array.isArray(r.v)) throw new Error(`quantifier domain ${path} is not a set`);
+  const e = t.set;
+  return r.v.map((x, i) =>
+    typeof e !== "string" && "ref" in e
+      ? { ...f, vars: { ...f.vars, [q.as]: objOf(s, e.ref, x, `${path}[${i}]`) } }
+      : { ...f, vals: { ...f.vals, [q.as]: { type: e, v: x } } },
+  );
 }
 
 // Out of range means malformed input (snapshot, duration, now): it throws, it is not U.
@@ -328,8 +390,7 @@ function predicate(s: Session, f: Frame, e: Expr): TV {
   }
   if ("isNull" in e) return tv(value(s, f, e.isNull[0]) === null);
   if ("isNotNull" in e) return tv(value(s, f, e.isNotNull[0]) !== null);
-  const quant = (q: Quantifier): TV[] =>
-    evalAll(navigate(s, f, q.in).map((el) => () => (q.where === undefined ? "T" : predicate(s, { ...f, vars: { ...f.vars, [q.as]: el } }, q.where))));
+  const quant = (q: Quantifier): TV[] => evalAll(domain(s, f, q).map((g) => () => (q.where === undefined ? "T" : predicate(s, g, q.where))));
   // Quantifiers are two-valued: an element counts only when its predicate is T.
   if ("exists" in e) return tv(quant(e.exists).includes("T"));
   if ("none" in e) return tv(!quant(e.none).includes("T"));
@@ -378,7 +439,8 @@ function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor:
       if (v === null ? p.optional === true || projected : p.optional === true && !projected) continue;
       return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "missing" };
     }
-    if (!fitsType(v, p.type!)) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "type" };
+    const m = misfit(v, p.type!, name);
+    if (m !== null) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "type", ...nestedPath(p.type!, name, m) };
     if (Array.isArray(p.values) && !p.values.includes(v as string)) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "type" };
   }
   const perm = action.permission;
@@ -388,6 +450,18 @@ function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor:
   if (states.includes("pass")) return undefined;
   if (states.every((x) => x === "deny")) return { layer: "invocation", result: "PERMISSION_DENIED" };
   return { layer: "indeterminate", reason: "permission_condition" };
+}
+
+// The `path` of a failure inside a record parameter; none for a failure at the top level or in a parameter without records.
+const nestedPath = (t: Type, name: string, at: string): { path?: string } => (at !== name && hasRecord(t) ? { path: at } : {});
+
+// The ids inside a parameter value with their ref types and places: declared field order, then array order. Null values
+// (optional fields) have no id.
+function* refsIn(v: unknown, t: Type, at: string): Generator<{ id: unknown; ref: string; at: string }> {
+  if (v === null || v === undefined || typeof t === "string") return;
+  if ("ref" in t) yield { id: v, ref: t.ref, at };
+  else if ("set" in t) for (const [i, x] of (v as readonly unknown[]).entries()) yield* refsIn(x, t.set, `${at}[${i}]`);
+  else for (const f of Object.keys(t.record)) yield* refsIn(own(v as Record<string, unknown>, f), t.record[f], `${at}.${f}`);
 }
 
 const condId = (row: DecisionRow): string => ("passes" in row.when ? row.when.passes : row.when.fails);
@@ -400,21 +474,17 @@ function resolve(s: Session, actionId: string): DecideResult {
   const unresolved: string[] = []; // unresolved: domain parameters whose id did not resolve
   for (const [name, p] of Object.entries(action.parameters ?? {})) {
     const t = p.type!;
-    const isSet = typeof t !== "string" && "set" in t;
-    const elem = isSet ? t.set : t;
-    if (typeof elem === "string" || !("ref" in elem)) continue;
     const v = own(s.env.bindings, name);
     if (v === null && p.optional !== true && projectedFields(p) !== null) return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "not_found" };
-    if (v === null || v === undefined) continue;
-    for (const id of isSet ? (v as readonly Value[]) : [v]) {
-      if (s.byId(elem.ref).has(id as string)) continue;
+    for (const { id, ref, at } of refsIn(v, t, name)) {
+      if (s.byId(ref).has(id as string)) continue;
       // Absent and out of scope give the same null, so existence in another tenant is not revealed.
       if (resolvesInDomain(p)) {
         unresolved.push(name);
         break;
       }
-      if (s.allRows(elem.ref).some((r) => r.id === id)) return { layer: "invocation", result: "SCOPE_DENIED", param: name };
-      return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "not_found" };
+      if (s.allRows(ref).some((r) => r.id === id)) return { layer: "invocation", result: "SCOPE_DENIED", param: name, ...nestedPath(t, name, at) };
+      return { layer: "invocation", result: "INVALID_BINDING", param: name, reason: "not_found", ...nestedPath(t, name, at) };
     }
   }
   const b = s.env.bindings;
@@ -493,13 +563,14 @@ export function decide(ont: Stage1Ontology, actionId: string, snapshot: Snapshot
   return resolve(s, actionId);
 }
 
-export type ExternalResult = { result: string; param?: string; reason?: "missing" | "unknown_param" | "type" | "not_found" };
+export type ExternalResult = { result: string; param?: string; reason?: "missing" | "unknown_param" | "type" | "not_found"; path?: string };
 
 // The outward projection. SCOPE_DENIED and not_found map to one value, so a caller cannot learn that an id exists in
 // another tenant. Other reasons (such as type) are reported as they are.
 export function externalResult(r: Exclude<DecideResult, { layer: "indeterminate" }>): ExternalResult {
   if (r.layer === "domain") return { result: r.result };
-  if (r.result === "SCOPE_DENIED") return { result: "INVALID_BINDING", param: r.param, reason: "not_found" };
-  if (r.result === "INVALID_BINDING") return { result: r.result, param: r.param, reason: r.reason };
+  const at = r.result === "SCOPE_DENIED" || r.result === "INVALID_BINDING" ? (r.path === undefined ? {} : { path: r.path }) : {};
+  if (r.result === "SCOPE_DENIED") return { result: "INVALID_BINDING", param: r.param, reason: "not_found", ...at };
+  if (r.result === "INVALID_BINDING") return { result: r.result, param: r.param, reason: r.reason, ...at };
   return { result: r.result };
 }

@@ -488,9 +488,14 @@ ofv:set a rdf:Property ;
   rdfs:comment "Element type of a set type, written as for ofv:type. YAML: ….type.set" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
+ofv:record a rdf:Property ;
+  rdfs:label "record" ;
+  rdfs:comment "The fields of a record type, a map from field name to field type, written as for ofv:type. Only in a parameter type. A field is required unless the ofv:optional list of the record names it. YAML: actionTypes.<ID>.parameters.<n>.type.record (also nested, and as ….type.set.record)" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
 ofv:optional a rdf:Property ;
   rdfs:label "optional" ;
-  rdfs:comment "The caller may leave the parameter out; it is then null. Not for a projected parameter: it is always given, and null is a value. YAML: actionTypes.<ID>.parameters.<n>.optional" ;
+  rdfs:comment "The caller may leave the parameter out; it is then null. Not for a projected parameter: it is always given, and null is a value. YAML: actionTypes.<ID>.parameters.<n>.optional. In a record type, the list of the fields that may be absent or null. YAML: ….type.record optional[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:projectedFrom a rdf:Property ;

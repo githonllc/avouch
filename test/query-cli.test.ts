@@ -115,6 +115,20 @@ describe("avouch query", () => {
     expect(r.envelope.result.id).toBe("BORROW");
   });
 
+  it("prints a record parameter type and a quantifier over a record set", () => {
+    const type = { set: { record: { book: { ref: "Book" }, note: "string" }, optional: ["note"] } };
+    const path = patchedOntology([
+      { op: "add", path: "/actionTypes/BORROW/parameters/picks", value: { type, cite: { doc: "L6", quote: "BORROW takes member_id" } } },
+      { op: "add", path: "/actionTypes/BORROW/conditions/-", value: { id: "picks_available", expr: { all: { as: "p", in: { ref: "picks" }, where: { eq: [{ ref: "p.book.state" }, { lit: "AVAILABLE" }] } } }, cites: [{ cite: { doc: "L6", quote: "BORROW takes member_id" } }] } },
+    ]);
+    const r = json("action", "BORROW", "-f", path);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.envelope.result.parameters.find((p: { name: string }) => p.name === "picks").type).toEqual(type);
+    expect(r.envelope.result.conditions.find((c: { id: string }) => c.id === "picks_available").exprText).toBe('all p in picks where p.book.state = "AVAILABLE"');
+    const text = run("action", "BORROW", "-f", path).stdout;
+    expect(text).toContain(["  - name: picks", "    type:", "      set:", "        record:", "          book:", "            ref: Book", "          note: string", "        optional: note"].join("\n"));
+  });
+
   it("stamps no git outside a repository", () => {
     const { path } = copyOntology();
     const r = json("action", "BORROW", "-f", path);
