@@ -128,6 +128,10 @@ function show(e: unknown, atRoot: boolean): string {
     const where = v.where !== undefined ? ` where ${show(v.where, false)}` : "";
     return wrap(`${k} ${v.as} in ${n.from.ref}.${n.link}(${n.dir})${where}`);
   }
+  if ((k === "exists" || k === "none" || k === "all") && isObj(v) && typeof v.as === "string" && isObj(v.in) && typeof v.in.ref === "string" && Object.keys(v.in).length === 1) {
+    const where = v.where !== undefined ? ` where ${show(v.where, false)}` : "";
+    return wrap(`${k} ${v.as} in ${v.in.ref}${where}`);
+  }
   return unknownNode(e);
 }
 

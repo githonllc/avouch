@@ -255,4 +255,28 @@ describe("ontology JSON Schema", () => {
     expect(validate(l)).toBe(false);
     expect(paths()).toContain(`/linkTypes/${l.linkTypes.length - 1}/id`);
   });
+
+  it("a record parameter type validates; a record in a property type, a bad field name or a repeated optional is rejected", () => {
+    const rec = { record: { book: { ref: "Book" }, legs: { set: { record: { city: "enum" } } }, note: "string" }, optional: ["note"] };
+    const o = structuredClone(ontology);
+    o.actionTypes.BORROW.parameters.picks = { type: { set: rec }, cite: { doc: "L6", quote: "x" } };
+    o.actionTypes.BORROW.parameters.pick = { type: rec, optional: true, cite: { doc: "L6", quote: "x" } };
+    expect(validate(o), JSON.stringify(validate.errors)).toBe(true);
+    const prop = structuredClone(ontology);
+    prop.objectTypes.Book.properties.title.type = rec;
+    expect(validate(prop)).toBe(false);
+    expect(paths()).toContain("/objectTypes/Book/properties/title/type");
+    for (const [label, type] of [
+      ["a field name with a dot", { record: { "a.b": "id" } }],
+      ["a field name that starts with a digit", { record: { "1a": "id" } }],
+      ["a reserved field name", { record: { actor: "id" } }],
+      ["a repeated optional field", { record: { a: "id" }, optional: ["a", "a"] }],
+      ["an unknown key", { record: { a: "id" }, other: 1 }],
+      ["a set of a set", { set: { set: "id" } }],
+    ] as const) {
+      const b = structuredClone(ontology);
+      b.actionTypes.BORROW.parameters.pick = { type, cite: { doc: "L6", quote: "x" } };
+      expect(validate(b), label).toBe(false);
+    }
+  });
 });

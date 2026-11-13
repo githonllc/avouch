@@ -1055,7 +1055,7 @@
       "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote. `projectedFrom` (only with `type: {ref: <Object>}`) lists the request fields, an alternate key, that the project's projection resolves to this ref; each field is a declared parameter of the same action that is not projected (R1); on any other parameter R1 reports it and `decide` ignores it; the cite quote must name each field instead of the parameter name (R2 `projection_field_not_in_quote`); a null value of a required projected parameter is `INVALID_BINDING` `not_found`, and an absent one is `missing`, also with `optional: true` (SPEC section 9). `unresolved: domain` (only on a `type: {ref: <Object>}` parameter with no `optional` and no `projectedFrom`): an id that does not resolve (absent, or only outside the scope) binds to null, not to `INVALID_BINDING` `not_found` or `SCOPE_DENIED`; a decision row tests it with `isNull` / `isNotNull`; on any other parameter R1 reports it and `decide` ignores it (SPEC section 9, Domain resolution).",
       "properties": {
         "cite": { "$ref": "#/$defs/cite" },
-        "type": { "$ref": "#/$defs/valueType" },
+        "type": { "$ref": "#/$defs/parameterType" },
         "optional": { "const": true },
         "values": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "projectedFrom": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
@@ -1106,6 +1106,37 @@
           },
           "cite": {
             "$ref": "#/$defs/cite"
+          }
+        }
+      },
+      "parameterType": {
+        "description": "A parameter type: a value type, a record type, or `{set: <record type>}` (SPEC section 9). Record types are valid only in a parameter type, not in a property or a derived property.",
+        "oneOf": [
+          { "$ref": "#/$defs/valueType" },
+          { "$ref": "#/$defs/recordType" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["set"],
+            "properties": { "set": { "$ref": "#/$defs/recordType" } }
+          }
+        ]
+      },
+      "recordType": {
+        "description": "A record: `{record: {<field>: <parameter type>}, optional?: [<field>...]}`. A field is required unless `optional` names it. A field name is an identifier and is not `now`, `actor` or `self`. R1: `optional` names fields of this record, each once. A record value is a JSON object; a field that the type does not declare is ignored (SPEC section 9).",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["record"],
+        "properties": {
+          "record": {
+            "type": "object",
+            "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "enum": ["now", "actor", "self"] } },
+            "additionalProperties": { "$ref": "#/$defs/parameterType" }
+          },
+          "optional": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
           }
         }
       },
@@ -1190,7 +1221,7 @@
           "ref": {
             "type": "string",
             "minLength": 1,
-            "description": "now, actor.id, actor.keys, actor.kind, a parameter, or <binding>.<property> (one dot)."
+            "description": "A path: now, actor.id, actor.keys, actor.kind, or a head (a parameter or a quantifier variable; self in a derived property), then fields of a record, then at most one property of an object (SPEC section 9)."
           },
           "lit": {
             "oneOf": [
@@ -1453,7 +1484,7 @@
             }
           }
         },
-        "description": "An expression: a map with exactly one key, the node name. Value nodes: ref, lit, plus, dateIn, derived. Predicate nodes: comparisons, and, or, not, in, subsetOf, isNull, isNotNull, and the quantifiers exists / none / all over a nav. Type rules: SPEC.md section 9."
+        "description": "An expression: a map with exactly one key, the node name. Value nodes: ref, lit, plus, dateIn, derived. Predicate nodes: comparisons, and, or, not, in, subsetOf, isNull, isNotNull, and the quantifiers exists / none / all over a nav or over a {ref} path of a set that reads no property of an object. Type rules: SPEC.md section 9."
       },
       "decision": {
         "type": "object",

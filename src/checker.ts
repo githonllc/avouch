@@ -10,13 +10,24 @@ export { IDENT };
 // The schema fields whose value is a map keyed by names, not by fields: a key of such a map is a user name, even when it reads `cite`.
 export const NAME_MAPS: ReadonlySet<string> = new Set([
   "contexts", "outOfScopeObjectTypes", "dispositions", "objectTypes", "properties", "non_link_fields", "stateMachines",
-  "bind", "derivedProperties", "actionTypes", "parameters", "edit_cites", "link_effects",
+  "bind", "derivedProperties", "actionTypes", "parameters", "edit_cites", "link_effects", "record",
 ]);
 
 const CLASSES = ["canonical", "derived", "policy", "opaque", "unknown"];
 const CARDINALITY = /^(1|N):(1|N|M)$/;
 
 type Any = any; // the ontology is untyped YAML; every field access below is validated (R1)
+
+// The R1 messages for each record type inside a parameter type whose `optional` is not a list of distinct fields of it.
+function badOptional(t: unknown): string[] {
+  if (!isObj(t)) return [];
+  if (t.set !== undefined) return badOptional(t.set);
+  if (!isObj(t.record)) return [];
+  const fields = Object.keys(t.record);
+  const opt = t.optional;
+  const ok = opt === undefined || (Array.isArray(opt) && opt.every((f) => typeof f === "string" && fields.includes(f)) && new Set(opt).size === opt.length);
+  return [...(ok ? [] : [`optional ${JSON.stringify(opt)} must be a list of distinct fields of the record {${fields.join(", ")}}`]), ...Object.values(t.record).flatMap(badOptional)];
+}
 
 export function check(ontology: unknown, facts: SourceFacts): Report {
   const out: Violation[] = [];
@@ -301,6 +312,8 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
             v("R1", `${p}.parameters.${n}`, `projectedFrom field ${f} must be a declared parameter of ${cid} that is not projected`);
       if (isObj(pv) && pv.unresolved !== undefined && !resolvesInDomain(pv))
         v("R1", `${p}.parameters.${n}`, "unresolved: domain needs a required scalar {ref: <Object>} parameter without projectedFrom");
+      // A record type: its optional list names fields of that record, each once (the schema checks the field names).
+      for (const bad of isObj(pv) ? badOptional(pv.type) : []) v("R1", `${p}.parameters.${n}`, bad);
     }
     const pids = new Set<string>();
     for (const [i, pc] of arr(c.conditions).entries()) {

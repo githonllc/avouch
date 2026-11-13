@@ -452,3 +452,26 @@ describe("soundness property: concrete result in the abstract result (seeded)", 
     expect(bodyU).toBeGreaterThan(50);
   }, 30_000); // 0.8 s on a developer machine; one shared CI run took 5.4 s, above the 5 s default
 });
+
+describe("record parameters", () => {
+  const pickType = { set: { record: { book: { ref: "Book" }, spare: { ref: "Book" }, count: "integer", tags: { set: "enum" } }, optional: ["spare", "tags"] } };
+  const o = applyPatch(ont, [{ op: "add", path: "/actionTypes/BORROW/parameters/picks", value: { type: pickType, cite: { doc: "L6", quote: "picks" } } }]);
+  const absorbs = (e: Expr) => {
+    checkPredicate(o, e, BORROW);
+    return absorbingQuantifiers(o, facts, e, BORROW);
+  };
+  it("a required field read in a body is not reported; an optional field read is", () => {
+    expect(absorbs(q("all", "p", r("picks") as never, op("eq", r("p.book.state"), L("AVAILABLE"))))).toEqual([]);
+    expect(absorbs(q("all", "p", r("picks") as never, op("eq", r("p.count"), L(1))))).toEqual([]);
+    expect(absorbs(q("all", "p", r("picks") as never, op("eq", r("p.spare.state"), L("AVAILABLE"))))).toEqual(["$.all"]);
+    expect(absorbs(q("all", "p", r("picks") as never, op("in", L("A"), r("p.tags"))))).toEqual(["$.all"]);
+  });
+  it("a nested domain does not throw and gives the variable its element type", () => {
+    expect(absorbs(q("exists", "p", r("picks") as never, q("all", "t", r("p.tags") as never, op("eq", r("t"), L("A")))))).toEqual([]);
+    const mn = mayNullIn(o, facts, { ...BORROW, values: { p: pickType.set as never } });
+    expect(mn("p.book")).toBe(false);
+    expect(mn("p.spare")).toBe(true);
+    expect(mn("p.spare.state")).toBe(true);
+    expect(mn("p.book.state")).toBe(false);
+  });
+});

@@ -4,11 +4,11 @@
 // Callers analyse only expressions that type-check. The evaluator throws NoExpression when it reaches a derived property
 // without an expression (the absent-expression rule); absorbingQuantifiers skips such a quantifier body.
 import type { SourceFacts } from "./contract.js";
-import { navType, objectBinding, own, resolvesInDomain, type Expr, type ExprContext, type Quantifier, type Stage1Ontology } from "./expr.js";
+import { bindVariable, objectBinding, own, quantifierDomain, resolvesInDomain, type Expr, type ExprContext, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
 
 export const MAX_NULLABLE_REFS = 8;
 export type Truth = "T" | "F" | "U";
-// Whether a normalized path (`x` or `x.prop`) may be null.
+// Whether a normalized path (`x`, `x.prop`, `x.field.field.prop`) may be null.
 export type MayNull = (path: string) => boolean;
 
 class NoExpression extends Error {}
@@ -126,16 +126,29 @@ function nullability(ont: Stage1Ontology, facts: SourceFacts): (ctx: ExprContext
     return lists.get(objectType)!;
   };
   return (ctx) => (path) => {
-    const [head, prop] = split(path);
+    const [head, ...rest] = path.split(".");
     if (head === "now" || head === "actor") return false;
     const local = head === "self" || Object.hasOwn(ctx.locals, head);
-    const param = local || ctx.action === undefined ? undefined : own(ont.actionTypes[ctx.action]?.parameters, head);
-    if (!local && param === undefined) return true; // not reachable after the type check; conservative
-    if (param !== undefined && (param.optional === true || resolvesInDomain(param))) return true; // an optional parameter or a ref with unresolved: domain, and every property read through it
-    if (prop === undefined) return false; // an object binding, or a required parameter
-    const o = objectBinding(ont, head, ctx);
-    // non-null only when the field list says so; a projected property (from) may always be null (its key may be absent)
-    return o === undefined || own(own(ont.objectTypes, o)?.properties, prop)?.from !== undefined || fields(o)?.get(prop)?.nullable !== false;
+    const value = !local && ctx.values !== undefined && Object.hasOwn(ctx.values, head) ? ctx.values[head] : undefined;
+    const param = local || value !== undefined || ctx.action === undefined ? undefined : own(ont.actionTypes[ctx.action]?.parameters, head);
+    if (!local && value === undefined && param === undefined) return true; // not reachable after the type check; conservative
+    if (param !== undefined && (param.optional === true || resolvesInDomain(param))) return true; // an optional parameter or a ref with unresolved: domain, and every path read through it
+    const o = local ? objectBinding(ont, head, ctx) : undefined;
+    // the head is not null (an object binding, a quantifier variable, or a required parameter); walk the segments
+    let t: Type | undefined = local ? (o === undefined ? undefined : { ref: o }) : (value ?? param!.type);
+    for (const seg of rest) {
+      if (t === undefined || typeof t === "string") return true; // not reachable after the type check; conservative
+      if ("record" in t) {
+        if (Array.isArray(t.optional) && t.optional.includes(seg)) return true; // an optional field, and every path read through it
+        t = own(t.record, seg);
+        continue;
+      }
+      if (!("ref" in t)) return true; // not reachable after the type check; conservative
+      // the last segment, a property of an object: non-null only when the field list says so; a projected property
+      // (from) may always be null (its key may be absent)
+      return own(own(ont.objectTypes, t.ref)?.properties, seg)?.from !== undefined || fields(t.ref)?.get(seg)?.nullable !== false;
+    }
+    return false;
   };
 }
 
@@ -160,7 +173,7 @@ export function absorbingQuantifiers(ont: Stage1Ontology, facts: SourceFacts, e:
     else if (QUANTIFIERS.has(k)) {
       const q = (x as unknown as Record<string, Quantifier>)[k];
       if (q.where === undefined) return;
-      const c2: ExprContext = { ...c, locals: { ...c.locals, [q.as]: navType(ont, q.in, c, `${p}.in`) } };
+      const c2 = bindVariable(c, q.as, quantifierDomain(ont, q.in, c, `${p}.in`));
       try {
         if (mayUnknown(ont, q.where, mayNullFor(c2))) out.push(p);
       } catch (err) {
