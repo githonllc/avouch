@@ -3,7 +3,7 @@
 // and the type errors. Toy vocabulary only: Branch (root), Person (global), Book (tenant, by branch_id).
 import { describe, expect, it } from "vitest";
 import { decide, evalPredicate, evalValue, externalResult, type Bindings, type DecideResult } from "../src/evaluate";
-import { checkPredicate, ExprError, fitsType, type Expr, type Stage1Ontology, type Type } from "../src/expr";
+import { checkPredicate, ExprError, fitsType, type Expr, type ParameterType, type Stage1Ontology } from "../src/expr";
 
 const E = (x: unknown) => x as Expr;
 const ref = (r: string) => E({ ref: r });
@@ -12,8 +12,8 @@ const op = (k: string, ...a: Expr[]) => E({ [k]: a });
 const q = (k: "exists" | "none" | "all", as: string, inn: unknown, where?: Expr) => E({ [k]: where === undefined ? { as, in: inn } : { as, in: inn, where } });
 
 const NOW = Date.UTC(2026, 2, 10, 12);
-const Address: Type = { record: { city: "enum", zip: "id" }, optional: ["zip"] };
-const Stop: Type = {
+const Address: ParameterType = { record: { city: "enum", zip: "id" }, optional: ["zip"] };
+const Stop: ParameterType = {
   record: {
     book_id: { ref: "Book" },
     count: "integer",
