@@ -5,8 +5,11 @@ export type Scalar = "enum" | "timestamp" | "duration" | "date" | "timezone" | "
 // A value of type "string" is read only by isNull / isNotNull; as a set element (actor.keys) it has in and subsetOf.
 // A record type is valid only in a parameter type (the schema keeps it out of properties and derived properties). A field
 // is required unless `optional` names it. A record has no operations: an expression reads its fields.
-export type RecordType = { record: Record<string, Type>; optional?: string[] };
-export type Type = Scalar | { set: Scalar } | RecordType | { set: RecordType };
+// Type: the type of a property, a derived property, a literal and a snapshot value. ParameterType: the type of a parameter,
+// a record field or a quantifier variable, which may also be a record.
+export type Type = Scalar | { set: Scalar };
+export type RecordType = { record: Record<string, ParameterType>; optional?: string[] };
+export type ParameterType = Type | RecordType | { set: RecordType };
 
 export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "timezone", "id", "integer", "number", "boolean", "string"] as const;
 export const EXPR_NODES = [
@@ -59,7 +62,7 @@ export type DecisionRow = { when: { passes: string } | { fails: string }; result
 export type Decision = { hitPolicy: "first"; rows: DecisionRow[]; otherwise?: { result: string; next?: unknown } };
 export type Condition = { id: string; expr?: Expr; unspecified?: string };
 export type ActionType = {
-  parameters?: Record<string, { type?: Type; optional?: true; values?: string[]; projectedFrom?: string[]; unresolved?: "domain" }>;
+  parameters?: Record<string, { type?: ParameterType; optional?: true; values?: string[]; projectedFrom?: string[]; unresolved?: "domain" }>;
   permission: Permission;
   conditions: Condition[];
   decision?: Decision;
@@ -108,7 +111,7 @@ export const newReads = (): ExprReads => ({ reads: [], literals: [], undefinedDe
 // locals: quantifier variable -> object type. values: quantifier variable -> its type, for a variable that is not an
 // object binding (an element of a set of records or of a set of scalars). collect: optional record of what the check
 // reads; nested: inside a reached derived expression (its literals are not the checked expression's own).
-export type ExprContext = { action?: string; self?: string; locals: Record<string, string>; values?: Record<string, Type>; collect?: ExprReads; nested?: boolean };
+export type ExprContext = { action?: string; self?: string; locals: Record<string, string>; values?: Record<string, ParameterType>; collect?: ExprReads; nested?: boolean };
 
 const VALUE_NODES = new Set(["ref", "lit", "plus", "dateIn", "derived"]);
 const COMPARE = new Set(["eq", "neq", "lt", "lte", "gt", "gte"]);
@@ -142,14 +145,14 @@ function args(e: Record<string, unknown>, k: string, n: number | "2+", path: str
 
 const isLit = (e: unknown): e is { lit: unknown } => isObj(e) && Object.keys(e).length === 1 && "lit" in e;
 
-export function typeEquals(a: Type | "string", b: Type | "string"): boolean {
+export function typeEquals(a: ParameterType | "string", b: ParameterType | "string"): boolean {
   if (typeof a === "string" || typeof b === "string") return a === b;
   if ("ref" in a) return "ref" in b && a.ref === b.ref;
   if ("set" in a) return "set" in b && typeEquals(a.set, b.set);
   return false;
 }
 
-const showType = (t: Type | "string"): string =>
+const showType = (t: ParameterType | "string"): string =>
   typeof t === "string"
     ? t
     : "ref" in t
@@ -158,10 +161,10 @@ const showType = (t: Type | "string"): string =>
         ? `{set: ${showType(t.set)}}`
         : `{record: {${Object.entries(t.record).map(([f, ft]) => `${f}: ${showType(ft)}`).join(", ")}}${Array.isArray(t.optional) ? `, optional: [${t.optional.join(", ")}]` : ""}}`;
 
-const isSet = (t: Type): t is { set: Scalar } | { set: RecordType } => typeof t !== "string" && "set" in t;
-export const isRecordType = (t: Type | undefined): t is RecordType => t !== undefined && typeof t !== "string" && "record" in t;
+const isSet = (t: ParameterType): t is { set: Scalar } | { set: RecordType } => typeof t !== "string" && "set" in t;
+export const isRecordType = (t: ParameterType | undefined): t is RecordType => t !== undefined && typeof t !== "string" && "record" in t;
 // A record or a set of records: a type that has no operations.
-export const hasRecord = (t: Type): boolean => isRecordType(t) || (isSet(t) && isRecordType(t.set));
+export const hasRecord = (t: ParameterType): boolean => isRecordType(t) || (isSet(t) && isRecordType(t.set));
 
 export function validTimezone(v: string): boolean {
   try {
@@ -174,14 +177,14 @@ export function validTimezone(v: string): boolean {
 }
 
 // The one format table, for literals and for parameter values alike.
-export function fitsType(v: unknown, t: Type | "string"): boolean {
+export function fitsType(v: unknown, t: ParameterType | "string"): boolean {
   return misfit(v, t, "") === null;
 }
 
 // The place of the first value that does not fit, or null when v fits t. at names v; a set element is `<at>[<i>]` and a
 // record field `<at>.<field>`, in array order and declared field order. A required field that is absent or null does
 // not fit; an optional one reads as null; a field the type does not declare is ignored; a set element is never null.
-export function misfit(v: unknown, t: Type | "string", at: string): string | null {
+export function misfit(v: unknown, t: ParameterType | "string", at: string): string | null {
   if (typeof t !== "string") {
     if ("set" in t) {
       if (!Array.isArray(v)) return at;
@@ -232,9 +235,9 @@ function scalarFits(v: unknown, t: Exclude<Scalar, { ref: string }> | "string"):
 // A literal is a string, a number, or an array of them; there are no Boolean literals.
 const isLitValue = (v: unknown): boolean =>
   typeof v === "string" || typeof v === "number" || (Array.isArray(v) && v.every((x) => typeof x === "string" || typeof x === "number"));
-const litFits = (v: unknown, t: Type | "string"): boolean => isLitValue(v) && fitsType(v, t);
+const litFits = (v: unknown, t: ParameterType | "string"): boolean => isLitValue(v) && fitsType(v, t);
 // A literal in a position of type t; a set literal is non-empty with elements of one JSON type. Records the literal.
-function literal(v: unknown, t: Type | "string", ctx: ExprContext, at: string): void {
+function literal(v: unknown, t: ParameterType | "string", ctx: ExprContext, at: string): void {
   if (Array.isArray(v) && v.length === 0) throw new ExprError(at, "a set literal must not be empty");
   if (Array.isArray(v) && new Set(v.map((x) => typeof x)).size > 1) throw new ExprError(at, `set literal ${JSON.stringify(v)} mixes element types`);
   if (!litFits(v, t)) throw new ExprError(at, `literal ${JSON.stringify(v)} does not fit ${showType(t)}`);
@@ -253,7 +256,7 @@ export function objectBinding(ont: Stage1Ontology, name: string, ctx: ExprContex
 // A path: a head (now, actor, self, a parameter or a quantifier variable), then record fields, then at most one property
 // of an object. Each segment is read by the type before it: a record gives a field, a ref gives a property of the bound
 // object. domain: the path of a quantifier domain, which reads no property of an object.
-function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string, domain = false): Type {
+function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string, domain = false): ParameterType {
   const parts = path.split(".");
   if (parts.some((p) => p === "")) throw new ExprError(at, `ref ${path}: an empty segment`);
   const [head, ...rest] = parts;
@@ -270,7 +273,7 @@ function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string
     throw new ExprError(at, `actor.${prop ?? ""} is not readable; use actor.id, actor.keys or actor.kind`);
   }
   if (head === "self" && ctx.self === undefined) throw new ExprError(at, "self is valid only in a derived property expression");
-  let t: Type;
+  let t: ParameterType;
   const value = ctx.values !== undefined && Object.hasOwn(ctx.values, head) ? ctx.values[head] : undefined;
   const obj = value === undefined ? objectBinding(ont, head, ctx) : undefined;
   if (obj !== undefined && own(ont.objectTypes, obj) === undefined) throw new ExprError(at, `object type ${obj} is not declared`);
@@ -306,7 +309,7 @@ function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string
 }
 
 // What a quantifier variable is: an object binding of an object type, or a value of a type (a record or a scalar).
-export type DomainVar = { object: string } | { value: Type };
+export type DomainVar = { object: string } | { value: ParameterType };
 // The `in` of a quantifier: a navigation, or a {ref} path of type {set: E} whose head is a parameter or a quantifier
 // variable and which reads no property of an object. A ref element gives an object binding; another element a value.
 export function quantifierDomain(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: string): DomainVar {
@@ -357,12 +360,12 @@ function derivedType(ont: Stage1Ontology, id: string, at: string, stack: string[
   return dp.type;
 }
 
-function operand(ont: Stage1Ontology, e: unknown, ctx: ExprContext, want: Type, at: string, stack: string[]): void {
+function operand(ont: Stage1Ontology, e: unknown, ctx: ExprContext, want: ParameterType, at: string, stack: string[]): void {
   const t = valueTypeIn(ont, e, ctx, want, at, stack);
   if (!typeEquals(t, want)) throw new ExprError(at, `expected ${showType(want)}, found ${showType(t)}`);
 }
 
-function valueTypeIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, expected: Type | undefined, at: string, stack: string[]): Type {
+function valueTypeIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, expected: ParameterType | undefined, at: string, stack: string[]): ParameterType {
   const k = nodeKey(e, at);
   const node = e as Record<string, unknown>;
   const p = `${at}.${k}`;
@@ -411,7 +414,7 @@ function checkValues(ont: Stage1Ontology, e: unknown, xs: unknown[], ctx: ExprCo
 }
 
 // Types the two operands of a binary operation; a literal takes the type of the other side.
-function pair(ont: Stage1Ontology, a: unknown, b: unknown, ctx: ExprContext, p: string, stack: string[]): [Type, Type] {
+function pair(ont: Stage1Ontology, a: unknown, b: unknown, ctx: ExprContext, p: string, stack: string[]): [ParameterType, ParameterType] {
   if (isLit(a) && isLit(b)) throw new ExprError(p, "both operands are literals");
   if (isLit(a)) {
     const tb = valueTypeIn(ont, b, ctx, undefined, `${p}[1]`, stack);
@@ -437,7 +440,7 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
     if ((k === "eq" || k === "neq") && ctx.collect?.reads.length === n0 + 1 && isLit(l) && typeof l.lit === "string" && isObj(r) && "ref" in r)
       ctx.collect.reads[n0].lit = l.lit;
     if (k === "eq" || k === "neq") {
-      const idVsRef = (x: Type, y: Type) => x === "id" && typeof y !== "string" && "ref" in y;
+      const idVsRef = (x: ParameterType, y: ParameterType) => x === "id" && typeof y !== "string" && "ref" in y;
       if (!typeEquals(ta, tb) && !idVsRef(ta, tb) && !idVsRef(tb, ta)) throw new ExprError(p, `${k} compares ${showType(ta)} with ${showType(tb)}`);
       if (isLit(l)) checkValues(ont, r, [l.lit], ctx, p);
     } else if (typeof ta !== "string" || !ORDERED.has(ta) || !typeEquals(ta, tb))
@@ -589,6 +592,6 @@ export function derivedPropertyType(ont: Stage1Ontology, id: string, collect?: E
 }
 
 // The type of a value expression; throws ExprError when it is not well typed. `expected` types a bare literal.
-export function valueType(ont: Stage1Ontology, expr: unknown, ctx: ExprContext, expected?: Type): Type {
+export function valueType(ont: Stage1Ontology, expr: unknown, ctx: ExprContext, expected?: ParameterType): ParameterType {
   return valueTypeIn(ont, expr, ctx, expected, "$", []);
 }

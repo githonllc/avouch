@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPermissionWhen, checkPredicate, fitsType, hasRecord, isObj, isPureLink, misfit, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPermissionWhen, checkPredicate, fitsType, hasRecord, isObj, isPureLink, misfit, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type ParameterType, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. A foreign-key via and the scope field are a string or null. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
@@ -144,9 +144,9 @@ class Session {
 // A frame: the visible names. `action` is undefined inside a derived expression (parameters are not visible there).
 // `input`: a permission conditional_when, before binding: a parameter reads as given, never as an object binding.
 // vals: the quantifier variables that are not object bindings (a record or a scalar element), with their types.
-type Frame = { action: string | undefined; vars: Record<string, ObjVar>; vals?: Record<string, { type: Type; v: unknown }>; input?: true };
+type Frame = { action: string | undefined; vars: Record<string, ObjVar>; vals?: Record<string, { type: ParameterType; v: unknown }>; input?: true };
 
-const paramType = (ont: Stage1Ontology, action: string | undefined, name: string): Type | undefined =>
+const paramType = (ont: Stage1Ontology, action: string | undefined, name: string): ParameterType | undefined =>
   action === undefined ? undefined : own(ont.actionTypes[action]?.parameters, name)?.type;
 
 // The object of a bound id; binding has resolved every id, so an id that is not visible throws.
@@ -179,7 +179,7 @@ function readProp(s: Session, o: ObjVar, prop: string): Value {
 
 // What a path reads: an object binding, or a value with its declared type (undefined when the path gives null before
 // its end). A path is a head, then record fields, then at most one property of an object.
-type Read = { o: ObjVar } | { t: Type | undefined; v: unknown };
+type Read = { o: ObjVar } | { t: ParameterType | undefined; v: unknown };
 
 function walk(s: Session, f: Frame, path: string): Read {
   const parts = path.split(".");
@@ -453,11 +453,11 @@ function admit(ont: Stage1Ontology, actionId: string, bindings: Bindings, actor:
 }
 
 // The `path` of a failure inside a record parameter; none for a failure at the top level or in a parameter without records.
-const nestedPath = (t: Type, name: string, at: string): { path?: string } => (at !== name && hasRecord(t) ? { path: at } : {});
+const nestedPath = (t: ParameterType, name: string, at: string): { path?: string } => (at !== name && hasRecord(t) ? { path: at } : {});
 
 // The ids inside a parameter value with their ref types and places: declared field order, then array order. Null values
 // (optional fields) have no id.
-function* refsIn(v: unknown, t: Type, at: string): Generator<{ id: unknown; ref: string; at: string }> {
+function* refsIn(v: unknown, t: ParameterType, at: string): Generator<{ id: unknown; ref: string; at: string }> {
   if (v === null || v === undefined || typeof t === "string") return;
   if ("ref" in t) yield { id: v, ref: t.ref, at };
   else if ("set" in t) for (const [i, x] of (v as readonly unknown[]).entries()) yield* refsIn(x, t.set, `${at}[${i}]`);

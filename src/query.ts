@@ -3,7 +3,7 @@
 // Every result field is an ontology value or a mechanical projection of one; a missing or ill-typed value is null ([] for
 // a list). The read sets come from the type check (checkPredicate / derivedPropertyType with collect), as for R4.
 import { touchedObjects } from "./touched.js";
-import { checkPredicate, derivedPropertyType, isObj, newReads, own, type Expr, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPredicate, derivedPropertyType, isObj, newReads, own, type Expr, type ParameterType, type Stage1Ontology, type Type } from "./expr.js";
 
 export type S = string | null;
 export type QueryCite = { doc: string; quote: string };
@@ -28,7 +28,7 @@ export type QueryRow = { row: number | "otherwise"; when: { passes: string } | {
 export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
   permission: { form: "unknown" } | { form: "none"; reason: S; cite: QueryCite | null; principals: QueryAlt["principals"] } | { form: "keys"; alternatives: QueryAlt[] };
   idempotencyKey: { required: boolean; cite: QueryCite | null } | null;
-  parameters: { name: string; type: Type | null; optional: boolean; values: string[] | null; projectedFrom: string[] | null; unresolved: string | null; cite: QueryCite | null }[];
+  parameters: { name: string; type: ParameterType | null; optional: boolean; values: string[] | null; projectedFrom: string[] | null; unresolved: string | null; cite: QueryCite | null }[];
   conditions: { id: string; expr: Expr | null; exprText: S; unspecified: S; reads: unknown[]; cites: QueryCite[]; scenarios: string[] }[];
   decision: { order: QueryCite | null; rows: QueryRow[] /* otherwise, when present, is last */ } | null;
   edits: { prop: string; cite: QueryCite | null /* edit_cites */ }[]; creates: string[]; deletes: string[]; emits: string[];
@@ -63,7 +63,8 @@ const ownObj = (r: Any, k: string): Any | undefined => {
   const v = own(r, k);
   return isObj(v) ? v : undefined;
 };
-const typeOf = (x: unknown): Type | null => (typeof x === "string" || isObj(x) ? (x as Type) : null);
+// A declared type as written: a parameter's may be a record (ParameterType), a property's or a derived property's is a Type.
+const typeOf = <T extends ParameterType = Type>(x: unknown): T | null => (typeof x === "string" || isObj(x) ? (x as T) : null);
 const sortStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const uniqSorted = (xs: string[]) => [...new Set(xs)].sort(sortStr);
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -364,7 +365,7 @@ export function queryAction(ont: unknown, id: string): QueryAction | null {
     idempotencyKey: isObj(ik) && typeof ik.required === "boolean" ? { required: ik.required, cite: citeOf(ik.cite) } : null,
     parameters: Object.entries(map(a.parameters)).map(([name, p]) => ({
       name,
-      type: typeOf(map(p).type),
+      type: typeOf<ParameterType>(map(p).type),
       optional: map(p).optional === true,
       values: Array.isArray(map(p).values) ? map(p).values.filter((x: unknown) => typeof x === "string") : null,
       projectedFrom: Array.isArray(map(p).projectedFrom) ? map(p).projectedFrom.filter((x: unknown) => typeof x === "string") : null,

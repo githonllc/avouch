@@ -4,7 +4,7 @@
 // Callers analyse only expressions that type-check. The evaluator throws NoExpression when it reaches a derived property
 // without an expression (the absent-expression rule); absorbingQuantifiers skips such a quantifier body.
 import type { SourceFacts } from "./contract.js";
-import { bindVariable, objectBinding, own, quantifierDomain, resolvesInDomain, type Expr, type ExprContext, type Quantifier, type Stage1Ontology, type Type } from "./expr.js";
+import { bindVariable, objectBinding, own, quantifierDomain, resolvesInDomain, type Expr, type ExprContext, type Quantifier, type ParameterType, type Stage1Ontology } from "./expr.js";
 
 export const MAX_NULLABLE_REFS = 8;
 export type Truth = "T" | "F" | "U";
@@ -135,7 +135,7 @@ function nullability(ont: Stage1Ontology, facts: SourceFacts): (ctx: ExprContext
     if (param !== undefined && (param.optional === true || resolvesInDomain(param))) return true; // an optional parameter or a ref with unresolved: domain, and every path read through it
     const o = local ? objectBinding(ont, head, ctx) : undefined;
     // the head is not null (an object binding, a quantifier variable, or a required parameter); walk the segments
-    let t: Type | undefined = local ? (o === undefined ? undefined : { ref: o }) : (value ?? param!.type);
+    let t: ParameterType | undefined = local ? (o === undefined ? undefined : { ref: o }) : (value ?? param!.type);
     for (const seg of rest) {
       if (t === undefined || typeof t === "string") return true; // not reachable after the type check; conservative
       if ("record" in t) {
