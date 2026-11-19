@@ -152,6 +152,12 @@ describe("properties.<p>.from", () => {
       expect(r11(run([mat, edit("Book.title")]))).toEqual([["BORROW:Book.pages", "BORROW writes Book.title (inputs of Book.pages) but does not list Book.metadata_json in edits"]]);
       expect(r11(run([mat, edit("Book.title"), edit("Book.metadata_json")]))).toEqual([]);
     });
+    it("row effects: an edit of the field in a row writes the projected input; the row lists the materialized property", () => {
+      const rowEdits = (edits: string[]): Op => ({ op: "add", path: "/actionTypes/BORROW/decision/otherwise/effects", value: { edits } });
+      const ops = [band, edit("Book.metadata_json"), edit("Book.page_band")];
+      expect(r11(run([...ops, rowEdits(["Book.metadata_json"])], docWith("- page_band"))).map(([k]) => k)).toContain("BORROW:otherwise:Book.page_band");
+      expect(r11(run([...ops, rowEdits(["Book.metadata_json", "Book.page_band"])], docWith("- page_band")))).toEqual([]);
+    });
 
     const longBook = { of: "Book", type: "boolean", expr: { gt: [{ ref: "self.pages" }, { ref: "self.pages" }] }, cite: mq };
     const q = () => applyPatch(ont, [...base, band, edit("Book.metadata_json"), { op: "add", path: "/derivedProperties/long_book", value: longBook },

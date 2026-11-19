@@ -51,6 +51,15 @@ describe("ontology JSON Schema", () => {
     expect(ok).toBe(true);
   });
 
+  it("effects on a decision row and on otherwise validate", () => {
+    const o = structuredClone(ontology);
+    o.actionTypes.BORROW.decision.rows[0].effects = {};
+    o.actionTypes.BORROW.decision.otherwise.effects = { edits: ["Book.state"], creates: ["Loan"], deletes: [], emits: ["loan.created"], links: ["loan_book"] };
+    const ok = validate(o);
+    expect(validate.errors ?? []).toEqual([]);
+    expect(ok).toBe(true);
+  });
+
   it("a state machine property validates", () => {
     const o = structuredClone(ontology);
     o.stateMachines.Book.property = "state";
@@ -151,6 +160,11 @@ describe("ontology JSON Schema", () => {
     ["principals as a list (old shape)", (o) => (o.actionTypes.BORROW.permission.principals = ["person"]), "/actionTypes/BORROW/permission/principals"],
     ["principals without cite on {none}", (o) => (o.actionTypes.RETURN.permission = { none: "anyone may return a loan", cite: { doc: "L10", quote: "`loan:close`" }, principals: { kinds: ["person"] } }), "/actionTypes/RETURN/permission/principals"],
     ["scope.global item without cite", (o) => (o.scope.global[0] = { type: "Person" }), "/scope/global/0"],
+    ["unknown key in row effects", (o) => (o.actionTypes.BORROW.decision.rows[0].effects = { writes: [] }), "/actionTypes/BORROW/decision/rows/0/effects"],
+    ["repeated entry in row effects", (o) => (o.actionTypes.BORROW.decision.rows[0].effects = { edits: ["Book.state", "Book.state"] }), "/actionTypes/BORROW/decision/rows/0/effects/edits"],
+    ["empty entry in row effects", (o) => (o.actionTypes.BORROW.decision.rows[0].effects = { emits: [""] }), "/actionTypes/BORROW/decision/rows/0/effects/emits/0"],
+    ["row effects kind that is not a list", (o) => (o.actionTypes.BORROW.decision.rows[0].effects = { edits: "Book.state" }), "/actionTypes/BORROW/decision/rows/0/effects/edits"],
+    ["unknown key in otherwise effects", (o) => (o.actionTypes.BORROW.decision.otherwise.effects = { writes: [] }), "/actionTypes/BORROW/decision/otherwise/effects"],
     ["expr node with two keys", (o) => (o.actionTypes.BORROW.conditions[0].expr = { eq: [{ ref: "now" }, { ref: "now" }], neq: [{ ref: "now" }, { ref: "now" }] }), "/actionTypes/BORROW/conditions/0/expr"],
   ];
   for (const [name, mutate, path] of reject)

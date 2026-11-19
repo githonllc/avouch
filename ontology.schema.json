@@ -344,7 +344,7 @@
             "reads",
             "cites"
           ],
-          "description": "The source requires this derived property to be stored in the same operation as its inputs. Extension (R1, R11); no Palantir analog (not a Palantir derived property, which is computed at runtime and read-only). R1: needs reads[] (non-empty, each a declared `Object.prop`) and cites[] (non-empty, each `{cite}`). R11: any action that edits one of `reads`, or creates the object of one of `reads`, must list this property (`Object.prop`) in its `edits` (else R11 `materialization_missing`). R11 guarantees complete declaration only; atomicity is guaranteed by the evidence adapter.",
+          "description": "The source requires this derived property to be stored in the same operation as its inputs. Extension (R1, R11); no Palantir analog (not a Palantir derived property, which is computed at runtime and read-only). R1: needs reads[] (non-empty, each a declared `Object.prop`) and cites[] (non-empty, each `{cite}`). R11: any action that edits one of `reads`, or creates the object of one of `reads`, must list this property (`Object.prop`) in its `edits` (else R11 `materialization_missing`); also per decision row and `otherwise` with `effects` (keys `<ID>:rows.<i>:<Object>.<prop>` and `<ID>:otherwise:<Object>.<prop>`). R11 guarantees complete declaration only; atomicity is guaranteed by the evidence adapter.",
           "properties": {
             "reads": {
               "type": "array",
@@ -576,7 +576,7 @@
             "with_creates",
             "cite"
           ],
-          "description": "Who may establish the link. Extension (R1, R5); no Palantir analog. R1: needs context (a key of `contexts`), with_creates[] and cite. R5: every action whose `creates` contains `from` — whatever its link_effects entry says — must belong to `context` and must also create every object in `with_creates`, unless the action is listed in `exceptions.commands` (else R5 `generic`, key `<ID>:<link id>`).",
+          "description": "Who may establish the link. Extension (R1, R5); no Palantir analog. R1: needs context (a key of `contexts`), with_creates[] and cite. R5: every action whose `creates` contains `from` — whatever its link_effects entry says — must belong to `context` and must also create every object in `with_creates`, unless the action is listed in `exceptions.commands` (else R5 `generic`, key `<ID>:<link id>`). R5 also checks each decision row and `otherwise` with `effects` of an action not in `exceptions.commands`: a row whose `effects.creates` has `from` must also have each `with_creates` object there (else R5 `generic`, key `<ID>:rows.<i>:<link id>` or `<ID>:otherwise:<link id>`), whether or not the link is in `effects.links`; the context is checked for the action only.",
           "properties": {
             "context": {
               "type": "string",
@@ -716,21 +716,21 @@
           "items": {
             "type": "string"
           },
-          "description": "Properties the action modifies, as `Object.prop`. Foundation (closest analog: the modify-object rules of a Palantir action type). R1: each must be a declared property of a declared object, or have an outOfScopeObjectTypes name as its object prefix. The object prefixes (declared objects only) are touched objects: R5 cross-context, R6 link sweep, R7 allowed stores. R7: for an action with `evidence`, a column changed on an existing row of a touched object's store must be listed here as `Object.prop` for each touched object with that store (else `column_undeclared`, key `<ID>:<Object>.<prop>`, once per touched object and column), and each entry that resolves to a declared property (as R1 resolves it; an unresolvable entry is R1 only) must be changed on an existing row by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:<Object>.<prop>`). R3: `<Object>.<state property>` here ⇔ the action is in some `by` of that object's transitions (objects with `stateMachines` only). R11: an action that writes an input of a `materializedFrom` property must also list that property here."
+          "description": "Properties the action modifies, as `Object.prop`. Foundation (closest analog: the modify-object rules of a Palantir action type). R1: each must be a declared property of a declared object, or have an outOfScopeObjectTypes name as its object prefix. The object prefixes (declared objects only) are touched objects: R5 cross-context, R6 link sweep, R7 allowed stores. R7: for an action with `evidence`, a column changed on an existing row of a touched object's store must be listed here as `Object.prop` for each touched object with that store (else `column_undeclared`, key `<ID>:<Object>.<prop>`, once per touched object and column), and each entry that resolves to a declared property (as R1 resolves it; an unresolvable entry is R1 only) must be changed on an existing row by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:<Object>.<prop>`). R3: `<Object>.<state property>` here ⇔ the action is in some `by` of that object's transitions (objects with `stateMachines` only). R11: an action that writes an input of a `materializedFrom` property must also list that property here; the same check runs on each decision row with `effects`, with the row's lists (key `<ID>:rows.<i>:<Object>.<prop>` or `<ID>:otherwise:<Object>.<prop>`). A decision row may narrow this with `effects` (R1 subset)."
         },
         "creates": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Objects the action creates (optional). Foundation (closest analog: the create-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. Declared objects here are touched (R5, R6, R7) and count as writing every property of that object for R11. R5: creating the `from` object of a link with `create_rule` triggers that rule."
+          "description": "Objects the action creates (optional). Foundation (closest analog: the create-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. Declared objects here are touched (R5, R6, R7) and count as writing every property of that object for R11. R5: creating the `from` object of a link with `create_rule` triggers that rule. A decision row may narrow this with `effects` (R1 subset)."
         },
         "deletes": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Objects whose rows the action removes (optional). Foundation (closest analog: the delete-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. A soft delete is an `edits` of the marker property. Declared objects here are touched (R5, R6, R7). R7: for an action with `evidence`, each declared object here must have a row of its datasource deleted by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:deletes:<Object>`); an upsert declares `creates`, not `deletes`. R11: deleting an input of a `materializedFrom` property counts as writing it, unless the object of that property is also listed here."
+          "description": "Objects whose rows the action removes (optional). Foundation (closest analog: the delete-object rules of a Palantir action type). R1: each must be a key of `objectTypes` or of `outOfScopeObjectTypes`. A soft delete is an `edits` of the marker property. Declared objects here are touched (R5, R6, R7). R7: for an action with `evidence`, each declared object here must have a row of its datasource deleted by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:deletes:<Object>`); an upsert declares `creates`, not `deletes`. R11: deleting an input of a `materializedFrom` property counts as writing it, unless the object of that property is also listed here. A decision row may narrow this with `effects` (R1 subset)."
         },
         "edit_cites": {
           "type": "object",
@@ -814,7 +814,7 @@
           "propertyNames": {
             "minLength": 1
           },
-          "description": "Link sweep (R6), keyed by link id. Extension (R1, R6); no Palantir analog. R1: must be a mapping (use {}); each key must be a declared link id. R6 needs an entry for EXACTLY the links whose `from` or `to` is a touched object of this action: a missing entry fails R6 `link_effect_missing` (key `<ID>:<link id>`); an entry for a link not incident to any touched object fails R6 (key `<ID>:<link id>:stray`, kind `generic`). The effect text itself is not checked for meaning.",
+          "description": "Link sweep (R6), keyed by link id. Extension (R1, R6); no Palantir analog. R1: must be a mapping (use {}); each key must be a declared link id. R6 needs an entry for EXACTLY the links whose `from` or `to` is a touched object of this action: a missing entry fails R6 `link_effect_missing` (key `<ID>:<link id>`); an entry for a link not incident to any touched object fails R6 (key `<ID>:<link id>:stray`, kind `generic`). The effect text itself is not checked for meaning. A decision row may narrow this with `effects` (R1 subset): its `effects.links` names only links whose entry here is `effect`.",
           "additionalProperties": {
             "$ref": "#/$defs/linkEffect"
           }
@@ -824,7 +824,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Event types the action writes. Extension (R1, R7, R8); no Palantir analog. R1: must be a list. R8: each must be in the source event catalog. R7: every event type the evidence wrote must be listed here (else R7 `event_undeclared`); listed but unwritten events are not a failure."
+          "description": "Event types the action writes. Extension (R1, R7, R8); no Palantir analog. R1: must be a list. R8: each must be in the source event catalog. R7: every event type the evidence wrote must be listed here (else R7 `event_undeclared`); listed but unwritten events are not a failure. A decision row may narrow this with `effects` (R1 subset)."
         },
         "evidence": {
           "description": "Optional: id of the evidence that implements this action. Extension (R1, R6, R7); no Palantir analog. R1: must be an id the evidence adapter provides; each id is claimed by at most one action. R7: for this action at least one committed invocation must be observed (else `<ID>:no-batch`); every store those invocations changed must be in stores(touched objects) ∪ link `table`s that are not any object's store and for which this action declares an `effect` ∪ `infrastructureStores` (else R7 `table_undeclared`); every event type written must be in `emits` (else R7 `event_undeclared`). Changed columns and edited properties are checked as described under `edits` (`column_undeclared`, `effect_unwitnessed`); each declared object in `creates` must have a row inserted into its store by at least one committed invocation (else `effect_unwitnessed`, key `<ID>:creates:<Object>`); pure link stores as described under the link `table`. Rejected invocations add nothing to the observed changes. An invocation record that is not well-formed (SPEC section 4: for example a committed record without a well-formed `delta`, a rejected record whose `delta` is not `null`, or a missing `id` or `rolledBackAttempts`) counts as neither committed nor rejected and is reported as an info diagnostic, not a violation. Evidence with committed invocations that no action claims fails R7. R6 also uses the observed stores for `none_but_written`. Actions without `evidence` get no other R7 check; with the profile setting `evidenceRequired`, they fail R7 `evidence_missing`.",
@@ -1521,7 +1521,7 @@
           "hitPolicy",
           "rows"
         ],
-        "description": "Decision table of the action: the first row whose condition test holds gives the result; `otherwise` gives the result when no row holds. Extension (R1, R12); closest Palantir analog: none. R12: an action with conditions needs a table (`decision_table_missing`); a table needs `otherwise` (`otherwise_missing`); rows with different results need `order` (`row_order_uncited`) and, for rows that cite one section, source order (`row_order_mismatch`); each result must occur in one of its row's cites (`result_unsupported`); a row may not use an unspecified condition (`condition_unspecified`).",
+        "description": "Decision table of the action: the first row whose condition test holds gives the result; `otherwise` gives the result when no row holds. Extension (R1, R12); closest Palantir analog: none. R12: an action with conditions needs a table (`decision_table_missing`); a table needs `otherwise` (`otherwise_missing`); rows with different results, or with the same result and different `effects`, need `order` (`row_order_uncited`) and, for rows that cite one section, source order (`row_order_mismatch`); for this, a row without `effects` has the action lists (`links`: the `link_effects` entries of the `effect` form), and each kind compares as a set, so rows with the same result and different `effects` each need a cite in source order that names the result; each result must occur in one of its row's cites (`result_unsupported`); a row may not use an unspecified condition (`condition_unspecified`).",
         "properties": {
           "hitPolicy": {
             "const": "first"
@@ -1566,6 +1566,9 @@
               },
               "next": {
                 "$ref": "#/$defs/next"
+              },
+              "effects": {
+                "$ref": "#/$defs/rowEffects"
               }
             }
           }
@@ -1625,6 +1628,56 @@
           },
           "next": {
             "$ref": "#/$defs/next"
+          },
+          "effects": {
+            "$ref": "#/$defs/rowEffects"
+          }
+        }
+      },
+      "rowEffects": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The domain effects that a decision row (or `otherwise`) allows: an upper bound for that row. Extension (R1, R5, R11, R12); no Palantir analog. If absent, the row makes no per-row effects declaration, and the action lists apply. If present, a kind left out is empty. The action lists `edits`, `creates`, `deletes`, `emits` and `link_effects` stay the upper bound over all results. R1: must be a mapping; each kind must be a list of non-empty strings without repeats (kind `generic`, key `actionTypes.<ID>.decision.rows.<i>.effects` or `actionTypes.<ID>.decision.otherwise.effects`); each entry of `edits`, `creates`, `deletes` and `emits` must be in the action list of the same name, and each entry of `links` must be a link id whose `link_effects` entry is the `effect` form (else R1 `effect_not_declared`, key `<effects key>.<kind>.<entry>`). Unknown keys are rejected by this schema, not by R1. R5 (`create_rule`), R11 and R12 also use the row effects. No rule compares an invocation with its row.",
+        "properties": {
+          "edits": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "creates": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "deletes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "emits": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "links": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       },
