@@ -239,6 +239,10 @@ describe("lookup in query", () => {
     expect(showExpr(q("all", "m", lk("Member", "member_ref"), blocked))).toBe("all m in lookup(Member, member_ref) where m.blocked_until is not null");
     expect(showExpr(memberFound)).toBe("member_ref is null or (exists m in lookup(Member, member_ref))");
     expect(showExpr({ exists: { as: "m", in: { lookup: { type: 1 } } } }).startsWith("<?>")).toBe(true);
+    // Extra keys are not a lookup: shown as an unknown node, not as a valid one.
+    expect(showExpr({ exists: { as: "m", in: { lookup: { type: "Member", id: { ref: "member_ref" }, zz: 1 } } } }).startsWith("<?>")).toBe(true);
+    expect(showExpr({ exists: { as: "m", in: { lookup: { type: "Member", id: { ref: "member_ref", zz: 1 } } } } }).startsWith("<?>")).toBe(true);
+    expect(showExpr({ exists: { as: "m", in: { lookup: { type: "Member", id: { ref: "member_ref" } }, zz: 1 } } }).startsWith("<?>")).toBe(true);
   });
 });
 

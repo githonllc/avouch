@@ -131,7 +131,7 @@ function show(e: unknown, atRoot: boolean): string {
   }
   if ((k === "exists" || k === "none" || k === "all") && isObj(v) && typeof v.as === "string" && isObj(v.in) && isObj(v.in.lookup)) {
     const l = v.in.lookup;
-    if (typeof l.type !== "string" || !isObj(l.id) || typeof l.id.ref !== "string") return unknownNode(e);
+    if (Object.keys(v.in).length !== 1 || Object.keys(l).length !== 2 || typeof l.type !== "string" || !isObj(l.id) || Object.keys(l.id).length !== 1 || typeof l.id.ref !== "string") return unknownNode(e);
     const where = v.where !== undefined ? ` where ${show(v.where, false)}` : "";
     return wrap(`${k} ${v.as} in lookup(${l.type}, ${l.id.ref})${where}`);
   }
