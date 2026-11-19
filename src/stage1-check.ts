@@ -211,8 +211,9 @@ function checkOutcome({ ont, v }: Ctx, cid: string, label: string, r: unknown, c
 const effectLinks = (c: Record<string, Any>): string[] => Object.entries(mapOf(c.link_effects)).filter(([, le]) => isObj(le) && "effect" in le).map(([k]) => k);
 
 // The row effects (R1): a mapping of lists of non-empty strings without repeats, each entry in the action list of its kind
-// (`links`: a link whose action entry is the effect form). Unknown keys are left to the schema.
-function checkRowEffects({ v }: Ctx, cid: string, c: Record<string, Any>, label: string, r: unknown): void {
+// (`links`: a link whose action entry is the effect form). Unknown keys are left to the schema. A row whose result has
+// class `rejected` may have entries only in `emits` (`rejected_writes`, on the raw lists).
+function checkRowEffects({ ont, v }: Ctx, cid: string, c: Record<string, Any>, label: string, r: unknown): void {
   if (!isObj(r) || !("effects" in r)) return;
   const e = r.effects, ek = `actionTypes.${cid}.decision.${label}.effects`;
   if (!isObj(e)) return v("R1", ek, `${label}: effects must be a mapping {${EFFECT_KINDS.join(", ")}}`);
@@ -236,6 +237,11 @@ function checkRowEffects({ v }: Ctx, cid: string, c: Record<string, Any>, label:
           ? `${label}: effects.links names ${x}, but link_effects.${x} of ${cid} is not the effect form`
           : `${label}: effects.${kind} names ${x}, but ${cid} does not list it in ${kind}`, "effect_not_declared");
   }
+  const d = hasKey(ont.dispositions, r.result) ? ont.dispositions[r.result] : undefined;
+  if (isObj(d) && d.class === "rejected")
+    for (const kind of EFFECT_KINDS)
+      if (kind !== "emits" && Array.isArray(e[kind]) && e[kind].length > 0)
+        v("R1", `${ek}.${kind}`, `${label} of ${cid}: result ${r.result} has class rejected, so effects.${kind} must be empty (only emits may have entries)`, "rejected_writes");
 }
 
 // Whether two rows differ in effects (R12): a row without effects has the action lists (links: the effect form entries);

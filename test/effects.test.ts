@@ -52,6 +52,64 @@ describe("row effects", () => {
       expect(triples(run([fx("BORROW", "rows/0", { writes: [], emits: ["loan.returned"] })]))).toEqual([["R1", "effect_not_declared", `${EK}.emits.loan.returned`]]));
   });
 
+  describe("R1: a rejected row writes nothing", () => {
+    // BORROW rows 0-2 are REJECTED (class rejected), row 3 REFERRED (pending), otherwise BORROWED (applied);
+    // RETURN row 0 is REJECTED, row 1 RETURNED_LATE (applied), otherwise RETURNED (applied).
+    const EK = "actionTypes.BORROW.decision.rows.0.effects";
+    const rw = (r: ReturnType<typeof check>) => triples(r).filter(([, k]) => k === "rejected_writes");
+
+    it("a rejected row with edits is rejected_writes, one violation", () => {
+      const r = run([fx("BORROW", "rows/0", { edits: ["Book.state"] })]);
+      expect(triples(r)).toEqual([["R1", "rejected_writes", `${EK}.edits`]]);
+      const msg = r.violations.find((x) => x.kind === "rejected_writes")?.msg;
+      expect(msg).toContain("rows.0");
+      expect(msg).toContain("edits");
+      expect(msg).toContain("REJECTED");
+    });
+
+    for (const [name, value] of [
+      ["only emits", { emits: ["loan.created"] }],
+      ["empty effects", {}],
+      ["an empty edits list", { edits: [] }],
+    ] as [string, unknown][])
+      it(`a rejected row with ${name} passes`, () => expect(only("R1", run([fx("BORROW", "rows/0", value)]))).toEqual([]));
+
+    it("one violation per kind: edits and links", () =>
+      expect(rw(run([fx("BORROW", "rows/0", { edits: ["Book.state"], links: ["loan_book"] })]))).toEqual([
+        ["R1", "rejected_writes", `${EK}.edits`],
+        ["R1", "rejected_writes", `${EK}.links`],
+      ]));
+
+    it("one violation per kind: creates and deletes", () => {
+      const deletes: Op = { op: "add", path: "/actionTypes/BORROW/deletes", value: ["Loan"] };
+      expect(rw(run([deletes, fx("BORROW", "rows/0", { creates: ["Loan"], deletes: ["Loan"] })]))).toEqual([
+        ["R1", "rejected_writes", `${EK}.creates`],
+        ["R1", "rejected_writes", `${EK}.deletes`],
+      ]);
+    });
+
+    it("an applied row with edits is not rejected_writes", () =>
+      expect(rw(run([fx("RETURN", "rows/1", { edits: ["Loan.state", "Book.state", "Member.open_loans"] })]))).toEqual([]));
+
+    it("otherwise whose result is rejected is checked", () => {
+      const rejected: Op = { op: "replace", path: "/actionTypes/BORROW/decision/otherwise/result", value: "REJECTED" };
+      expect(rw(run([rejected, fx("BORROW", "otherwise", { edits: ["Book.state"] })]))).toEqual([
+        ["R1", "rejected_writes", "actionTypes.BORROW.decision.otherwise.effects.edits"],
+      ]);
+    });
+
+    it("a non-empty list with a bad entry is rejected_writes and generic", () => {
+      const t = triples(run([fx("BORROW", "rows/0", { edits: [null] })]));
+      expect(t).toContainEqual(["R1", "rejected_writes", `${EK}.edits`]);
+      expect(t).toContainEqual(["R1", "generic", EK]);
+    });
+
+    it("a result that is not a declared disposition is not checked", () => {
+      const undeclared: Op = { op: "replace", path: "/actionTypes/BORROW/decision/rows/0/result", value: "NO_SUCH_RESULT" };
+      expect(rw(run([undeclared, fx("BORROW", "rows/0", { edits: ["Book.state"] })]))).toEqual([]);
+    });
+  });
+
   describe("R5: create_rule per row", () => {
     const rule = (extra: object = {}): Op => ({
       op: "add", path: "/linkTypes/0/create_rule",
@@ -118,7 +176,7 @@ describe("row effects", () => {
 
     it("a row without effects compares as the action lists", () => {
       const bound = { creates: ["Loan"], edits: ["Member.open_loans", "Book.state"], emits: ["loan.created"], links: ["loan_branch", "loan_book", "loan_member"] };
-      expect(triples(run([...swap, fx("BORROW", "rows/1", bound)]))).toEqual([]);
+      expect(only("R12", run([...swap, fx("BORROW", "rows/1", bound)]))).toEqual([]);
     });
 
     it("when the action lists are all empty, a row without effects and a row with {} do not differ", () => {
@@ -153,7 +211,7 @@ describe("row effects", () => {
 
     it("a difference only in links is a difference", () => {
       const bound = { creates: ["Loan"], edits: ["Member.open_loans", "Book.state"], emits: ["loan.created"], links: ["loan_branch", "loan_book"] };
-      expect(triples(run([...swap, fx("BORROW", "rows/1", bound)]))).toEqual([["R12", "row_order_mismatch", "BORROW:rows.0:rows.1"]]);
+      expect(only("R12", run([...swap, fx("BORROW", "rows/1", bound)]))).toEqual([["R12", "row_order_mismatch", "BORROW:rows.0:rows.1"]]);
     });
   });
 
