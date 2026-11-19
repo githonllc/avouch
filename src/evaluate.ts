@@ -1,7 +1,7 @@
 // Decision evaluation: evalValue / evalPredicate (two levels, Kleene logic) and decide (invocation layer, then decision table).
 // Deterministic: no wall clock, no randomness, no global mutable state; `now` comes from the caller.
 // Invalid input (ontology, snapshot, scope argument) throws; it is never a result.
-import { checkPermissionWhen, checkPredicate, fitsType, hasRecord, isObj, isPureLink, misfit, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Nav, type Principals, type Quantifier, type ParameterType, type Stage1Ontology, type Type } from "./expr.js";
+import { checkPermissionWhen, checkPredicate, fitsType, hasRecord, isObj, isPureLink, misfit, own, projectedFields, RESERVED_NAMES, resolvesInDomain, TIMESTAMP_MAX, TIMESTAMP_MIN, type Alt, type DecisionRow, type DispositionClass, type Expr, type Lookup, type Nav, type Principals, type Quantifier, type ParameterType, type Stage1Ontology, type Type } from "./expr.js";
 
 export type Value = string | number | boolean | null | readonly (string | number | boolean)[];
 // Object rows must carry a string `id`. A foreign-key via and the scope field are a string or null. Pure link rows are {from, to} with string ids (plus the scope field when scoped). An object type or a pure link that evaluation reads must be a key of objects / links (an empty table is []); else decide throws.
@@ -233,8 +233,10 @@ function readRef(s: Session, f: Frame, path: string): Value {
   return r.v as Value;
 }
 
-// The frames of the elements of a quantifier domain: a navigation, or a {ref} path of a set (null is the empty set).
+// The frames of the elements of a quantifier domain: a navigation, a lookup, or a {ref} path of a set (null is the empty
+// set).
 function domain(s: Session, f: Frame, q: Quantifier): Frame[] {
+  if ("lookup" in q.in) return lookup(s, f, q.in).map((el) => ({ ...f, vars: { ...f.vars, [q.as]: el } }));
   if (!("ref" in q.in)) return navigate(s, f, q.in).map((el) => ({ ...f, vars: { ...f.vars, [q.as]: el } }));
   const path = q.in.ref;
   const r = walk(s, f, path);
@@ -307,6 +309,17 @@ const and3 = (xs: TV[]): TV => (xs.includes("F") ? "F" : xs.includes("U") ? "U" 
 const or3 = (xs: TV[]): TV => (xs.includes("T") ? "T" : xs.includes("U") ? "U" : "F");
 const not3 = (x: TV): TV => (x === "T" ? "F" : x === "F" ? "T" : "U");
 const tv = (b: boolean): TV => (b ? "T" : "F");
+
+// The element of a lookup: the object of `type` with the id of the path, as the binding step finds a ref parameter (in
+// `type` only, after its scope filter). A null id is the empty set and does not read `type`.
+function lookup(s: Session, f: Frame, n: Lookup): ObjVar[] {
+  const { type, id } = n.lookup;
+  const v = readRef(s, f, id.ref);
+  if (v === null) return [];
+  if (typeof v !== "string") throw new Error(`lookup id ${id.ref} = ${JSON.stringify(v)} is not a string id`);
+  const row = s.byId(type).get(v);
+  return row === undefined ? [] : [{ type, row }];
+}
 
 function navigate(s: Session, f: Frame, n: Nav): ObjVar[] {
   const { from, link: linkId, dir } = n.nav;
