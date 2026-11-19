@@ -92,7 +92,7 @@ function ev(ont: Stage1Ontology, e: Expr, self: string, isNull: (path: string) =
 
 // The distinct normalized paths that may be null and that the outer evaluation reads, sorted. One run of ev with no path
 // null reaches every read (ev evaluates every operand; only a null `of` prunes); quantifiers are not entered, and a
-// `nav.from` is never a read.
+// `nav.from` and the id of a lookup are never a read.
 export function freeNullableRefs(ont: Stage1Ontology, e: Expr, mayNull: MayNull): string[] {
   const seen = new Set<string>();
   ev(ont, e, "self", (p) => (seen.add(p), false));

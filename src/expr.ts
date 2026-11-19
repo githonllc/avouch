@@ -15,14 +15,16 @@ export const SCALAR_TYPE_NAMES = ["enum", "timestamp", "duration", "date", "time
 export const EXPR_NODES = [
   "ref", "lit", "plus", "dateIn", "derived",
   "eq", "neq", "lt", "lte", "gt", "gte", "and", "or", "not", "in", "subsetOf", "isNull", "isNotNull",
-  "exists", "none", "all", "nav",
+  "exists", "none", "all", "nav", "lookup",
 ] as const;
 
 export type Lit = string | number | (string | number)[];
 // Navigation appears only as the `in` of a quantifier.
 export type Nav = { nav: { from: { ref: string }; link: string; dir: "forward" | "reverse" } };
-// The `in` of a quantifier: a navigation, or a {ref} path of a set type that reads no property of an object.
-export type Quantifier = { as: string; in: Nav | { ref: string }; where?: Expr };
+// A lookup appears only as the `in` of a quantifier: the visible object of `type` whose id is the value of the path.
+export type Lookup = { lookup: { type: string; id: { ref: string } } };
+// The `in` of a quantifier: a navigation, a lookup, or a {ref} path of a set type that reads no property of an object.
+export type Quantifier = { as: string; in: Nav | Lookup | { ref: string }; where?: Expr };
 export type ValueExpr =
   | { ref: string }
   | { lit: Lit }
@@ -310,10 +312,13 @@ function refType(ont: Stage1Ontology, path: string, ctx: ExprContext, at: string
 
 // What a quantifier variable is: an object binding of an object type, or a value of a type (a record or a scalar).
 export type DomainVar = { object: string } | { value: ParameterType };
-// The `in` of a quantifier: a navigation, or a {ref} path of type {set: E} whose head is a parameter or a quantifier
-// variable and which reads no property of an object. A ref element gives an object binding; another element a value.
+// The `in` of a quantifier: a navigation, a lookup, or a {ref} path of type {set: E} whose head is a parameter or a
+// quantifier variable and which reads no property of an object. A ref element gives an object binding; another element a
+// value.
 export function quantifierDomain(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: string): DomainVar {
-  if (nodeKey(n, at) !== "ref") return { object: navType(ont, n, ctx, at) };
+  const k = nodeKey(n, at);
+  if (k === "lookup") return { object: lookupType(ont, n, ctx, at) };
+  if (k !== "ref") return { object: navType(ont, n, ctx, at) };
   const path = (n as { ref: unknown }).ref;
   const p = `${at}.ref`;
   if (typeof path !== "string") throw new ExprError(p, "ref takes a path string");
@@ -397,6 +402,8 @@ function valueTypeIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, expected
     }
     case "nav":
       throw new ExprError(p, "nav is valid only as the `in` of a quantifier");
+    case "lookup":
+      throw new ExprError(p, "lookup is valid only as the `in` of a quantifier");
     default:
       if (EXPR_NODES.includes(k as (typeof EXPR_NODES)[number])) throw new ExprError(p, `predicate ${k} in a value position`);
       throw new ExprError(p, `unknown expression node ${k}`);
@@ -500,6 +507,8 @@ function checkPredicateIn(ont: Stage1Ontology, e: unknown, ctx: ExprContext, at:
       if (q.where !== undefined) checkPredicateIn(ont, q.where, bindVariable(ctx, as, v), `${p}.where`, stack);
       return;
     }
+    case "lookup":
+      throw new ExprError(p, "lookup is valid only as the `in` of a quantifier");
     default: {
       if (!VALUE_NODES.has(k)) throw new ExprError(p, `unknown predicate node ${k}`);
       // A value node of type boolean is a predicate: true / false / null give T / F / U.
@@ -525,7 +534,7 @@ function collectVia(ont: Stage1Ontology, link: Stage1Ontology["linkTypes"][numbe
 
 // Returns the element object type of a navigation.
 export function navType(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: string): string {
-  if (nodeKey(n, at) !== "nav") throw new ExprError(at, "a quantifier ranges over a nav");
+  if (nodeKey(n, at) !== "nav") throw new ExprError(at, "a quantifier ranges over a nav, a lookup or a set path");
   const v = (n as { nav: unknown }).nav;
   const p = `${at}.nav`;
   if (!isObj(v)) throw new ExprError(p, "nav takes {from, link, dir}");
@@ -543,6 +552,25 @@ export function navType(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: s
     return link.from;
   }
   throw new ExprError(`${p}.dir`, "dir is forward or reverse");
+}
+
+// Returns the object type of a lookup. The id path follows the rule of a quantifier domain (a parameter or a quantifier
+// variable, then record fields, no property of an object) and has type id or {ref: T}; it records no read.
+function lookupType(ont: Stage1Ontology, n: unknown, ctx: ExprContext, at: string): string {
+  const v = (n as { lookup: unknown }).lookup;
+  const p = `${at}.lookup`;
+  if (!isObj(v) || Object.keys(v).length !== 2 || typeof v.type !== "string" || !isObj(v.id) || Object.keys(v.id).length !== 1 || typeof v.id.ref !== "string")
+    throw new ExprError(p, "lookup takes {type: <object type>, id: {ref: <path>}}; a literal is not an operand");
+  const T = v.type;
+  if (own(ont.objectTypes, T) === undefined) throw new ExprError(`${p}.type`, `object type ${T} is not declared`);
+  const path = v.id.ref;
+  const ip = `${p}.id.ref`;
+  const head = path.split(".")[0];
+  if (RESERVED.has(head)) throw new ExprError(ip, `${path}: a lookup id is a parameter, a quantifier variable or a field of a record, not ${head}`);
+  const t = refType(ont, path, ctx, ip, true);
+  if (t !== "id" && !(typeof t !== "string" && "ref" in t && t.ref === T))
+    throw new ExprError(ip, `lookup id ${path} has type ${showType(t)}; a lookup of ${T} needs id or {ref: ${T}}`);
+  return T;
 }
 
 // ctx with the quantifier variable `as` added.

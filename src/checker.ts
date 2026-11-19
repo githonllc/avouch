@@ -311,7 +311,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
           if (!own(params, f) || projectedFields(isObj(params[f]) ? params[f] : {}) !== null)
             v("R1", `${p}.parameters.${n}`, `projectedFrom field ${f} must be a declared parameter of ${cid} that is not projected`);
       if (isObj(pv) && pv.unresolved !== undefined && !resolvesInDomain(pv))
-        v("R1", `${p}.parameters.${n}`, "unresolved: domain needs a required scalar {ref: <Object>} parameter without projectedFrom");
+        v("R1", `${p}.parameters.${n}`, "unresolved: domain needs a required scalar {ref: <Object>} parameter without projectedFrom; for an optional id or a set of ids, declare the type id or {set: id} and resolve it in a condition with lookup");
       // A record type: its optional list names fields of that record, each once (the schema checks the field names).
       for (const bad of isObj(pv) ? badOptional(pv.type) : []) v("R1", `${p}.parameters.${n}`, bad);
     }

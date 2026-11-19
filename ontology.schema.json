@@ -1052,7 +1052,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["cite"],
-      "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote. `projectedFrom` (only with `type: {ref: <Object>}`) lists the request fields, an alternate key, that the project's projection resolves to this ref; each field is a declared parameter of the same action that is not projected (R1); on any other parameter R1 reports it and `decide` ignores it; the cite quote must name each field instead of the parameter name (R2 `projection_field_not_in_quote`); a null value of a required projected parameter is `INVALID_BINDING` `not_found`, and an absent one is `missing`, also with `optional: true` (SPEC section 9). `unresolved: domain` (only on a `type: {ref: <Object>}` parameter with no `optional` and no `projectedFrom`): an id that does not resolve (absent, or only outside the scope) binds to null, not to `INVALID_BINDING` `not_found` or `SCOPE_DENIED`; a decision row tests it with `isNull` / `isNotNull`; on any other parameter R1 reports it and `decide` ignores it (SPEC section 9, Domain resolution).",
+      "description": "One action parameter. Foundation: Palantir action parameter. The name is the map key; the cite is the source text that names it. `type` is required when an expression reads the parameter; `optional: true` lets the caller omit it (it is then null). `values` is the value domain of an `enum` parameter (only with `type: enum`): a value outside it is `INVALID_BINDING` `type`; R1 checks its shape and that literals compared with the parameter are among them, R2 that each value appears in the cite quote. `projectedFrom` (only with `type: {ref: <Object>}`) lists the request fields, an alternate key, that the project's projection resolves to this ref; each field is a declared parameter of the same action that is not projected (R1); on any other parameter R1 reports it and `decide` ignores it; the cite quote must name each field instead of the parameter name (R2 `projection_field_not_in_quote`); a null value of a required projected parameter is `INVALID_BINDING` `not_found`, and an absent one is `missing`, also with `optional: true` (SPEC section 9). `unresolved: domain` (only on a `type: {ref: <Object>}` parameter with no `optional` and no `projectedFrom`): an id that does not resolve (absent, or only outside the scope) binds to null, not to `INVALID_BINDING` `not_found` or `SCOPE_DENIED`; a decision row tests it with `isNull` / `isNotNull`; on any other parameter R1 reports it and `decide` ignores it (SPEC section 9, Domain resolution). For an optional id or a set of ids that a decision row judges, use type `id` or `{set: id}` and a `lookup` in a condition instead.",
       "properties": {
         "cite": { "$ref": "#/$defs/cite" },
         "type": { "$ref": "#/$defs/parameterType" },
@@ -1482,9 +1482,37 @@
                 ]
               }
             }
+          },
+          "lookup": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "id"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "description": "The object of type `type` whose id is the value of the path `id.ref`, as a set of at most one object; only as the `in` of a quantifier. The path has type id or {ref: <type>} and reads no property of an object (SPEC section 9, Lookup)."
           }
         },
-        "description": "An expression: a map with exactly one key, the node name. Value nodes: ref, lit, plus, dateIn, derived. Predicate nodes: comparisons, and, or, not, in, subsetOf, isNull, isNotNull, and the quantifiers exists / none / all over a nav or over a {ref} path of a set that reads no property of an object. Type rules: SPEC.md section 9."
+        "description": "An expression: a map with exactly one key, the node name. Value nodes: ref, lit, plus, dateIn, derived. Predicate nodes: comparisons, and, or, not, in, subsetOf, isNull, isNotNull, and the quantifiers exists / none / all over a nav, a lookup, or a {ref} path of a set that reads no property of an object. Type rules: SPEC.md section 9."
       },
       "decision": {
         "type": "object",
