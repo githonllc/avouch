@@ -139,6 +139,21 @@ describe("row effects", () => {
       ];
       expect(triples(run(uncited))).toEqual([]);
       expect(triples(run([...uncited, fx("BORROW", "rows/2", {})]))).toEqual([["R12", "row_order_uncited", "BORROW"]]);
+      const v = run([...uncited, fx("BORROW", "rows/2", {})]).violations.find((x) => x.rule === "R12");
+      expect(v?.msg).toContain("the same result with different effects");
+    });
+
+    it("otherwise is not compared: effects on otherwise alone give no R12", () => {
+      const uncited: Op[] = [
+        { op: "remove", path: "/actionTypes/BORROW/decision/order" },
+        { op: "remove", path: "/actionTypes/BORROW/decision/rows/3" },
+      ];
+      expect(only("R12", run([...uncited, fx("BORROW", "otherwise", {})]))).toEqual([]);
+    });
+
+    it("a difference only in links is a difference", () => {
+      const bound = { creates: ["Loan"], edits: ["Member.open_loans", "Book.state"], emits: ["loan.created"], links: ["loan_branch", "loan_book"] };
+      expect(triples(run([...swap, fx("BORROW", "rows/1", bound)]))).toEqual([["R12", "row_order_mismatch", "BORROW:rows.0:rows.1"]]);
     });
   });
 

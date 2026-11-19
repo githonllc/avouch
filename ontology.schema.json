@@ -344,7 +344,7 @@
             "reads",
             "cites"
           ],
-          "description": "The source requires this derived property to be stored in the same operation as its inputs. Extension (R1, R11); no Palantir analog (not a Palantir derived property, which is computed at runtime and read-only). R1: needs reads[] (non-empty, each a declared `Object.prop`) and cites[] (non-empty, each `{cite}`). R11: any action that edits one of `reads`, or creates the object of one of `reads`, must list this property (`Object.prop`) in its `edits` (else R11 `materialization_missing`); also per decision row with `effects` (key `<ID>:rows.<i>:<Object>.<prop>`). R11 guarantees complete declaration only; atomicity is guaranteed by the evidence adapter.",
+          "description": "The source requires this derived property to be stored in the same operation as its inputs. Extension (R1, R11); no Palantir analog (not a Palantir derived property, which is computed at runtime and read-only). R1: needs reads[] (non-empty, each a declared `Object.prop`) and cites[] (non-empty, each `{cite}`). R11: any action that edits one of `reads`, or creates the object of one of `reads`, must list this property (`Object.prop`) in its `edits` (else R11 `materialization_missing`); also per decision row and `otherwise` with `effects` (keys `<ID>:rows.<i>:<Object>.<prop>` and `<ID>:otherwise:<Object>.<prop>`). R11 guarantees complete declaration only; atomicity is guaranteed by the evidence adapter.",
           "properties": {
             "reads": {
               "type": "array",
