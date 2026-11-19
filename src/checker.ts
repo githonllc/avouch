@@ -2,7 +2,7 @@
 // Fail closed: a missing anchor, a parse failure or a missing field is a violation, never a skip.
 import { IDENT, RULES, type Invocation, type Report, type RuleId, type SourceFacts, type StoreDelta, type Violation } from "./contract.js";
 import { checkPermissionWhen, derivedPropertyType, isObj, newReads, projectedFields, resolvesInDomain, type Stage1Ontology } from "./expr.js";
-import { touchedObjects } from "./touched.js";
+import { statedRows, touchedObjects } from "./touched.js";
 import { analyzeConditions, asReads, parseScope, quoteHasLiteral, quotesOf, stage1Violations } from "./stage1-check.js";
 
 export { IDENT };
@@ -164,7 +164,7 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     const fr = fromOf(ref);
     return isObj(fr) && isStr(fr.field) ? `${String(ref).split(".")[0]}.${fr.field}` : undefined;
   };
-  // the edits of an action at column level: an edit of `<O>.<f>` also writes each property projected from it
+  // the edits of an action (or of a row's effects) at column level: an edit of `<O>.<f>` also writes each property projected from it
   const editedProps = (c: Any): string[] =>
     arr(c.edits).flatMap((e) => {
       const o = String(e).split(".")[0], props = objType(o) && isObj(objects[o].properties) ? Object.keys(objects[o].properties) : [];
@@ -620,13 +620,19 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
     else if (cross.length && !(isObj(cc) && config.crossContextMechanisms.includes(cc.via) && isObj(cc.cite)))
       v("R5", cid, `${c.context} command touches ${cross.join(", ")} of another context without a declared crossContext mechanism (${config.crossContextMechanisms.join(", ")})`);
     if (!cross.length && c.crossContext !== undefined) v("R5", cid, "crossContext declared but no object of another context is touched");
-    for (const l of links)
-      if (isObj(l) && isObj(l.create_rule) && arr(c.creates).includes(l.from)) {
-        const r = l.create_rule;
-        if (arr(r.exceptions?.commands).includes(cid)) continue;
-        if (c.context !== r.context || !arr(r.with_creates).every((o: string) => arr(c.creates).includes(o)))
-          v("R5", `${cid}:${l.id}`, `${cid} (${c.context}) creates ${l.from} with ${l.id}, but ${r.cite?.doc} allows only ${r.context} commands that also create ${arr(r.with_creates).join(", ")}`);
+    for (const l of links) {
+      if (!isObj(l) || !isObj(l.create_rule)) continue;
+      const r = l.create_rule;
+      if (arr(r.exceptions?.commands).includes(cid)) continue;
+      if (arr(c.creates).includes(l.from) && (c.context !== r.context || !arr(r.with_creates).every((o: string) => arr(c.creates).includes(o))))
+        v("R5", `${cid}:${l.id}`, `${cid} (${c.context}) creates ${l.from} with ${l.id}, but ${r.cite?.doc} allows only ${r.context} commands that also create ${arr(r.with_creates).join(", ")}`);
+      // per row with effects: the row's creates (the context is the action's, checked above)
+      for (const { label, effects } of statedRows(c)) {
+        const missing = arr(r.with_creates).filter((o: string) => !effects.creates.includes(o));
+        if (effects.creates.includes(l.from) && missing.length)
+          v("R5", `${cid}:${label}:${l.id}`, `${cid} ${label} creates ${l.from} with ${l.id} but not ${missing.join(", ")}; ${r.cite?.doc} requires ${arr(r.with_creates).join(", ")}`);
       }
+    }
   }
   // ------------------------------------------------------------------------------------------ R6
   // evidence aggregates are derived here from the invocation records, never stored by the adapter. Records are runtime data
@@ -879,14 +885,22 @@ export function check(ontology: unknown, facts: SourceFacts): Report {
       const reads: string[] = arr((pr as Any)?.materializedFrom?.reads);
       if (!reads.length) continue;
       const target = `${name}.${pn}`;
+      // the inputs that lists write; deleting an input object writes it, unless the target's own object is deleted too (the target row is gone)
+      const writesInput = (lists: Any): string[] => {
+        const edits = editedProps(lists);
+        return reads.filter((r) => edits.includes(r) || arr(lists.creates).includes(r.split(".")[0])
+          || (arr(lists.deletes).includes(r.split(".")[0]) && !arr(lists.deletes).includes(name)));
+      };
       for (const [cid, c] of Object.entries(commands)) {
         if (!isObj(c)) continue;
-        // deleting an input object writes it, unless the target's own object is deleted too (the target row is gone)
-        const edits = editedProps(c);
-        const hit = reads.filter((r) => edits.includes(r) || arr(c.creates).includes(r.split(".")[0])
-          || (arr(c.deletes).includes(r.split(".")[0]) && !arr(c.deletes).includes(name)));
-        if (hit.length && !edits.includes(target))
+        const hit = writesInput(c);
+        if (hit.length && !editedProps(c).includes(target))
           v("R11", `${cid}:${target}`, `${cid} writes ${hit.join(", ")} (inputs of ${target}) but does not list ${fieldOf(target) ?? target} in edits`, "materialization_missing");
+        for (const { label, effects } of statedRows(c)) {
+          const rowHit = writesInput(effects);
+          if (rowHit.length && !editedProps(effects).includes(target))
+            v("R11", `${cid}:${label}:${target}`, `${cid} ${label} writes ${rowHit.join(", ")} (inputs of ${target}) but its effects do not list ${fieldOf(target) ?? target} in edits`, "materialization_missing");
+        }
       }
     }
 

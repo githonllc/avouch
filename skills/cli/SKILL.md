@@ -24,7 +24,7 @@ Give the ontology with `-f <file>`. Without `-f`, the CLI uses the `ontology` of
 | Verb | When to use |
 |---|---|
 | `list <actions\|objects\|links\|derived\|dispositions\|anchors\|gaps>` | overview: actions with context and permission keys, objects, links, which document sections the ontology depends on, waived gaps |
-| `action <ID>` | before you implement or change an action: permission (`any_of`, `principals`, `conditional_when`), idempotency key, parameters, conditions, decision rows in order with the conditions each row requires, edits, creates, deletes, emits, link effects |
+| `action <ID>` | before you implement or change an action: permission (`any_of`, `principals`, `conditional_when`), idempotency key, parameters, conditions, decision rows in order with the conditions each row requires and the row `effects`, edits, creates, deletes, emits, link effects |
 | `object <Type>` | a type: property classes, `canonical_values`, state machine, links, writers, readers |
 | `result <DISPOSITION>` | what makes any action return this result |
 | `writes <Object>.<prop>` | which actions change a property (`writers`), create its object (`creators`) or delete it (`deleters`); for a derived property, which actions change its inputs |

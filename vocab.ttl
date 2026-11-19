@@ -269,22 +269,32 @@ ofv:evidence a rdf:Property ;
 
 ofv:emits a rdf:Property ;
   rdfs:label "emits" ;
-  rdfs:comment "Event types the action writes. YAML: actionTypes.<ID>.emits[]" ;
+  rdfs:comment "Event types the action writes. YAML: actionTypes.<ID>.emits[], actionTypes.<ID>.decision.rows[].effects.emits[], actionTypes.<ID>.decision.otherwise.effects.emits[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:creates a rdf:Property ;
   rdfs:label "creates" ;
-  rdfs:comment "Object types an action type creates. YAML: actionTypes.<ID>.creates[]" ;
+  rdfs:comment "Object types an action type creates. YAML: actionTypes.<ID>.creates[], actionTypes.<ID>.decision.rows[].effects.creates[], actionTypes.<ID>.decision.otherwise.effects.creates[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:deletes a rdf:Property ;
   rdfs:label "deletes" ;
-  rdfs:comment "Object types whose rows an action type removes (a soft delete is an edits). YAML: actionTypes.<ID>.deletes[]" ;
+  rdfs:comment "Object types whose rows an action type removes (a soft delete is an edits). YAML: actionTypes.<ID>.deletes[], actionTypes.<ID>.decision.rows[].effects.deletes[], actionTypes.<ID>.decision.otherwise.effects.deletes[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:edits a rdf:Property ;
   rdfs:label "edits" ;
-  rdfs:comment "Properties an action type edits. YAML: actionTypes.<ID>.edits[]" ;
+  rdfs:comment "Properties an action type edits. YAML: actionTypes.<ID>.edits[], actionTypes.<ID>.decision.rows[].effects.edits[], actionTypes.<ID>.decision.otherwise.effects.edits[]" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:effects a rdf:Property ;
+  rdfs:label "effects" ;
+  rdfs:comment "Allowed domain effects of a decision row or otherwise (upper bound). YAML: actionTypes.<ID>.decision.rows[].effects, actionTypes.<ID>.decision.otherwise.effects" ;
+  rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
+
+ofv:links a rdf:Property ;
+  rdfs:label "links" ;
+  rdfs:comment "Link ids whose action entry is effect. YAML: actionTypes.<ID>.decision.rows[].effects.links[], actionTypes.<ID>.decision.otherwise.effects.links[]" ;
   rdfs:isDefinedBy <https://w3id.org/avouch/v1/vocab> .
 
 ofv:edit_cites a rdf:Property ;

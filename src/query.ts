@@ -2,7 +2,7 @@
 // cite an anchor. Pure functions: they never throw on any parsed YAML, and they return plain JSON (no Map, no Set).
 // Every result field is an ontology value or a mechanical projection of one; a missing or ill-typed value is null ([] for
 // a list). The read sets come from the type check (checkPredicate / derivedPropertyType with collect), as for R4.
-import { touchedObjects } from "./touched.js";
+import { rowEffects, statedRows, touchedObjects, type RowEffects } from "./touched.js";
 import { checkPredicate, derivedPropertyType, isObj, newReads, own, type Expr, type ParameterType, type Stage1Ontology, type Type } from "./expr.js";
 
 export type S = string | null;
@@ -22,7 +22,7 @@ export type QueryList =
 export type QueryAlt = { keys: string[]; conditionalKeys: string[]; cite: QueryCite | null; conditionalCite: QueryCite | null;
   conditionalWhen: S /* showExpr text of conditional_when, or null */; principals: { kinds: string[]; cite: QueryCite | null } | null };
 export type QueryRow = { row: number | "otherwise"; when: { passes: string } | { fails: string } | null; result: S; class: S;
-  cites: QueryCite[]; next: unknown /* the raw value, or null */; requires: { condition: string; must: "pass" | "fail"; specified: boolean }[];
+  cites: QueryCite[]; next: unknown /* the raw value, or null */; effects: RowEffects | null /* the row effects; null when the row states none */; requires: { condition: string; must: "pass" | "fail"; specified: boolean }[];
   blockedBy: S /* the first condition with specified=false in an earlier row (static): decide stops at that row for an input where that condition is
     undefined (always for an unspecified condition; for a derived property without expr only when evaluation reaches it) */ };
 export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
@@ -32,6 +32,8 @@ export type QueryAction = { id: string; context: S; doc: S; docTerm: S;
   conditions: { id: string; expr: Expr | null; exprText: S; unspecified: S; reads: unknown[]; cites: QueryCite[]; scenarios: string[] }[];
   decision: { order: QueryCite | null; rows: QueryRow[] /* otherwise, when present, is last */ } | null;
   edits: { prop: string; cite: QueryCite | null /* edit_cites */ }[]; creates: string[]; deletes: string[]; emits: string[];
+  effectsUpperBound: boolean /* true when a decision row has effects: then edits, creates, deletes, emits and linkEffects are the upper bound over
+    all rows, not what each row does */;
   linkEffects: { link: string; kind: "effect" | "none" | "unspecified"; text: S; cite: QueryCite | null; scenarios: string[] }[];
   crossContext: { via: S; unspecified: S; cite: QueryCite | null } | null; evidence: S;
   transitions: { object: string; from: S; to: S }[] /* state machine transitions whose by names this action */ };
@@ -300,7 +302,7 @@ function decisionRows(an: Analysis, id: string, a: Any): QueryRow[] {
   };
   const base = (r: Any): Omit<QueryRow, "row" | "when" | "requires" | "blockedBy"> => {
     const result = str(r.result);
-    return { result, class: result !== null ? str(ownObj(disp, result)?.class) : null, cites: citesOf(r.cites), next: r.next ?? null };
+    return { result, class: result !== null ? str(ownObj(disp, result)?.class) : null, cites: citesOf(r.cites), next: r.next ?? null, effects: rowEffects(r) };
   };
   const rows: QueryRow[] = [];
   const before: QueryRow["requires"] = [];
@@ -392,6 +394,7 @@ export function queryAction(ont: unknown, id: string): QueryAction | null {
     creates: strs(a.creates),
     deletes: strs(a.deletes),
     emits: strs(a.emits),
+    effectsUpperBound: statedRows(a).length > 0,
     linkEffects: Object.entries(map(a.link_effects)).flatMap(([link, le]) => {
       const e = map(le);
       const kind = LINK_KINDS.find((k) => k in e);

@@ -4,6 +4,7 @@
 import { IDENT, type SourceFacts, type Violation } from "./contract.js";
 import { checkPredicate, derivedPropertyType, DISPOSITION_CLASSES, INVOCATION_RESULTS, isObj, newReads, type Expr, type ExprContext, type ExprReads, type Stage1Ontology } from "./expr.js";
 import { absorbingQuantifiers, mayNullIn, mayUnknown } from "./unknown.js";
+import { EFFECT_KINDS, rowEffects, type RowEffects } from "./touched.js";
 // R4 number literals (SPEC section 9, "Literals in quotes"). A span: ASCII letters, digits and `_`, joined by `.` when a
 // letter or a digit follows it, by `+` `-` U+2212 when a digit follows it, and by `,` between a digit and exactly three
 // digits; a span may start with `.` `+` `-` U+2212 directly before a digit. A span only bounds the text: it is one number,
@@ -206,14 +207,59 @@ function checkOutcome({ ont, v }: Ctx, cid: string, label: string, r: unknown, c
   if (isStr(r.result) && !quotesOf(r.cites).some((q) => IDENT(r.result).test(q))) v("R12", `${cid}:${label}`, `${label} of ${cid}: no cite quote names its result ${r.result}`, "result_unsupported");
 }
 
-// Rows i < j with different results whose position cites are in one section must follow source order there. Rows whose
-// position cites are in different sections are not compared.
-function checkRowOrder({ facts, v }: Ctx, cid: string, rows: Any[]): void {
+// The link ids whose action entry is the effect form.
+const effectLinks = (c: Record<string, Any>): string[] => Object.entries(mapOf(c.link_effects)).filter(([, le]) => isObj(le) && "effect" in le).map(([k]) => k);
+
+// The row effects (R1): a mapping of lists of non-empty strings without repeats, each entry in the action list of its kind
+// (`links`: a link whose action entry is the effect form). Unknown keys are left to the schema.
+function checkRowEffects({ v }: Ctx, cid: string, c: Record<string, Any>, label: string, r: unknown): void {
+  if (!isObj(r) || !("effects" in r)) return;
+  const e = r.effects, ek = `actionTypes.${cid}.decision.${label}.effects`;
+  if (!isObj(e)) return v("R1", ek, `${label}: effects must be a mapping {${EFFECT_KINDS.join(", ")}}`);
+  const links = effectLinks(c);
+  for (const kind of EFFECT_KINDS) {
+    if (!(kind in e)) continue;
+    if (!Array.isArray(e[kind])) {
+      v("R1", ek, `${label}: effects.${kind} must be a list`);
+      continue;
+    }
+    const seen = new Set<string>(), twice = new Set<string>();
+    for (const x of e[kind]) {
+      if (!isStr(x)) v("R1", ek, `${label}: effects.${kind} entries must be non-empty strings`);
+      else if (seen.has(x)) twice.add(x);
+      else seen.add(x);
+    }
+    for (const x of twice) v("R1", ek, `${label}: effects.${kind} lists ${x} twice`);
+    for (const x of seen)
+      if (kind === "links" ? !links.includes(x) : !arr(c[kind]).includes(x))
+        v("R1", `${ek}.${kind}.${x}`, kind === "links"
+          ? `${label}: effects.links names ${x}, but link_effects.${x} of ${cid} is not the effect form`
+          : `${label}: effects.${kind} names ${x}, but ${cid} does not list it in ${kind}`, "effect_not_declared");
+  }
+}
+
+// Whether two rows differ in effects (R12): a row without effects has the action lists (links: the effect form entries);
+// each kind compares as a set.
+function effectsDiffer(c: Record<string, Any>): (x: unknown, y: unknown) => boolean {
+  const bound: RowEffects = { edits: arr(c.edits), creates: arr(c.creates), deletes: arr(c.deletes), emits: arr(c.emits), links: effectLinks(c) };
+  const of = (r: unknown) => rowEffects(r) ?? bound;
+  return (x, y) => {
+    const a = of(x), b = of(y);
+    return EFFECT_KINDS.some((k) => {
+      const sa = new Set(a[k]), sb = new Set(b[k]);
+      return sa.size !== sb.size || [...sa].some((t) => !sb.has(t));
+    });
+  };
+}
+
+// Rows i < j with different results, or with the same result and different effects, whose position cites are in one
+// section must follow source order there. Rows whose position cites are in different sections are not compared.
+function checkRowOrder({ facts, v }: Ctx, cid: string, rows: Any[], differ: (x: unknown, y: unknown) => boolean): void {
   const pos = rows.map((r) => (isObj(r) && isStr(r.result) ? position(facts, r) : null));
   for (let i = 0; i < rows.length; i++)
     for (let j = i + 1; j < rows.length; j++) {
       const a = pos[i], b = pos[j];
-      if (!a || !b || a.doc !== b.doc || rows[i].result === rows[j].result || a.pos < b.pos) continue;
+      if (!a || !b || a.doc !== b.doc || (rows[i].result === rows[j].result && !differ(rows[i], rows[j])) || a.pos < b.pos) continue;
       v("R12", `${cid}:rows.${i}:rows.${j}`, `rows.${i} (${rows[i].result}) comes before rows.${j} (${rows[j].result}), but its cite does not come earlier in ${a.doc}`, "row_order_mismatch");
     }
 }
@@ -233,11 +279,22 @@ function checkDecision(ctx: Ctx, cid: string, c: Record<string, Any>, analyses: 
   if (d.order !== undefined && !(isObj(d.order) && isObj(d.order.cite))) v("R1", dk, "order must be {cite}");
   const rows = arr(d.rows);
   const condIds = new Set<string>(conds.map((pc) => pc.id));
-  rows.forEach((r, i) => checkOutcome(ctx, cid, `rows.${i}`, r, condIds));
+  rows.forEach((r, i) => {
+    checkOutcome(ctx, cid, `rows.${i}`, r, condIds);
+    checkRowEffects(ctx, cid, c, `rows.${i}`, r);
+  });
   if (d.otherwise === undefined) v("R12", cid, `the decision table of ${cid} has no otherwise`, "otherwise_missing");
-  else checkOutcome(ctx, cid, "otherwise", d.otherwise, null);
-  if (new Set(rows.map((r) => r?.result)).size > 1 && d.order === undefined)
-    v("R12", cid, `the rows of ${cid} give different results, but no cite says that they are checked in order`, "row_order_uncited");
+  else {
+    checkOutcome(ctx, cid, "otherwise", d.otherwise, null);
+    checkRowEffects(ctx, cid, c, "otherwise", d.otherwise);
+  }
+  const differ = effectsDiffer(c);
+  const results = new Set(rows.map((r) => r?.result)).size > 1;
+  const sameDiffer = rows.some((r, i) => rows.some((q, j) => i < j && r?.result === q?.result && differ(r, q)));
+  if ((results || sameDiffer) && d.order === undefined)
+    v("R12", cid, results
+      ? `the rows of ${cid} give different results, but no cite says that they are checked in order`
+      : `the rows of ${cid} give the same result with different effects, but no cite says that they are checked in order`, "row_order_uncited");
   // condition_unspecified: a row uses a condition without expression, or one that reaches a derived property without one
   const used = new Set<string>(rows.map((r) => r?.when?.passes ?? r?.when?.fails).filter(isStr));
   for (const pc of conds.filter((x) => used.has(x.id))) {
@@ -246,7 +303,7 @@ function checkDecision(ctx: Ctx, cid: string, c: Record<string, Any>, analyses: 
     if (pc.expr === undefined) v("R12", `${cid}:${pc.id}`, `a row of ${cid} uses ${pc.id}, which is not written as an expression`, "condition_unspecified");
     else if (undef.length) v("R12", `${cid}:${pc.id}`, `a row of ${cid} uses ${pc.id}, which reads the derived ${undef.join(", ")} that has no expression`, "condition_unspecified");
   }
-  checkRowOrder(ctx, cid, rows);
+  checkRowOrder(ctx, cid, rows, differ);
 }
 
 // ------------------------------------------------------------------------------------------ static UNKNOWN analysis
